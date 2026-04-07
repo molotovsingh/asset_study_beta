@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Index Study Lab</title>
+    <link rel="stylesheet" href="./app/styles.css">
+    <script type="module" src="./app/main.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">Study System</p>
+          <h1>Index Study Lab</h1>
+          <p class="lead">
+            A minimal shell for many studies. Each study owns its own inputs,
+            rules, and outputs. Data adapters and catalogs stay reusable.
+          </p>
+        </div>
+
+        <section class="panel">
+          <label class="field-label" for="study-select">Study</label>
+          <select id="study-select" class="input"></select>
+          <div id="study-meta" class="meta-stack"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Why This Shape</h2>
+          <p class="muted">
+            The first study is risk-adjusted return for Indian indices. The
+            shell is already split into study modules, index catalog metadata,
+            and CSV adapters so a large study library does not collapse into one
+            form.
+          </p>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <div id="study-root"></div>
+      </main>
+    </div>
+  </body>
+</html>
