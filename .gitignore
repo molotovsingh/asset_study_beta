@@ -10,3 +10,4 @@ dist/
 coverage/
 .venv/
 __pycache__/
+data/local-cache/

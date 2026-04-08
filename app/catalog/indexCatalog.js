@@ -6,7 +6,7 @@ const indexCatalog = [
     family: "Broad Market",
     seriesType: "Price",
     sourceUrl: "https://www.niftyindices.com/reports/historical-data",
-    aliases: ["nifty fifty", "nifty50"],
+    aliases: ["nifty", "nifty fifty", "nifty50"],
     sync: {
       provider: "yfinance",
       datasetType: "index",
@@ -157,4 +157,40 @@ function getSyncedIndexCatalog() {
   return indexCatalog.filter((entry) => entry.sync);
 }
 
-export { indexCatalog, findIndexByName, getIndexById, getSyncedIndexCatalog };
+function getRunnableIndexCatalog() {
+  return indexCatalog.filter((entry) => entry.sync?.symbol);
+}
+
+function entryMatchesQuery(entry, query) {
+  if (!query) {
+    return false;
+  }
+
+  if (normalize(entry.label) === query) {
+    return true;
+  }
+
+  if (entry.aliases.some((alias) => normalize(alias) === query)) {
+    return true;
+  }
+
+  return normalize(entry.sync?.symbol || "") === query;
+}
+
+function findRunnableIndexMatch(name) {
+  const query = normalize(name || "");
+  if (!query) {
+    return null;
+  }
+
+  return getRunnableIndexCatalog().find((entry) => entryMatchesQuery(entry, query)) || null;
+}
+
+export {
+  indexCatalog,
+  findIndexByName,
+  findRunnableIndexMatch,
+  getIndexById,
+  getRunnableIndexCatalog,
+  getSyncedIndexCatalog,
+};

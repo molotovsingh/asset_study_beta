@@ -1,23 +1,7 @@
-function buildSnapshotRelativePath(syncConfig) {
-  return `data/snapshots/${syncConfig.provider}/${syncConfig.datasetType}/${syncConfig.datasetId}.json`;
-}
+const LOCAL_API_COMMAND = "./.venv/bin/python scripts/dev_server.py --port 8000";
 
-function buildSnapshotUrl(syncConfig) {
-  return new URL(`../../${buildSnapshotRelativePath(syncConfig)}`, import.meta.url);
-}
-
-function buildManifestRelativePath(syncConfig) {
-  return `data/snapshots/${syncConfig.provider}/${syncConfig.datasetType}/manifest.json`;
-}
-
-function buildManifestUrl(syncConfig) {
-  return new URL(`../../${buildManifestRelativePath(syncConfig)}`, import.meta.url);
-}
-
-function getManifestCacheKey(syncConfig) {
-  return syncConfig
-    ? `${syncConfig.provider}:${syncConfig.datasetType}`
-    : "none";
+function buildApiUrl(pathname) {
+  return new URL(`../../api${pathname}`, import.meta.url);
 }
 
 function normalizeSnapshotPoints(points) {
@@ -102,97 +86,80 @@ function describeFreshness(freshness) {
   }
 }
 
-async function loadSyncManifest(syncConfig) {
-  if (!syncConfig) {
-    throw new Error("No synced source is configured for this index.");
-  }
-
-  const response = await fetch(buildManifestUrl(syncConfig), {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(
-        `No manifest was found yet. Run ./scripts/refresh_yfinance.sh to create ${buildManifestRelativePath(syncConfig)}.`,
-      );
-    }
-
-    throw new Error(
-      `Could not load the sync manifest (${response.status} ${response.statusText}).`,
-    );
-  }
-
-  const manifest = await response.json();
-  if (!Array.isArray(manifest.datasets)) {
-    throw new Error("The sync manifest does not contain a datasets list.");
-  }
-
-  return manifest;
+function buildLocalApiUnavailableMessage() {
+  return `Could not reach the local data API. Start ${LOCAL_API_COMMAND} and reload the app.`;
 }
 
-function getManifestDataset(manifest, syncConfig) {
-  return (
-    manifest?.datasets?.find(
-      (dataset) => dataset.datasetId === syncConfig?.datasetId,
-    ) || null
-  );
+async function parseJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
 }
 
-async function loadSyncedSeries(syncConfig) {
-  if (!syncConfig) {
-    throw new Error("No synced source is configured for this index.");
+async function loadRememberedIndexCatalog() {
+  let response;
+  try {
+    response = await fetch(buildApiUrl("/yfinance/catalog"), {
+      cache: "no-store",
+    });
+  } catch (error) {
+    throw new Error(buildLocalApiUnavailableMessage());
   }
-
-  const response = await fetch(buildSnapshotUrl(syncConfig), {
-    cache: "no-store",
-  });
 
   if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(
-        `No synced snapshot was found yet. Run ./scripts/refresh_yfinance.sh to create ${buildSnapshotRelativePath(syncConfig)}.`,
-      );
-    }
-
-    throw new Error(
-      `Could not load the synced snapshot (${response.status} ${response.statusText}).`,
-    );
+    const payload = await parseJsonResponse(response);
+    throw new Error(payload?.error || buildLocalApiUnavailableMessage());
   }
 
-  const snapshot = await response.json();
-  const series = normalizeSnapshotPoints(snapshot.points);
+  const payload = await response.json();
+  if (!Array.isArray(payload.datasets)) {
+    throw new Error("The local data API returned an invalid catalog payload.");
+  }
+
+  return payload.datasets;
+}
+
+async function fetchIndexSeries(request) {
+  let response;
+  try {
+    response = await fetch(buildApiUrl("/yfinance/index-series"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw new Error(buildLocalApiUnavailableMessage());
+  }
+
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(payload?.error || "The local data API could not load that symbol.");
+  }
+
+  const snapshot = payload?.snapshot;
+  const series = normalizeSnapshotPoints(snapshot?.points);
 
   if (series.length < 2) {
-    throw new Error("The synced snapshot did not contain enough observations.");
+    throw new Error("The fetched series did not contain enough observations.");
   }
 
-  return { snapshot, series };
-}
-
-function describeSyncSource(indexEntry) {
-  if (!indexEntry?.sync) {
-    return "No synced snapshot is configured for this catalog entry yet.";
-  }
-
-  const sync = indexEntry.sync;
-  const relativePath = buildSnapshotRelativePath(sync);
-  const isProxy = sync.sourceSeriesType && sync.sourceSeriesType !== indexEntry.seriesType;
-  const prefix = isProxy
-    ? `${sync.provider} bootstrap currently uses a ${sync.sourceSeriesType.toLowerCase()} proxy for this ${indexEntry.seriesType} catalog entry.`
-    : `Synced snapshot available via ${sync.provider}.`;
-
-  return `${prefix} Local snapshot path: ${relativePath}.`;
+  return {
+    snapshot,
+    series,
+    rememberedEntry: payload?.rememberedEntry || null,
+  };
 }
 
 export {
-  buildManifestRelativePath,
-  buildSnapshotRelativePath,
+  LOCAL_API_COMMAND,
+  buildLocalApiUnavailableMessage,
   describeFreshness,
-  describeSyncSource,
-  getManifestDataset,
-  getManifestCacheKey,
+  fetchIndexSeries,
   getSnapshotFreshness,
-  loadSyncManifest,
-  loadSyncedSeries,
+  loadRememberedIndexCatalog,
 };
