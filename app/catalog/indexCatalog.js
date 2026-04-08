@@ -1,5 +1,21 @@
 const indexCatalog = [
   {
+    id: "nifty-50",
+    label: "Nifty 50",
+    provider: "NSE Indices",
+    family: "Broad Market",
+    seriesType: "Price",
+    sourceUrl: "https://www.niftyindices.com/reports/historical-data",
+    aliases: ["nifty fifty", "nifty50"],
+    sync: {
+      provider: "yfinance",
+      datasetType: "index",
+      datasetId: "nifty-50",
+      symbol: "^NSEI",
+      sourceSeriesType: "Price",
+    },
+  },
+  {
     id: "nifty-50-tri",
     label: "Nifty 50 TRI",
     provider: "NSE Indices",
@@ -7,6 +23,14 @@ const indexCatalog = [
     seriesType: "TRI",
     sourceUrl: "https://www.niftyindices.com/reports/historical-data",
     aliases: ["nifty 50 total return index", "nifty50 tri"],
+    sync: {
+      provider: "yfinance",
+      datasetType: "index",
+      datasetId: "nifty-50-tri",
+      symbol: "^NSEI",
+      sourceSeriesType: "Price",
+      note: "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
+    },
   },
   {
     id: "nifty-next-50",
@@ -52,6 +76,13 @@ const indexCatalog = [
     seriesType: "Price",
     sourceUrl: "https://www.bseindia.com/indices/IndexArchiveData.html",
     aliases: ["sensex", "bse sensex"],
+    sync: {
+      provider: "yfinance",
+      datasetType: "index",
+      datasetId: "sensex",
+      symbol: "^BSESN",
+      sourceSeriesType: "Price",
+    },
   },
   {
     id: "sensex-tri",
@@ -61,6 +92,14 @@ const indexCatalog = [
     seriesType: "TRI",
     sourceUrl: "https://www.bseindia.com/indices/IndexArchiveData.html",
     aliases: ["sensex total return index", "bse sensex tri"],
+    sync: {
+      provider: "yfinance",
+      datasetType: "index",
+      datasetId: "sensex-tri",
+      symbol: "^BSESN",
+      sourceSeriesType: "Price",
+      note: "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
+    },
   },
   {
     id: "bse-100",
@@ -110,4 +149,12 @@ function findIndexByName(name) {
   );
 }
 
-export { indexCatalog, findIndexByName };
+function getIndexById(indexId) {
+  return indexCatalog.find((entry) => entry.id === indexId) || null;
+}
+
+function getSyncedIndexCatalog() {
+  return indexCatalog.filter((entry) => entry.sync);
+}
+
+export { indexCatalog, findIndexByName, getIndexById, getSyncedIndexCatalog };

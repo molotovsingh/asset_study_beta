@@ -1,0 +1,422 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from time import sleep
+
+
+@dataclass(frozen=True)
+class DatasetConfig:
+    dataset_id: str
+    label: str
+    symbol: str
+    target_series_type: str
+    source_series_type: str
+    note: str | None = None
+    provider_name: str = "Yahoo Finance"
+    family: str = "Custom"
+    source_url: str | None = None
+
+
+DATASETS: dict[str, DatasetConfig] = {
+    "nifty-50": DatasetConfig(
+        dataset_id="nifty-50",
+        label="Nifty 50",
+        symbol="^NSEI",
+        target_series_type="Price",
+        source_series_type="Price",
+        provider_name="NSE Indices",
+        family="Broad Market",
+        source_url="https://www.niftyindices.com/reports/historical-data",
+    ),
+    "nifty-50-tri": DatasetConfig(
+        dataset_id="nifty-50-tri",
+        label="Nifty 50 TRI",
+        symbol="^NSEI",
+        target_series_type="TRI",
+        source_series_type="Price",
+        note="Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
+        provider_name="NSE Indices",
+        family="Broad Market",
+        source_url="https://www.niftyindices.com/reports/historical-data",
+    ),
+    "sensex": DatasetConfig(
+        dataset_id="sensex",
+        label="S&P BSE Sensex",
+        symbol="^BSESN",
+        target_series_type="Price",
+        source_series_type="Price",
+        provider_name="BSE",
+        family="Broad Market",
+        source_url="https://www.bseindia.com/indices/IndexArchiveData.html",
+    ),
+    "sensex-tri": DatasetConfig(
+        dataset_id="sensex-tri",
+        label="S&P BSE Sensex TRI",
+        symbol="^BSESN",
+        target_series_type="TRI",
+        source_series_type="Price",
+        note="Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
+        provider_name="BSE",
+        family="Broad Market",
+        source_url="https://www.bseindia.com/indices/IndexArchiveData.html",
+    ),
+}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Fetch index history from yfinance and write normalized JSON snapshots.",
+    )
+    parser.add_argument(
+        "--dataset-id",
+        action="append",
+        help="Dataset id to sync. Repeat for multiple ids. Defaults to all configured datasets.",
+    )
+    parser.add_argument(
+        "--period",
+        default="10y",
+        help="Yahoo Finance period to request when --start is not provided. Default: 10y",
+    )
+    parser.add_argument(
+        "--start",
+        help="Optional YYYY-MM-DD start date. Overrides --period.",
+    )
+    parser.add_argument(
+        "--end",
+        help="Optional YYYY-MM-DD end date.",
+    )
+    parser.add_argument(
+        "--output-root",
+        default="data/snapshots",
+        help="Directory where normalized snapshots are written. Default: data/snapshots",
+    )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=2,
+        help="Number of retry attempts for each symbol after the first failure. Default: 2",
+    )
+    parser.add_argument(
+        "--retry-delay-sec",
+        type=float,
+        default=2.0,
+        help="Delay between retries in seconds. Default: 2.0",
+    )
+    parser.add_argument(
+        "--config-path",
+        default="data/config/yfinance-datasets.json",
+        help="Path to the JSON file containing custom yfinance datasets. Default: data/config/yfinance-datasets.json",
+    )
+    return parser.parse_args()
+
+
+def load_yfinance():
+    try:
+        import yfinance as yf
+    except ModuleNotFoundError:
+        print(
+            "yfinance is not installed. Create a local venv and run "
+            "`./.venv/bin/pip install -r requirements-sync.txt` first.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    return yf
+
+
+def normalize_points(points: list[list[str | float]]) -> list[list[str | float]]:
+    deduped: dict[str, float] = {}
+
+    for raw_date, raw_value in points:
+        date_value = str(raw_date)
+        numeric_value = float(raw_value)
+        deduped[date_value] = numeric_value
+
+    ordered_points = sorted(deduped.items())
+    if len(ordered_points) < 2:
+        raise RuntimeError("normalized snapshot contained fewer than two unique observations.")
+
+    return [[date_value, value] for date_value, value in ordered_points]
+
+
+def normalize_dataset_id(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    if not normalized:
+        raise RuntimeError("datasetId must contain at least one letter or number.")
+    return normalized
+
+
+def build_yahoo_quote_url(symbol: str) -> str:
+    return f"https://finance.yahoo.com/quote/{symbol}"
+
+
+def dataset_from_dict(raw: dict) -> DatasetConfig:
+    dataset_id = normalize_dataset_id(str(raw["datasetId"]))
+    label = str(raw["label"]).strip()
+    symbol = str(raw["symbol"]).strip()
+
+    if not label:
+      raise RuntimeError(f"{dataset_id}: label is required")
+    if not symbol:
+      raise RuntimeError(f"{dataset_id}: symbol is required")
+
+    target_series_type = str(raw.get("targetSeriesType") or "Price").strip() or "Price"
+    source_series_type = str(raw.get("sourceSeriesType") or target_series_type).strip() or target_series_type
+    provider_name = str(raw.get("providerName") or "Yahoo Finance").strip() or "Yahoo Finance"
+    family = str(raw.get("family") or "Custom").strip() or "Custom"
+    source_url = str(raw.get("sourceUrl") or build_yahoo_quote_url(symbol)).strip()
+    note = raw.get("note")
+    if note is not None:
+      note = str(note).strip() or None
+
+    return DatasetConfig(
+        dataset_id=dataset_id,
+        label=label,
+        symbol=symbol,
+        target_series_type=target_series_type,
+        source_series_type=source_series_type,
+        note=note,
+        provider_name=provider_name,
+        family=family,
+        source_url=source_url,
+    )
+
+
+def load_custom_datasets(config_path: Path) -> dict[str, DatasetConfig]:
+    if not config_path.exists():
+        return {}
+
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    datasets = raw.get("datasets", [])
+    if not isinstance(datasets, list):
+        raise RuntimeError("Custom yfinance config must contain a top-level datasets list.")
+
+    custom_datasets: dict[str, DatasetConfig] = {}
+    for item in datasets:
+        if not isinstance(item, dict):
+            raise RuntimeError("Each custom dataset entry must be an object.")
+
+        config = dataset_from_dict(item)
+        if config.dataset_id in DATASETS or config.dataset_id in custom_datasets:
+            raise RuntimeError(f"Duplicate datasetId in custom config: {config.dataset_id}")
+
+        custom_datasets[config.dataset_id] = config
+
+    return custom_datasets
+
+
+def load_all_datasets(config_path: Path) -> dict[str, DatasetConfig]:
+    datasets = dict(DATASETS)
+    datasets.update(load_custom_datasets(config_path))
+    return datasets
+
+
+def fetch_points_once(yf, config: DatasetConfig, start: str | None, end: str | None, period: str) -> list[list[str | float]]:
+    history_kwargs = {
+        "interval": "1d",
+        "auto_adjust": False,
+        "actions": False,
+    }
+
+    if start:
+        history_kwargs["start"] = start
+        if end:
+            history_kwargs["end"] = end
+    else:
+        history_kwargs["period"] = period
+        if end:
+            history_kwargs["end"] = end
+
+    frame = yf.Ticker(config.symbol).history(**history_kwargs)
+    if frame.empty:
+        raise RuntimeError(f"{config.dataset_id}: yfinance returned no rows for symbol {config.symbol}.")
+
+    if "Close" not in frame.columns:
+        raise RuntimeError(f"{config.dataset_id}: expected a Close column in the yfinance response.")
+
+    points: list[list[str | float]] = []
+    for index_value, raw_value in frame["Close"].items():
+        try:
+            numeric_value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+
+        if not numeric_value == numeric_value:
+            continue
+
+        if hasattr(index_value, "date"):
+            date_value = index_value.date().isoformat()
+        else:
+            date_value = str(index_value)[:10]
+
+        points.append([date_value, round(numeric_value, 6)])
+
+    normalized_points = normalize_points(points)
+    if len(normalized_points) < 2:
+        raise RuntimeError(f"{config.dataset_id}: normalized snapshot contained fewer than two observations.")
+
+    return normalized_points
+
+
+def fetch_points(
+    yf,
+    config: DatasetConfig,
+    start: str | None,
+    end: str | None,
+    period: str,
+    retries: int,
+    retry_delay_sec: float,
+) -> list[list[str | float]]:
+    last_error: Exception | None = None
+
+    for attempt in range(retries + 1):
+        try:
+            return fetch_points_once(yf, config, start, end, period)
+        except Exception as error:  # noqa: BLE001
+            last_error = error
+            if attempt >= retries:
+                break
+
+            print(
+                f"{config.dataset_id}: attempt {attempt + 1} failed ({error}). Retrying...",
+                file=sys.stderr,
+            )
+            sleep(retry_delay_sec)
+
+    assert last_error is not None
+    raise last_error
+
+
+def build_snapshot(config: DatasetConfig, points: list[list[str | float]]) -> dict:
+    return {
+        "provider": "yfinance",
+        "datasetType": "index",
+        "datasetId": config.dataset_id,
+        "label": config.label,
+        "symbol": config.symbol,
+        "targetSeriesType": config.target_series_type,
+        "sourceSeriesType": config.source_series_type,
+        "providerName": config.provider_name,
+        "family": config.family,
+        "sourceUrl": config.source_url or build_yahoo_quote_url(config.symbol),
+        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "range": {
+            "startDate": points[0][0],
+            "endDate": points[-1][0],
+            "observations": len(points),
+        },
+        "note": config.note,
+        "points": points,
+    }
+
+
+def write_snapshot(output_root: Path, config: DatasetConfig, snapshot: dict) -> Path:
+    output_path = output_root / "yfinance" / "index" / f"{config.dataset_id}.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(f"{json.dumps(snapshot, indent=2)}\n", encoding="utf-8")
+    return output_path
+
+
+def build_manifest_entry(snapshot: dict, output_path: Path, output_root: Path) -> dict:
+    return {
+        "datasetId": snapshot["datasetId"],
+        "label": snapshot["label"],
+        "symbol": snapshot["symbol"],
+        "targetSeriesType": snapshot["targetSeriesType"],
+        "sourceSeriesType": snapshot["sourceSeriesType"],
+        "providerName": snapshot.get("providerName"),
+        "family": snapshot.get("family"),
+        "sourceUrl": snapshot.get("sourceUrl"),
+        "generatedAt": snapshot["generatedAt"],
+        "range": snapshot["range"],
+        "note": snapshot["note"],
+        "path": output_path.relative_to(output_root).as_posix(),
+    }
+
+
+def write_manifest(output_root: Path, entries: list[dict]) -> Path:
+    manifest = {
+        "provider": "yfinance",
+        "datasetType": "index",
+        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "datasets": sorted(entries, key=lambda entry: entry["datasetId"]),
+    }
+    manifest_path = output_root / "yfinance" / "index" / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(f"{json.dumps(manifest, indent=2)}\n", encoding="utf-8")
+    return manifest_path
+
+
+def build_snapshot_path(output_root: Path, dataset_id: str) -> Path:
+    return output_root / "yfinance" / "index" / f"{dataset_id}.json"
+
+
+def collect_manifest_entries(output_root: Path, datasets: dict[str, DatasetConfig]) -> list[dict]:
+    entries: list[dict] = []
+
+    for dataset_id in sorted(datasets):
+        snapshot_path = build_snapshot_path(output_root, dataset_id)
+        if not snapshot_path.exists():
+            continue
+
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        entries.append(build_manifest_entry(snapshot, snapshot_path, output_root))
+
+    return entries
+
+
+def main() -> int:
+    args = parse_args()
+    yf = load_yfinance()
+    config_path = Path(args.config_path)
+    datasets = load_all_datasets(config_path)
+
+    selected_ids = args.dataset_id or list(datasets)
+    unknown_ids = [dataset_id for dataset_id in selected_ids if dataset_id not in datasets]
+    if unknown_ids:
+        print(
+            f"Unknown dataset ids: {', '.join(unknown_ids)}. Add them to {config_path} first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    output_root = Path(args.output_root)
+
+    failures = 0
+    for dataset_id in selected_ids:
+        config = datasets[dataset_id]
+        try:
+            points = fetch_points(
+                yf,
+                config,
+                start=args.start,
+                end=args.end,
+                period=args.period,
+                retries=max(args.retries, 0),
+                retry_delay_sec=max(args.retry_delay_sec, 0),
+            )
+            snapshot = build_snapshot(config, points)
+            output_path = write_snapshot(output_root, config, snapshot)
+            print(f"Wrote {output_path} ({len(points)} observations)")
+        except Exception as error:  # noqa: BLE001
+            failures += 1
+            print(f"{dataset_id}: {error}", file=sys.stderr)
+
+    manifest_entries = collect_manifest_entries(output_root, datasets)
+    if manifest_entries:
+        manifest_path = write_manifest(output_root, manifest_entries)
+        print(f"Wrote {manifest_path} ({len(manifest_entries)} datasets)")
+
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

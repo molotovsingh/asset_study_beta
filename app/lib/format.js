@@ -33,4 +33,14 @@ function formatDateRange(startDate, endDate) {
   return `${formatDate(startDate)} to ${formatDate(endDate)}`;
 }
 
-export { formatPercent, formatNumber, formatDate, formatDateRange };
+function formatDateTime(date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export { formatPercent, formatNumber, formatDate, formatDateRange, formatDateTime };
