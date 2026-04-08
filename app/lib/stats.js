@@ -41,6 +41,21 @@ function mean(values) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function median(values) {
+  if (!values.length) {
+    return null;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[middle];
+  }
+
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 function sampleStdDev(values) {
   if (values.length < 2) {
     return null;
@@ -71,6 +86,89 @@ function maxDrawdown(series) {
   return maxDepth;
 }
 
+function ulcerIndex(series) {
+  if (!series.length) {
+    return null;
+  }
+
+  let peak = series[0].value;
+  const squaredDrawdowns = [];
+
+  for (const point of series) {
+    if (point.value > peak) {
+      peak = point.value;
+    }
+
+    const drawdown = Math.min(point.value / peak - 1, 0);
+    squaredDrawdowns.push(drawdown ** 2);
+  }
+
+  return Math.sqrt(mean(squaredDrawdowns) ?? 0);
+}
+
+function getDrawdownDurationStats(series) {
+  if (series.length < 2) {
+    return {
+      maxDrawdownDurationDays: 0,
+      maxDrawdownDurationPeriods: 0,
+    };
+  }
+
+  let peakValue = series[0].value;
+  let peakDate = series[0].date;
+  let peakIndex = 0;
+  let currentDrawdownStartDate = null;
+  let currentDrawdownStartIndex = null;
+  let maxDrawdownDurationDays = 0;
+  let maxDrawdownDurationPeriods = 0;
+
+  for (let index = 1; index < series.length; index += 1) {
+    const point = series[index];
+
+    if (point.value >= peakValue) {
+      if (currentDrawdownStartDate !== null && currentDrawdownStartIndex !== null) {
+        maxDrawdownDurationDays = Math.max(
+          maxDrawdownDurationDays,
+          (point.date - currentDrawdownStartDate) / 86400000,
+        );
+        maxDrawdownDurationPeriods = Math.max(
+          maxDrawdownDurationPeriods,
+          index - currentDrawdownStartIndex,
+        );
+      }
+
+      peakValue = point.value;
+      peakDate = point.date;
+      peakIndex = index;
+      currentDrawdownStartDate = null;
+      currentDrawdownStartIndex = null;
+      continue;
+    }
+
+    if (currentDrawdownStartDate === null || currentDrawdownStartIndex === null) {
+      currentDrawdownStartDate = peakDate;
+      currentDrawdownStartIndex = peakIndex;
+    }
+  }
+
+  if (currentDrawdownStartDate !== null && currentDrawdownStartIndex !== null) {
+    const lastPoint = series[series.length - 1];
+    maxDrawdownDurationDays = Math.max(
+      maxDrawdownDurationDays,
+      (lastPoint.date - currentDrawdownStartDate) / 86400000,
+    );
+    maxDrawdownDurationPeriods = Math.max(
+      maxDrawdownDurationPeriods,
+      series.length - 1 - currentDrawdownStartIndex,
+    );
+  }
+
+  return {
+    maxDrawdownDurationDays,
+    maxDrawdownDurationPeriods,
+  };
+}
+
 function toPeriodicReturns(series) {
   const returns = [];
 
@@ -86,6 +184,68 @@ function toPeriodicReturns(series) {
   }
 
   return returns;
+}
+
+function percentile(values, quantile) {
+  if (!values.length) {
+    return null;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const boundedQuantile = Math.min(Math.max(quantile, 0), 1);
+  const index = (sorted.length - 1) * boundedQuantile;
+  const lowerIndex = Math.floor(index);
+  const upperIndex = Math.ceil(index);
+
+  if (lowerIndex === upperIndex) {
+    return sorted[lowerIndex];
+  }
+
+  const weight = index - lowerIndex;
+  return sorted[lowerIndex] * (1 - weight) + sorted[upperIndex] * weight;
+}
+
+function sampleSkewness(values) {
+  if (values.length < 3) {
+    return null;
+  }
+
+  const avg = mean(values);
+  const stdDev = sampleStdDev(values);
+  if (avg === null || !stdDev) {
+    return null;
+  }
+
+  const n = values.length;
+  const sum = values.reduce(
+    (total, value) => total + ((value - avg) / stdDev) ** 3,
+    0,
+  );
+
+  return (n / ((n - 1) * (n - 2))) * sum;
+}
+
+function sampleExcessKurtosis(values) {
+  if (values.length < 4) {
+    return null;
+  }
+
+  const avg = mean(values);
+  const stdDev = sampleStdDev(values);
+  if (avg === null || !stdDev) {
+    return null;
+  }
+
+  const n = values.length;
+  const sum = values.reduce(
+    (total, value) => total + ((value - avg) / stdDev) ** 4,
+    0,
+  );
+
+  return (
+    (n * (n + 1) * sum) / ((n - 1) * (n - 2) * (n - 3)) -
+    (3 * (n - 1) ** 2) / ((n - 2) * (n - 3))
+  );
 }
 
 function getAnnualRiskFreeRate(period, riskFreeSeries, fallbackRate) {
@@ -124,10 +284,11 @@ function computeRiskAdjustedMetrics(indexSeries, options = {}) {
   if (!periodicReturns.length) {
     throw new Error("The study needs at least two index observations.");
   }
+  const periodReturnValues = periodicReturns.map((point) => point.value);
 
   const periodsPerYear = inferPeriodsPerYear(indexSeries);
   const annualizedVolatility =
-    (sampleStdDev(periodicReturns.map((point) => point.value)) ?? 0) *
+    (sampleStdDev(periodReturnValues) ?? 0) *
     Math.sqrt(periodsPerYear);
 
   const annualRiskFreeRates = periodicReturns.map((period) =>
@@ -159,6 +320,35 @@ function computeRiskAdjustedMetrics(indexSeries, options = {}) {
     downsideDeviation > 0
       ? (annualizedReturn - averageAnnualRiskFreeRate) / downsideDeviation
       : null;
+  const maxDrawdownValue = maxDrawdown(indexSeries);
+  const calmarRatio =
+    maxDrawdownValue < 0
+      ? annualizedReturn / Math.abs(maxDrawdownValue)
+      : null;
+  const positivePeriods = periodicReturns.filter((period) => period.value > 0).length;
+  const nonPositivePeriods = periodicReturns.length - positivePeriods;
+  const winRate =
+    periodicReturns.length > 0
+      ? positivePeriods / periodicReturns.length
+      : null;
+  const averagePeriodReturn = mean(periodReturnValues);
+  const medianPeriodReturn = median(periodReturnValues);
+  const ulcerIndexValue = ulcerIndex(indexSeries);
+  const martinRatio =
+    ulcerIndexValue && ulcerIndexValue > 0
+      ? (annualizedReturn - averageAnnualRiskFreeRate) / ulcerIndexValue
+      : null;
+  const valueAtRisk95 = percentile(periodReturnValues, 0.05);
+  const cvarSample = periodReturnValues.filter(
+    (value) => valueAtRisk95 !== null && value <= valueAtRisk95,
+  );
+  const conditionalValueAtRisk95 = mean(cvarSample);
+  const skewness = sampleSkewness(periodReturnValues);
+  const excessKurtosis = sampleExcessKurtosis(periodReturnValues);
+  const {
+    maxDrawdownDurationDays,
+    maxDrawdownDurationPeriods,
+  } = getDrawdownDurationStats(indexSeries);
 
   const rankedReturns = [...periodicReturns].sort((left, right) => left.value - right.value);
   const worstPeriod = rankedReturns[0] || null;
@@ -168,9 +358,24 @@ function computeRiskAdjustedMetrics(indexSeries, options = {}) {
     annualizedReturn,
     annualizedVolatility,
     averageAnnualRiskFreeRate,
+    averagePeriodReturn,
+    calmarRatio,
+    conditionalValueAtRisk95,
+    downsideDeviation,
+    excessKurtosis,
+    martinRatio,
+    maxDrawdownDurationDays,
+    maxDrawdownDurationPeriods,
+    medianPeriodReturn,
+    winRate,
+    positivePeriods,
+    nonPositivePeriods,
     sharpeRatio,
+    skewness,
     sortinoRatio,
-    maxDrawdown: maxDrawdown(indexSeries),
+    ulcerIndex: ulcerIndexValue,
+    valueAtRisk95,
+    maxDrawdown: maxDrawdownValue,
     totalReturn,
     periodsPerYear,
     observations: indexSeries.length,

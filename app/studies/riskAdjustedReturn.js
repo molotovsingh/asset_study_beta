@@ -1,23 +1,29 @@
-import { getRunnableIndexCatalog } from "../catalog/indexCatalog.js";
-import {
-  formatDate,
-  formatDateTime,
-  formatDateRange,
-  formatNumber,
-  formatPercent,
-} from "../lib/format.js";
+import { formatDate } from "../lib/format.js";
 import {
   filterSeriesByDate,
   computeRiskAdjustedMetrics,
 } from "../lib/stats.js";
 import {
-  LOCAL_API_COMMAND,
   buildLocalApiUnavailableMessage,
-  describeFreshness,
   fetchIndexSeries,
+  getManifestDataset,
   getSnapshotFreshness,
   loadRememberedIndexCatalog,
+  loadSyncManifest,
+  loadSyncedSeries,
 } from "../lib/syncedData.js";
+import {
+  buildSelectionSignature,
+  buildSeriesRequest,
+  findSelectionByQuery,
+  mergeSelectionSuggestions,
+  upsertRememberedCatalogEntry,
+} from "./riskAdjustedReturnSelection.js";
+import {
+  renderResults,
+  renderSelectionDetails,
+  studyTemplate,
+} from "./riskAdjustedReturnView.js";
 
 const demoIndexSeries = [
   ["2021-04-07", 14500],
@@ -43,330 +49,16 @@ const demoIndexSeries = [
   ["2026-04-07", 29520],
 ].map(([date, value]) => ({ date: new Date(`${date}T00:00:00`), value }));
 
+const bundledManifestSyncConfig = {
+  provider: "yfinance",
+  datasetType: "index",
+};
+
 function toInputDate(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function buildYahooQuoteUrl(symbol) {
-  return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`;
-}
-
-function normalizeQuery(value) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function buildBuiltInSelection(entry) {
-  return {
-    kind: "builtin",
-    id: entry.id,
-    label: entry.label,
-    symbol: entry.sync.symbol,
-    providerName: entry.provider,
-    family: entry.family,
-    targetSeriesType: entry.seriesType,
-    sourceSeriesType: entry.sync.sourceSeriesType || entry.seriesType,
-    sourceUrl: entry.sourceUrl,
-    note: entry.sync.note || null,
-    aliases: entry.aliases || [],
-    generatedAt: null,
-    range: null,
-  };
-}
-
-function buildRememberedSelection(entry) {
-  return {
-    kind: "remembered",
-    id: entry.datasetId,
-    label: entry.label || entry.symbol,
-    symbol: entry.symbol,
-    providerName: entry.providerName || "Yahoo Finance",
-    family: entry.family || "Remembered",
-    targetSeriesType: entry.targetSeriesType || "Price",
-    sourceSeriesType: entry.sourceSeriesType || entry.targetSeriesType || "Price",
-    sourceUrl: entry.sourceUrl || buildYahooQuoteUrl(entry.symbol),
-    note: entry.note || null,
-    aliases: [],
-    generatedAt: entry.generatedAt || null,
-    range: entry.range || null,
-  };
-}
-
-function buildAdHocSelection(rawValue) {
-  const symbol = rawValue.trim();
-
-  return {
-    kind: "adhoc",
-    id: `adhoc:${symbol}`,
-    label: symbol,
-    symbol,
-    providerName: "Yahoo Finance",
-    family: "Ad hoc",
-    targetSeriesType: "Price",
-    sourceSeriesType: "Price",
-    sourceUrl: buildYahooQuoteUrl(symbol),
-    note: null,
-    aliases: [],
-    generatedAt: null,
-    range: null,
-  };
-}
-
-function buildSelectionSignature(selection) {
-  if (!selection) {
-    return "none";
-  }
-
-  return [
-    selection.kind,
-    selection.id,
-    selection.symbol,
-    selection.targetSeriesType,
-  ].join("|");
-}
-
-function mergeSelectionSuggestions(rememberedCatalog) {
-  const builtIns = getRunnableIndexCatalog().map(buildBuiltInSelection);
-  const builtInSymbols = new Set(
-    builtIns.map((entry) => normalizeQuery(entry.symbol)),
-  );
-  const remembered = rememberedCatalog
-    .map(buildRememberedSelection)
-    .filter((entry) => !builtInSymbols.has(normalizeQuery(entry.symbol)));
-
-  return [...builtIns, ...remembered];
-}
-
-function findSelectionByQuery(query, suggestions) {
-  const normalized = normalizeQuery(query);
-  if (!normalized) {
-    return null;
-  }
-
-  const labelMatch = suggestions.find(
-    (entry) => normalizeQuery(entry.label) === normalized,
-  );
-  if (labelMatch) {
-    return labelMatch;
-  }
-
-  const aliasMatch = suggestions.find((entry) =>
-    entry.aliases.some((alias) => normalizeQuery(alias) === normalized),
-  );
-  if (aliasMatch) {
-    return aliasMatch;
-  }
-
-  const rememberedSymbolMatch = suggestions.find(
-    (entry) =>
-      entry.kind === "remembered" && normalizeQuery(entry.symbol) === normalized,
-  );
-  if (rememberedSymbolMatch) {
-    return rememberedSymbolMatch;
-  }
-
-  const builtInSymbolMatches = suggestions.filter(
-    (entry) =>
-      entry.kind === "builtin" && normalizeQuery(entry.symbol) === normalized,
-  );
-  if (builtInSymbolMatches.length === 1) {
-    return builtInSymbolMatches[0];
-  }
-
-  return buildAdHocSelection(query);
-}
-
-function renderSelectionDetails(selection, runtimeSnapshot, useDemoData) {
-  if (!selection) {
-    return `
-      <div class="note-box">
-        <p>Type a built-in name like Nifty 50 or any yfinance symbol like AAPL or ^NSEI.</p>
-      </div>
-    `;
-  }
-
-  const sourceUrl = runtimeSnapshot?.sourceUrl || selection.sourceUrl;
-  const providerName = runtimeSnapshot?.providerName || selection.providerName;
-  const family = runtimeSnapshot?.family || selection.family;
-  const targetSeriesType =
-    runtimeSnapshot?.targetSeriesType || selection.targetSeriesType;
-  const sourceSeriesType =
-    runtimeSnapshot?.sourceSeriesType || selection.sourceSeriesType;
-  const note = runtimeSnapshot?.note || selection.note || null;
-  const generatedAt = runtimeSnapshot?.generatedAt || selection.generatedAt;
-  const range = runtimeSnapshot?.range || selection.range;
-  const snapshotForFreshness =
-    runtimeSnapshot || (generatedAt || range ? { generatedAt, range } : null);
-
-  let runtimeMeta = `
-    <p class="summary-meta">Will resolve <span class="mono">${selection.symbol}</span> through the local yfinance backend when you run the study.</p>
-  `;
-
-  if (selection.kind === "remembered" && snapshotForFreshness) {
-    const freshness = getSnapshotFreshness(snapshotForFreshness);
-    const latestDate = freshness.latestDate
-      ? formatDate(freshness.latestDate)
-      : "n/a";
-    const syncedAt = generatedAt
-      ? formatDateTime(new Date(generatedAt))
-      : "n/a";
-    const rangeStart = range?.startDate
-      ? formatDate(new Date(`${range.startDate}T00:00:00`))
-      : "n/a";
-    const rangeEnd = range?.endDate
-      ? formatDate(new Date(`${range.endDate}T00:00:00`))
-      : "n/a";
-
-    runtimeMeta = `
-      <div class="sync-summary-grid">
-        <div class="sync-summary-row">
-          <span class="summary-pill ${freshness.status}">${describeFreshness(freshness)}</span>
-          <span class="summary-meta">Latest market date: ${latestDate}</span>
-        </div>
-        <p class="summary-meta">Remembered locally. Last fetched: ${syncedAt}</p>
-        <p class="summary-meta">Cached range: ${rangeStart} to ${rangeEnd}</p>
-        <p class="summary-meta">Observations: ${range?.observations ?? "n/a"}</p>
-      </div>
-    `;
-  }
-
-  if (runtimeSnapshot) {
-    const freshness = getSnapshotFreshness(runtimeSnapshot);
-    const latestDate = freshness.latestDate
-      ? formatDate(freshness.latestDate)
-      : "n/a";
-    const syncedAt = runtimeSnapshot.generatedAt
-      ? formatDateTime(new Date(runtimeSnapshot.generatedAt))
-      : "n/a";
-    const rangeStart = runtimeSnapshot.range?.startDate
-      ? formatDate(new Date(`${runtimeSnapshot.range.startDate}T00:00:00`))
-      : "n/a";
-    const rangeEnd = runtimeSnapshot.range?.endDate
-      ? formatDate(new Date(`${runtimeSnapshot.range.endDate}T00:00:00`))
-      : "n/a";
-    const demoNote = useDemoData
-      ? `<p class="summary-meta">Demo mode is active. Live fetch metadata is shown below for reference only.</p>`
-      : "";
-
-    runtimeMeta = `
-      <div class="sync-summary-grid">
-        <div class="sync-summary-row">
-          <span class="summary-pill ${freshness.status}">${describeFreshness(freshness)}</span>
-          <span class="summary-meta">Latest market date: ${latestDate}</span>
-        </div>
-        ${demoNote}
-        <p class="summary-meta">Backend fetch: ${runtimeSnapshot.cache?.status || "n/a"}</p>
-        <p class="summary-meta">Last fetched: ${syncedAt}</p>
-        <p class="summary-meta">Series range: ${rangeStart} to ${rangeEnd}</p>
-        <p class="summary-meta">Observations: ${runtimeSnapshot.range?.observations ?? "n/a"}</p>
-      </div>
-    `;
-  }
-
-  const proxyWarning =
-    sourceSeriesType && sourceSeriesType !== targetSeriesType
-      ? `<p class="summary-meta">Bootstrap uses <span class="mono">${sourceSeriesType}</span> data as a proxy for <span class="mono">${targetSeriesType}</span>.</p>`
-      : "";
-  const kindLabel =
-    selection.kind === "builtin"
-      ? "Built-in Mapping"
-      : selection.kind === "remembered"
-        ? "Remembered Symbol"
-        : "Raw Symbol";
-
-  return `
-    <div class="note-box">
-      <p><span class="section-label">${kindLabel}</span>${selection.label}</p>
-      <p>${providerName} · ${family} · ${targetSeriesType}</p>
-      <p>Source: <a href="${sourceUrl}" target="_blank" rel="noreferrer">${sourceUrl}</a></p>
-      <p class="summary-meta">Resolved symbol: <span class="mono">${selection.symbol}</span></p>
-      ${proxyWarning}
-      ${note ? `<p class="summary-meta">${note}</p>` : ""}
-      ${runtimeMeta}
-    </div>
-  `;
-}
-
-function renderResults({
-  metrics,
-  indexName,
-  startDate,
-  endDate,
-  methodLabel,
-  warnings,
-}) {
-  const warningHtml = warnings.length
-    ? `
-      <div class="detail-block">
-        <h3>Warnings</h3>
-        <ul class="warning-list">
-          ${warnings.map((warning) => `<li>${warning}</li>`).join("")}
-        </ul>
-      </div>
-    `
-    : "";
-
-  return `
-    <div class="results-shell">
-      <div class="results-grid">
-        <div class="result-card">
-          <p class="meta-label">Sharpe Ratio</p>
-          <strong>${formatNumber(metrics.sharpeRatio)}</strong>
-          <span>CAGR-based</span>
-        </div>
-        <div class="result-card">
-          <p class="meta-label">Sortino Ratio</p>
-          <strong>${formatNumber(metrics.sortinoRatio)}</strong>
-          <span>Downside-risk based</span>
-        </div>
-        <div class="result-card">
-          <p class="meta-label">Annualized Return</p>
-          <strong>${formatPercent(metrics.annualizedReturn)}</strong>
-          <span>${indexName}</span>
-        </div>
-        <div class="result-card">
-          <p class="meta-label">Annualized Volatility</p>
-          <strong>${formatPercent(metrics.annualizedVolatility)}</strong>
-          <span>${metrics.periodsPerYear} periods per year inferred</span>
-        </div>
-        <div class="result-card">
-          <p class="meta-label">Average Risk-Free Rate</p>
-          <strong>${formatPercent(metrics.averageAnnualRiskFreeRate)}</strong>
-          <span>Annualized average</span>
-        </div>
-        <div class="result-card">
-          <p class="meta-label">Max Drawdown</p>
-          <strong>${formatPercent(metrics.maxDrawdown)}</strong>
-          <span>Peak-to-trough</span>
-        </div>
-      </div>
-
-      <div class="result-details">
-        <div class="detail-block">
-          <h3>Study Window</h3>
-          <p class="result-detail">${formatDateRange(startDate, endDate)}</p>
-          <p class="result-detail">Total return: ${formatPercent(metrics.totalReturn)}</p>
-          <p class="result-detail">Index observations: ${metrics.observations}</p>
-          <p class="result-detail">Return observations: ${metrics.periodicObservations}</p>
-          <p class="result-detail">Method: ${methodLabel}</p>
-        </div>
-        <div class="detail-block">
-          <h3>Return Extremes</h3>
-          <p class="result-detail">
-            Best period:
-            ${metrics.bestPeriod ? `${formatDate(metrics.bestPeriod.startDate)} to ${formatDate(metrics.bestPeriod.endDate)} (${formatPercent(metrics.bestPeriod.value)})` : "n/a"}
-          </p>
-          <p class="result-detail">
-            Worst period:
-            ${metrics.worstPeriod ? `${formatDate(metrics.worstPeriod.startDate)} to ${formatDate(metrics.worstPeriod.endDate)} (${formatPercent(metrics.worstPeriod.value)})` : "n/a"}
-          </p>
-        </div>
-        ${warningHtml}
-      </div>
-    </div>
-  `;
 }
 
 function appendCoverageWarnings(series, startDate, endDate, warnings) {
@@ -400,118 +92,43 @@ function appendSnapshotWarnings(snapshot, warnings) {
   }
 
   if (freshness.syncAgeDays !== null && freshness.syncAgeDays > 2) {
+    const fetchLabel = snapshot.cache ? "fetched" : "synced";
     warnings.push(
-      `This cached series was fetched ${freshness.syncAgeDays} days ago. The backend will refresh it automatically when the local cache expires.`,
+      `This series was last ${fetchLabel} ${freshness.syncAgeDays} days ago.`,
     );
   }
 }
 
-function studyTemplate(defaultStartDate, defaultEndDate) {
-  return `
-    <div class="study-layout">
-      <div class="study-header">
-        <div class="study-copy">
-          <p class="study-kicker">Study 01</p>
-          <h2>Risk-Adjusted Return</h2>
-          <p>
-            Type a supported index name or any yfinance symbol, choose your
-            study window, set the annual risk-free rate manually, and run the
-            study. The local backend fetches and caches the series on demand.
-          </p>
-        </div>
-        <div class="note-box">
-          <p>
-            Formula used:
-            <span class="mono">Sharpe = (CAGR - average annual risk-free) / annualized volatility</span>
-          </p>
-          <p>
-            Sortino uses downside deviation built from periodic excess returns.
-          </p>
-        </div>
-      </div>
+function validateStudyInputs(selection, startValue, endValue, riskFreeValue) {
+  const start = new Date(`${startValue}T00:00:00`);
+  const end = new Date(`${endValue}T00:00:00`);
+  const riskFreeRate = Number(riskFreeValue);
 
-      <div class="study-grid">
-        <section class="card">
-          <form id="risk-study-form" class="card-grid">
-            <div class="card-wide">
-              <label class="field-label" for="index-query">Index Or Symbol</label>
-              <input id="index-query" class="input" type="text" list="index-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
-              <datalist id="index-suggestions"></datalist>
-              <p class="helper">
-                Type a built-in name like <span class="mono">Nifty 50</span> or any yfinance symbol like <span class="mono">AAPL</span>, <span class="mono">^NSEI</span>, or <span class="mono">ETH-USD</span>.
-              </p>
-              <div id="index-summary"></div>
-            </div>
+  if (!selection) {
+    throw new Error(
+      "Enter an index name or a yfinance symbol before running the study.",
+    );
+  }
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new Error("Pick a valid start date and end date.");
+  }
+  if (start >= end) {
+    throw new Error("Start date must be earlier than end date.");
+  }
+  if (!Number.isFinite(riskFreeRate)) {
+    throw new Error("Enter a valid annual risk-free rate.");
+  }
 
-            <div>
-              <label class="field-label" for="start-date">Start Date</label>
-              <input id="start-date" class="input" type="date" value="${defaultStartDate}">
-            </div>
-
-            <div>
-              <label class="field-label" for="end-date">End Date</label>
-              <input id="end-date" class="input" type="date" value="${defaultEndDate}">
-            </div>
-
-            <div class="card-wide toggle-row">
-              <input id="use-demo-data" type="checkbox">
-              <label for="use-demo-data">Use synthetic demo data instead of the live backend fetch</label>
-            </div>
-
-            <div class="card-wide">
-              <label class="field-label" for="constant-rate">Annual Risk-Free Rate %</label>
-              <input id="constant-rate" class="input" type="number" step="0.01" value="5.50">
-              <p class="helper">
-                Fill this manually from the reference you trust, such as the RBI
-                91-day T-bill yield on the date you are using as your baseline.
-              </p>
-            </div>
-
-            <div class="card-wide">
-              <div class="study-actions">
-                <button class="button" type="submit">Run Study</button>
-                <button id="load-five-year-window" class="button secondary" type="button">Use Last 5 Years</button>
-              </div>
-              <p id="study-status" class="status"></p>
-            </div>
-          </form>
-        </section>
-
-        <aside class="card">
-          <p class="section-label">Source Hints</p>
-          <ul class="source-list">
-            <li>Built-in names are resolved to yfinance symbols before the run.</li>
-            <li>Any successful ad hoc symbol is remembered locally on this machine.</li>
-            <li>Local backend command: <span class="mono">${LOCAL_API_COMMAND}</span></li>
-            <li>Risk-free reference: RBI 91-day T-bill data at <a href="https://data.rbi.org.in" target="_blank" rel="noreferrer">data.rbi.org.in</a></li>
-          </ul>
-
-          <p class="section-label">System Notes</p>
-          <p class="helper">
-            The browser no longer reads repo snapshot files directly for this
-            study. It asks a local Python backend to fetch and cache symbols on
-            demand so the main input can accept built-ins or raw yfinance symbols.
-          </p>
-        </aside>
-      </div>
-
-      <section id="results-root" class="card">
-        <div class="empty-state">
-          Run the study to see annualized return, volatility, Sharpe ratio,
-          Sortino ratio, and drawdown.
-        </div>
-      </section>
-    </div>
-  `;
+  return { start, end, riskFreeRate };
 }
 
 const riskAdjustedReturnStudy = {
   id: "risk-adjusted-return",
   title: "Risk-Adjusted Return",
   description:
-    "Compute CAGR, volatility, Sharpe, Sortino, and drawdown from an index name or any yfinance symbol.",
+    "Measure return, risk, and drawdown for a bundled dataset or yfinance symbol.",
   inputSummary:
-    "Index name or yfinance symbol, date window, and a manually entered annual risk-free rate.",
+    "Dataset or symbol, date range, and annual risk-free rate.",
   mount(root) {
     const today = new Date();
     const endDate = new Date(
@@ -536,21 +153,35 @@ const riskAdjustedReturnStudy = {
     const resultsRoot = root.querySelector("#results-root");
     const lastFiveYearsButton = root.querySelector("#load-five-year-window");
 
-    let rememberedCatalog = [];
-    let lastLoadedSelectionSignature = "none";
-    let lastLoadedSnapshot = null;
+    const state = {
+      bundledManifest: null,
+      rememberedCatalog: [],
+      backendState: "unknown",
+      lastLoadedSelectionSignature: "none",
+      lastLoadedSnapshot: null,
+    };
 
-    function setStatus(message, state = "info") {
-      status.className = `status ${state}`;
+    function setStatus(message, statusState = "info") {
+      status.className = `status ${statusState}`;
       status.textContent = message;
     }
 
     function getSuggestions() {
-      return mergeSelectionSuggestions(rememberedCatalog);
+      return mergeSelectionSuggestions(
+        state.bundledManifest,
+        state.rememberedCatalog,
+      );
     }
 
     function getCurrentSelection() {
       return findSelectionByQuery(indexQueryInput.value, getSuggestions());
+    }
+
+    function getRuntimeSnapshot(selection) {
+      const selectionSignature = buildSelectionSignature(selection);
+      return selectionSignature === state.lastLoadedSelectionSignature
+        ? state.lastLoadedSnapshot
+        : null;
     }
 
     function populateSuggestionList() {
@@ -564,50 +195,79 @@ const riskAdjustedReturnStudy = {
 
     function updateIndexSummary() {
       const selection = getCurrentSelection();
-      const selectionSignature = buildSelectionSignature(selection);
-      const runtimeSnapshot =
-        selectionSignature === lastLoadedSelectionSignature
-          ? lastLoadedSnapshot
-          : null;
-
       indexSummary.innerHTML = renderSelectionDetails(
         selection,
-        runtimeSnapshot,
+        getRuntimeSnapshot(selection),
         useDemoDataInput.checked,
+        state.backendState,
       );
     }
 
-    function rememberCatalogEntry(entry) {
-      if (!entry?.symbol) {
+    function refreshSelectionUi() {
+      populateSuggestionList();
+      updateIndexSummary();
+    }
+
+    function activateResultsTab(tabId) {
+      const tabRoot = resultsRoot.querySelector("[data-results-tabs]");
+      if (!tabRoot) {
         return;
       }
 
-      const existingIndex = rememberedCatalog.findIndex(
-        (item) => normalizeQuery(item.symbol) === normalizeQuery(entry.symbol),
-      );
+      const triggers = tabRoot.querySelectorAll("[data-results-tab-trigger]");
+      const panels = tabRoot.querySelectorAll("[data-results-tab-panel]");
 
-      if (existingIndex >= 0) {
-        rememberedCatalog[existingIndex] = entry;
-      } else {
-        rememberedCatalog.push(entry);
-      }
+      triggers.forEach((trigger) => {
+        const isActive = trigger.dataset.resultsTabTrigger === tabId;
+        trigger.classList.toggle("is-active", isActive);
+        trigger.setAttribute("aria-selected", String(isActive));
+      });
 
-      populateSuggestionList();
+      panels.forEach((panel) => {
+        panel.hidden = panel.dataset.resultsTabPanel !== tabId;
+      });
     }
 
-    function buildSeriesRequest(selection) {
-      return {
-        datasetId: selection.kind === "adhoc" ? undefined : selection.id,
-        symbol: selection.symbol,
-        label: selection.label,
-        providerName: selection.providerName,
-        family: selection.family,
-        targetSeriesType: selection.targetSeriesType,
-        sourceSeriesType: selection.sourceSeriesType,
-        sourceUrl: selection.sourceUrl,
-        note: selection.note,
-        remember: selection.kind !== "builtin",
-      };
+    function handleResultsClick(event) {
+      const trigger = event.target.closest("[data-results-tab-trigger]");
+      if (!trigger) {
+        return;
+      }
+
+      activateResultsTab(trigger.dataset.resultsTabTrigger);
+    }
+
+    function rememberCatalogEntry(entry) {
+      state.rememberedCatalog = upsertRememberedCatalogEntry(
+        state.rememberedCatalog,
+        entry,
+      );
+      refreshSelectionUi();
+    }
+
+    function applyLoadedSnapshot(selection, snapshot, rememberedEntry) {
+      state.lastLoadedSelectionSignature = buildSelectionSignature(selection);
+      state.lastLoadedSnapshot = snapshot;
+
+      if (rememberedEntry) {
+        rememberCatalogEntry(rememberedEntry);
+        return;
+      }
+
+      updateIndexSummary();
+    }
+
+    async function loadSelectionData(selection) {
+      if (selection.kind === "builtin" || selection.kind === "bundled") {
+        const manifestDataset =
+          state.bundledManifest && selection.sync
+            ? getManifestDataset(state.bundledManifest, selection.sync)
+            : null;
+
+        return loadSyncedSeries(selection.sync, manifestDataset);
+      }
+
+      return fetchIndexSeries(buildSeriesRequest(selection));
     }
 
     async function handleSubmit(event) {
@@ -616,23 +276,12 @@ const riskAdjustedReturnStudy = {
 
       try {
         const selection = getCurrentSelection();
-        const start = new Date(`${startDateInput.value}T00:00:00`);
-        const end = new Date(`${endDateInput.value}T00:00:00`);
-
-        if (!selection) {
-          throw new Error("Enter an index name or a yfinance symbol before running the study.");
-        }
-        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-          throw new Error("Pick a valid start date and end date.");
-        }
-        if (start >= end) {
-          throw new Error("Start date must be earlier than end date.");
-        }
-
-        const riskFreeRate = Number(constantRateInput.value);
-        if (!Number.isFinite(riskFreeRate)) {
-          throw new Error("Enter a valid annual risk-free rate.");
-        }
+        const { start, end, riskFreeRate } = validateStudyInputs(
+          selection,
+          startDateInput.value,
+          endDateInput.value,
+          constantRateInput.value,
+        );
 
         let indexSeries = [];
         const warnings = [];
@@ -641,20 +290,24 @@ const riskAdjustedReturnStudy = {
         if (useDemoDataInput.checked) {
           indexSeries = filterSeriesByDate(demoIndexSeries, start, end);
           methodLabel = "Synthetic demo data";
-          warnings.push("Demo mode uses synthetic data only. It is for UI testing, not analysis.");
+          warnings.push(
+            "Demo mode uses synthetic data only. It is for UI testing, not analysis.",
+          );
           appendCoverageWarnings(indexSeries, start, end, warnings);
         } else {
-          const fetched = await fetchIndexSeries(buildSeriesRequest(selection));
-          const { snapshot, series, rememberedEntry } = fetched;
+          const { snapshot, series, rememberedEntry } =
+            await loadSelectionData(selection);
 
           indexSeries = filterSeriesByDate(series, start, end);
-          methodLabel = `Local yfinance fetch using ${snapshot.symbol}`;
+          methodLabel = snapshot.cache
+            ? `Local yfinance fetch using ${snapshot.symbol}`
+            : `Bundled snapshot using ${snapshot.symbol}`;
           appendCoverageWarnings(indexSeries, start, end, warnings);
           appendSnapshotWarnings(snapshot, warnings);
 
           if (snapshot.sourceSeriesType !== selection.targetSeriesType) {
             warnings.push(
-              `Fetched data currently uses ${snapshot.sourceSeriesType} series as a bootstrap proxy for ${selection.targetSeriesType}.`,
+              `Loaded data currently uses ${snapshot.sourceSeriesType} series as a bootstrap proxy for ${selection.targetSeriesType}.`,
             );
           }
 
@@ -662,17 +315,13 @@ const riskAdjustedReturnStudy = {
             warnings.push(snapshot.note);
           }
 
-          if (rememberedEntry) {
-            rememberCatalogEntry(rememberedEntry);
-          }
-
-          lastLoadedSelectionSignature = buildSelectionSignature(selection);
-          lastLoadedSnapshot = snapshot;
-          updateIndexSummary();
+          applyLoadedSnapshot(selection, snapshot, rememberedEntry);
         }
 
         if (indexSeries.length < 2) {
-          throw new Error("The selected date range leaves fewer than two index observations.");
+          throw new Error(
+            "The selected date range leaves fewer than two index observations.",
+          );
         }
 
         const metrics = computeRiskAdjustedMetrics(indexSeries, {
@@ -680,12 +329,13 @@ const riskAdjustedReturnStudy = {
         });
 
         if (selection.targetSeriesType !== "TRI") {
-          warnings.push("This selection is not marked as TRI. Dividend exclusion can understate long-run return quality.");
+          warnings.push(
+            "This selection is not marked as TRI. Dividend exclusion can understate long-run return quality.",
+          );
         }
 
         resultsRoot.innerHTML = renderResults({
           metrics,
-          indexName: selection.label,
           startDate: indexSeries[0].date,
           endDate: indexSeries[indexSeries.length - 1].date,
           methodLabel,
@@ -712,16 +362,32 @@ const riskAdjustedReturnStudy = {
       setStatus("Loaded a trailing 5-year window.", "info");
     }
 
+    async function loadBundledManifest() {
+      try {
+        state.bundledManifest = await loadSyncManifest(bundledManifestSyncConfig);
+        refreshSelectionUi();
+      } catch (error) {
+        state.bundledManifest = null;
+        refreshSelectionUi();
+        setStatus(
+          `${error.message} Built-in datasets can still load directly if their snapshot files exist.`,
+          "info",
+        );
+      }
+    }
+
     async function loadRememberedSymbols() {
       try {
-        rememberedCatalog = await loadRememberedIndexCatalog();
-        populateSuggestionList();
-        updateIndexSummary();
+        state.rememberedCatalog = await loadRememberedIndexCatalog();
+        state.backendState = "ready";
+        refreshSelectionUi();
       } catch (error) {
-        rememberedCatalog = [];
-        populateSuggestionList();
-        updateIndexSummary();
-        setStatus(error.message || buildLocalApiUnavailableMessage(), "error");
+        state.rememberedCatalog = [];
+        state.backendState = "unavailable";
+        refreshSelectionUi();
+        if (!status.textContent) {
+          setStatus(buildLocalApiUnavailableMessage(), "info");
+        }
       }
     }
 
@@ -734,9 +400,10 @@ const riskAdjustedReturnStudy = {
     useDemoDataInput.addEventListener("change", updateIndexSummary);
     form.addEventListener("submit", handleSubmit);
     lastFiveYearsButton.addEventListener("click", applyLastFiveYears);
+    resultsRoot.addEventListener("click", handleResultsClick);
 
-    populateSuggestionList();
-    updateIndexSummary();
+    refreshSelectionUi();
+    loadBundledManifest();
     loadRememberedSymbols();
 
     return () => {
@@ -745,6 +412,7 @@ const riskAdjustedReturnStudy = {
       indexQueryInput.removeEventListener("change", handleSelectionInput);
       useDemoDataInput.removeEventListener("change", updateIndexSummary);
       lastFiveYearsButton.removeEventListener("click", applyLastFiveYears);
+      resultsRoot.removeEventListener("click", handleResultsClick);
     };
   },
 };
