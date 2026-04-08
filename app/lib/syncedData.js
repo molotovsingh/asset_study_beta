@@ -4,6 +4,34 @@ function buildApiUrl(pathname) {
   return new URL(`../../api${pathname}`, import.meta.url);
 }
 
+function buildManifestRelativePath(syncConfig) {
+  return `data/snapshots/${syncConfig.provider}/${syncConfig.datasetType}/manifest.json`;
+}
+
+function buildManifestUrl(syncConfig) {
+  return new URL(
+    `../../${buildManifestRelativePath(syncConfig)}`,
+    import.meta.url,
+  );
+}
+
+function buildSnapshotRelativePath(syncConfig, relativePath) {
+  if (relativePath) {
+    return relativePath.startsWith("data/")
+      ? relativePath
+      : `data/snapshots/${relativePath}`;
+  }
+
+  return `data/snapshots/${syncConfig.provider}/${syncConfig.datasetType}/${syncConfig.datasetId}.json`;
+}
+
+function buildSnapshotUrl(syncConfig, relativePath) {
+  return new URL(
+    `../../${buildSnapshotRelativePath(syncConfig, relativePath)}`,
+    import.meta.url,
+  );
+}
+
 function normalizeSnapshotPoints(points) {
   if (!Array.isArray(points)) {
     return [];
@@ -29,6 +57,15 @@ function normalizeSnapshotPoints(points) {
     .sort((left, right) => left.date - right.date);
 }
 
+function normalizeSnapshotSeries(snapshot, errorMessage) {
+  const series = normalizeSnapshotPoints(snapshot?.points);
+  if (series.length < 2) {
+    throw new Error(errorMessage);
+  }
+
+  return series;
+}
+
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -41,9 +78,7 @@ function getSnapshotFreshness(snapshot, now = new Date()) {
   const latestDate = snapshot?.range?.endDate
     ? new Date(`${snapshot.range.endDate}T00:00:00`)
     : null;
-  const generatedAt = snapshot?.generatedAt
-    ? new Date(snapshot.generatedAt)
-    : null;
+  const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt) : null;
 
   const marketLagDays =
     latestDate && !Number.isNaN(latestDate.getTime())
@@ -87,7 +122,7 @@ function describeFreshness(freshness) {
 }
 
 function buildLocalApiUnavailableMessage() {
-  return `Could not reach the local data API. Start ${LOCAL_API_COMMAND} and reload the app.`;
+  return `Could not reach the local data API. Built-in bundled snapshots still work, but raw symbols need ${LOCAL_API_COMMAND}.`;
 }
 
 async function parseJsonResponse(response) {
@@ -98,59 +133,137 @@ async function parseJsonResponse(response) {
   }
 }
 
-async function loadRememberedIndexCatalog() {
+async function requestJson(
+  url,
+  {
+    requestInit = {},
+    onNetworkError = () => "The request could not be completed.",
+    onHttpError = (response, payload) =>
+      payload?.error || `Request failed (${response.status} ${response.statusText}).`,
+  } = {},
+) {
   let response;
   try {
-    response = await fetch(buildApiUrl("/yfinance/catalog"), {
+    response = await fetch(url, {
       cache: "no-store",
+      ...requestInit,
     });
   } catch (error) {
-    throw new Error(buildLocalApiUnavailableMessage());
+    throw new Error(onNetworkError(error));
   }
 
+  const payload = await parseJsonResponse(response);
   if (!response.ok) {
-    const payload = await parseJsonResponse(response);
-    throw new Error(payload?.error || buildLocalApiUnavailableMessage());
+    throw new Error(onHttpError(response, payload));
   }
 
-  const payload = await response.json();
-  if (!Array.isArray(payload.datasets)) {
-    throw new Error("The local data API returned an invalid catalog payload.");
+  return payload;
+}
+
+function validateDatasetsPayload(payload, errorMessage) {
+  if (!Array.isArray(payload?.datasets)) {
+    throw new Error(errorMessage);
   }
 
   return payload.datasets;
 }
 
+async function loadSyncManifest(syncConfig) {
+  if (!syncConfig) {
+    throw new Error("No synced source is configured for this dataset.");
+  }
+
+  const manifest = await requestJson(buildManifestUrl(syncConfig), {
+    onHttpError: (response) => {
+      if (response.status === 404) {
+        return `No bundled manifest was found at ${buildManifestRelativePath(syncConfig)}.`;
+      }
+
+      return `Could not load the bundled manifest (${response.status} ${response.statusText}).`;
+    },
+  });
+
+  validateDatasetsPayload(
+    manifest,
+    "The bundled manifest does not contain a datasets list.",
+  );
+  return manifest;
+}
+
+function getManifestDataset(manifest, syncConfig) {
+  return (
+    manifest?.datasets?.find(
+      (dataset) => dataset.datasetId === syncConfig?.datasetId,
+    ) || null
+  );
+}
+
+async function loadSyncedSeries(syncConfig, manifestDataset = null) {
+  if (!syncConfig) {
+    throw new Error("No synced source is configured for this dataset.");
+  }
+
+  const snapshot = await requestJson(
+    buildSnapshotUrl(syncConfig, manifestDataset?.path),
+    {
+      onHttpError: (response) => {
+        const expectedPath = buildSnapshotRelativePath(
+          syncConfig,
+          manifestDataset?.path,
+        );
+        if (response.status === 404) {
+          return `No bundled snapshot was found at ${expectedPath}.`;
+        }
+
+        return `Could not load the bundled snapshot (${response.status} ${response.statusText}).`;
+      },
+    },
+  );
+
+  return {
+    snapshot,
+    series: normalizeSnapshotSeries(
+      snapshot,
+      "The bundled snapshot did not contain enough observations.",
+    ),
+  };
+}
+
+async function loadRememberedIndexCatalog() {
+  const payload = await requestJson(buildApiUrl("/yfinance/catalog"), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || buildLocalApiUnavailableMessage(),
+  });
+
+  validateDatasetsPayload(
+    payload,
+    "The local data API returned an invalid catalog payload.",
+  );
+  return payload.datasets;
+}
+
 async function fetchIndexSeries(request) {
-  let response;
-  try {
-    response = await fetch(buildApiUrl("/yfinance/index-series"), {
+  const payload = await requestJson(buildApiUrl("/yfinance/index-series"), {
+    requestInit: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      cache: "no-store",
       body: JSON.stringify(request),
-    });
-  } catch (error) {
-    throw new Error(buildLocalApiUnavailableMessage());
-  }
-
-  const payload = await parseJsonResponse(response);
-  if (!response.ok) {
-    throw new Error(payload?.error || "The local data API could not load that symbol.");
-  }
+    },
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load that symbol.",
+  });
 
   const snapshot = payload?.snapshot;
-  const series = normalizeSnapshotPoints(snapshot?.points);
-
-  if (series.length < 2) {
-    throw new Error("The fetched series did not contain enough observations.");
-  }
-
   return {
     snapshot,
-    series,
+    series: normalizeSnapshotSeries(
+      snapshot,
+      "The fetched series did not contain enough observations.",
+    ),
     rememberedEntry: payload?.rememberedEntry || null,
   };
 }
@@ -160,6 +273,9 @@ export {
   buildLocalApiUnavailableMessage,
   describeFreshness,
   fetchIndexSeries,
+  getManifestDataset,
   getSnapshotFreshness,
   loadRememberedIndexCatalog,
+  loadSyncManifest,
+  loadSyncedSeries,
 };

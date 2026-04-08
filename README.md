@@ -6,7 +6,8 @@ Minimal static scaffold for a study library.
 
 - Hosts studies in a registry instead of hardcoding everything into one page.
 - Ships the first study: risk-adjusted return for an Indian index.
-- Uses a local backend to fetch and cache yfinance symbols on demand.
+- Loads bundled snapshots for built-in datasets and optionally uses a local
+  backend for raw yfinance symbols.
 - Keeps index catalog metadata separate from study logic.
 
 ## Why this structure
@@ -28,9 +29,12 @@ This avoids a single giant "study page" that keeps growing conditionals forever.
 
 `Risk-Adjusted Return` supports:
 
-- built-in index names or any yfinance symbol
+- built-in or bundled index datasets
+- raw yfinance symbols through the optional local backend
 - date window selection
-- local backend fetch and machine-local cache under `data/local-cache/...`
+- bundled snapshot loading from `data/snapshots/...`
+- local backend fetch and machine-local SQLite cache under
+  `data/local-cache/yfinance/index/cache.sqlite3`
 - optional synthetic demo data mode
 - manual annual risk-free rate input
 - output for CAGR, annualized volatility, Sharpe ratio, Sortino ratio, total
@@ -59,7 +63,14 @@ python3 -m venv .venv
 ./.venv/bin/pip install -r requirements-sync.txt
 ```
 
-3. Start the local app server:
+3. Either serve the static app for bundled datasets:
+
+```bash
+python3 -m http.server 8000
+```
+
+Or start the local app server when you want raw yfinance symbols and local
+machine caching backed by SQLite:
 
 ```bash
 ./.venv/bin/python scripts/dev_server.py --port 8000
@@ -67,28 +78,32 @@ python3 -m venv .venv
 
 Then open `http://127.0.0.1:8000`.
 
-The first study now depends on this local server because symbol lookup and
-yfinance fetching happen through `/api/yfinance/...`, not through static JSON
-files in the browser.
+The first study can load built-in bundled datasets from committed snapshots with
+either server. Raw symbols and remembered local symbols need the local server
+because they go through `/api/yfinance/...`.
 
-## Local Symbol Flow
+## Data Flow
 
-Type a built-in name like `Nifty 50` or any yfinance symbol like `AAPL`,
-`^NSEI`, or `ETH-USD` into the main input and run the study.
+Type a built-in name like `Nifty 50`, a bundled custom dataset label, or any
+yfinance symbol like `AAPL`, `^NSEI`, or `ETH-USD` into the main input and run
+the study.
 
 What happens:
 
-- built-in names resolve to their mapped symbols in the browser
-- raw symbols are sent straight to the local backend
+- built-in and bundled datasets load from committed snapshots under
+  `data/snapshots/`
+- raw symbols are sent to the local backend
 - successful ad hoc symbols are remembered locally on that machine
-- fetched series are cached under `data/local-cache/yfinance/index/`
+- backend-fetched series and remembered symbols are stored in
+  `data/local-cache/yfinance/index/cache.sqlite3`
 
-The browser never talks to Yahoo directly.
+The browser never talks to Yahoo directly. Bundled snapshots come from this
+repo, and ad hoc backend fetches are mediated through Python.
 
-## Optional Snapshot Tooling
+## Snapshot Tooling
 
-The older snapshot scripts are still available for bulk refresh, CI, or future
-provider work. They write normalized JSON snapshots into `data/snapshots/`.
+The snapshot scripts are the source of truth for bundled datasets in the repo.
+They write normalized JSON snapshots into `data/snapshots/`.
 
 Current bootstrap provider:
 
@@ -118,6 +133,12 @@ The sync script now retries transient symbol failures and also writes
 `data/snapshots/yfinance/index/manifest.json` so the repo has a compact index of
 what was pulled, when it was generated, and which snapshot path each dataset
 uses.
+
+Ad hoc backend-fetched symbols are local-only convenience data. Use the snapshot
+tooling when you want a dataset to become part of the bundled repo catalog.
+
+If you already have older `data/local-cache/.../*.json` files from the previous
+runtime format, the local server imports them into SQLite on startup.
 
 ### Current limits
 

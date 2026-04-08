@@ -3,7 +3,7 @@
 This directory now has two distinct roles:
 
 - `data/local-cache/`
-  Machine-local runtime cache written by `scripts/dev_server.py` when the app
+  Machine-local runtime storage written by `scripts/dev_server.py` when the app
   fetches yfinance symbols on demand. This path is ignored by git.
 - `data/snapshots/`
   Repo-tracked normalized snapshots produced by the bulk sync scripts for CI,
@@ -11,17 +11,22 @@ This directory now has two distinct roles:
 
 ## Runtime Cache
 
-The live app flow uses the local backend and writes cached series like:
+The optional local backend flow uses `scripts/dev_server.py` and stores mutable
+runtime state in:
 
-- `data/local-cache/yfinance/index/aapl-<hash>.json`
-- `data/local-cache/yfinance/index/manifest.json`
+- `data/local-cache/yfinance/index/cache.sqlite3`
 
-The browser does not fetch Yahoo directly. It talks to the local backend, which
-fetches, normalizes, caches, and remembers ad hoc symbols on this machine.
+The browser does not fetch Yahoo directly. For ad hoc symbols it talks to the
+local backend, which fetches, normalizes, caches, and remembers symbols on this
+machine.
 
-## Snapshot Tooling
+If older JSON cache files or a local `manifest.json` already exist in this
+folder, the dev server imports them into SQLite on startup.
 
-The optional bootstrap sync path still writes files like:
+## Bundled Snapshots
+
+The main bundled study datasets are read directly from repo-tracked snapshots
+like:
 
 - `data/snapshots/yfinance/index/nifty-50.json`
 - `data/snapshots/yfinance/index/nifty-50-tri.json`
@@ -36,5 +41,6 @@ python3 -m venv .venv
 ./.venv/bin/python scripts/sync_yfinance.py
 ```
 
-The snapshot tooling keeps a normalized local format around so the data source
-can be swapped later without rewriting study logic.
+The study UI can read these bundled snapshots from a plain static file server.
+The local backend is only needed when you want raw yfinance symbols or local
+remembered symbols.
