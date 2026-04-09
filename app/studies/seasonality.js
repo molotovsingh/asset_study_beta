@@ -3,30 +3,14 @@ import {
   exportSeasonalityCsv,
   exportSeasonalityXls,
 } from "../lib/seasonalityExport.js";
-import {
-  buildLocalApiUnavailableMessage,
-  fetchIndexSeries,
-  getManifestDataset,
-  loadRememberedIndexCatalog,
-  loadSyncManifest,
-  loadSyncedSeries,
-} from "../lib/syncedData.js";
 import { filterSeriesByDate } from "../lib/stats.js";
 import {
-  buildSelectionSignature,
-  buildSeriesRequest,
-  findSelectionByQuery,
-  mergeSelectionSuggestions,
-  upsertRememberedCatalogEntry,
-} from "./shared/indexSelection.js";
-import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
-import {
-  BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
   appendCoverageWarnings,
   appendSnapshotWarnings,
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
+import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import {
   renderSeasonalityResults,
   seasonalityTemplate,
@@ -99,59 +83,29 @@ function mountSeasonalityOverview(root) {
     seasonalitySession.includePartialBoundaryMonths;
 
   const state = seasonalitySession;
-
-  function setStatus(message, statusState = "info") {
-    status.className = `status ${statusState}`;
-    status.textContent = message;
-  }
+  const runtime = createIndexStudyOverviewRuntime({
+    session: state,
+    queryInput: indexQueryInput,
+    suggestionsEl: indexSuggestions,
+    summaryEl: indexSummary,
+    statusEl: status,
+  });
+  const {
+    setStatus,
+    getCurrentSelection,
+    refreshSelectionUi,
+    applyLoadedSnapshot,
+    loadSelectionData,
+    loadBundledManifest,
+    loadRememberedSymbols,
+    updateIndexSummary,
+  } = runtime;
 
   function persistFormState() {
     state.indexQuery = indexQueryInput.value;
     state.startDateValue = startDateInput.value;
     state.endDateValue = endDateInput.value;
     state.includePartialBoundaryMonths = includePartialInput.checked;
-  }
-
-  function getSuggestions() {
-    return mergeSelectionSuggestions(
-      state.bundledManifest,
-      state.rememberedCatalog,
-    );
-  }
-
-  function getCurrentSelection() {
-    return findSelectionByQuery(indexQueryInput.value, getSuggestions());
-  }
-
-  function getRuntimeSnapshot(selection) {
-    const selectionSignature = buildSelectionSignature(selection);
-    return selectionSignature === state.lastLoadedSelectionSignature
-      ? state.lastLoadedSnapshot
-      : null;
-  }
-
-  function populateSuggestionList() {
-    indexSuggestions.innerHTML = getSuggestions()
-      .map(
-        (entry) =>
-          `<option value="${entry.label}" label="${entry.symbol} · ${entry.family}"></option>`,
-      )
-      .join("");
-  }
-
-  function updateIndexSummary() {
-    const selection = getCurrentSelection();
-    indexSummary.innerHTML = renderSelectionDetails(
-      selection,
-      getRuntimeSnapshot(selection),
-      false,
-      state.backendState,
-    );
-  }
-
-  function refreshSelectionUi() {
-    populateSuggestionList();
-    updateIndexSummary();
   }
 
   function handleResultsClick(event) {
@@ -179,39 +133,6 @@ function mountSeasonalityOverview(root) {
     } catch (error) {
       setStatus(error.message, "error");
     }
-  }
-
-  function rememberCatalogEntry(entry) {
-    state.rememberedCatalog = upsertRememberedCatalogEntry(
-      state.rememberedCatalog,
-      entry,
-    );
-    refreshSelectionUi();
-  }
-
-  function applyLoadedSnapshot(selection, snapshot, rememberedEntry) {
-    state.lastLoadedSelectionSignature = buildSelectionSignature(selection);
-    state.lastLoadedSnapshot = snapshot;
-
-    if (rememberedEntry) {
-      rememberCatalogEntry(rememberedEntry);
-      return;
-    }
-
-    updateIndexSummary();
-  }
-
-  async function loadSelectionData(selection) {
-    if (selection.kind === "builtin" || selection.kind === "bundled") {
-      const manifestDataset =
-        state.bundledManifest && selection.sync
-          ? getManifestDataset(state.bundledManifest, selection.sync)
-          : null;
-
-      return loadSyncedSeries(selection.sync, manifestDataset);
-    }
-
-    return fetchIndexSeries(buildSeriesRequest(selection));
   }
 
   async function handleSubmit(event) {
@@ -338,37 +259,6 @@ function mountSeasonalityOverview(root) {
     endDateInput.value = toInputDate(end);
     persistFormState();
     setStatus("Loaded a trailing 5-year window.", "info");
-  }
-
-  async function loadBundledManifest() {
-    try {
-      state.bundledManifest = await loadSyncManifest(
-        BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
-      );
-      refreshSelectionUi();
-    } catch (error) {
-      state.bundledManifest = null;
-      refreshSelectionUi();
-      setStatus(
-        `${error.message} Built-in datasets can still load directly if their snapshot files exist.`,
-        "info",
-      );
-    }
-  }
-
-  async function loadRememberedSymbols() {
-    try {
-      state.rememberedCatalog = await loadRememberedIndexCatalog();
-      state.backendState = "ready";
-      refreshSelectionUi();
-    } catch (error) {
-      state.rememberedCatalog = [];
-      state.backendState = "unavailable";
-      refreshSelectionUi();
-      if (!status.textContent) {
-        setStatus(buildLocalApiUnavailableMessage(), "info");
-      }
-    }
   }
 
   function handleSelectionInput() {
