@@ -118,6 +118,12 @@ Refresh snapshots and validate them with:
 ./scripts/refresh_yfinance.sh --period 5y
 ```
 
+Run the frontend-side calculator and export regressions with:
+
+```bash
+node scripts/run_frontend_regression_checks.mjs
+```
+
 ### Add a custom yfinance symbol
 
 Register a symbol once:

@@ -202,4 +202,9 @@ function exportRelativeStudyXls(payload) {
   );
 }
 
-export { exportRelativeStudyCsv, exportRelativeStudyXls };
+export {
+  buildCsvRows,
+  buildWorkbookXml,
+  exportRelativeStudyCsv,
+  exportRelativeStudyXls,
+};

@@ -326,4 +326,9 @@ function exportSeasonalityXls(payload) {
   );
 }
 
-export { exportSeasonalityCsv, exportSeasonalityXls };
+export {
+  buildCsvRows,
+  buildWorkbookXml,
+  exportSeasonalityCsv,
+  exportSeasonalityXls,
+};
