@@ -28,6 +28,7 @@ import {
   renderSelectionDetails,
   studyTemplate,
 } from "./riskAdjustedReturnView.js";
+import { mountRiskAdjustedReturnVisuals } from "./riskAdjustedReturnVisuals.js";
 import { createPlaceholderView } from "./studyShell.js";
 
 const demoIndexSeries = [
@@ -65,6 +66,34 @@ function toInputDate(date) {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+function buildDefaultWindow() {
+  const today = new Date();
+  const endDate = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const startDate = new Date(endDate);
+  startDate.setFullYear(startDate.getFullYear() - 5);
+
+  return {
+    startDate,
+    endDate,
+  };
+}
+
+const defaultStudyWindow = buildDefaultWindow();
+const riskAdjustedReturnSession = {
+  indexQuery: "Nifty 50",
+  startDateValue: toInputDate(defaultStudyWindow.startDate),
+  endDateValue: toInputDate(defaultStudyWindow.endDate),
+  riskFreeRateValue: "5.50",
+  useDemoData: false,
+  lastLoadedSelectionSignature: "none",
+  lastLoadedSnapshot: null,
+  lastStudyRun: null,
+};
 
 function appendCoverageWarnings(series, startDate, endDate, warnings) {
   if (!series.length) {
@@ -127,17 +156,21 @@ function validateStudyInputs(selection, startValue, endValue, riskFreeValue) {
   return { start, end, riskFreeRate };
 }
 
-function mountRiskAdjustedReturnOverview(root) {
-    const today = new Date();
-    const endDate = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    );
-    const startDate = new Date(endDate);
-    startDate.setFullYear(startDate.getFullYear() - 5);
+function renderStudyRunResults(resultsRoot, studyRun) {
+  resultsRoot.innerHTML = renderResults({
+    metrics: studyRun.metrics,
+    startDate: studyRun.actualStartDate,
+    endDate: studyRun.actualEndDate,
+    methodLabel: studyRun.methodLabel,
+    warnings: studyRun.warnings,
+  });
+}
 
-    root.innerHTML = studyTemplate(toInputDate(startDate), toInputDate(endDate));
+function mountRiskAdjustedReturnOverview(root) {
+    root.innerHTML = studyTemplate(
+      riskAdjustedReturnSession.startDateValue,
+      riskAdjustedReturnSession.endDateValue,
+    );
 
     const form = root.querySelector("#risk-study-form");
     const indexQueryInput = root.querySelector("#index-query");
@@ -151,18 +184,33 @@ function mountRiskAdjustedReturnOverview(root) {
     const resultsRoot = root.querySelector("#results-root");
     const lastFiveYearsButton = root.querySelector("#load-five-year-window");
 
+    indexQueryInput.value = riskAdjustedReturnSession.indexQuery;
+    startDateInput.value = riskAdjustedReturnSession.startDateValue;
+    endDateInput.value = riskAdjustedReturnSession.endDateValue;
+    constantRateInput.value = riskAdjustedReturnSession.riskFreeRateValue;
+    useDemoDataInput.checked = riskAdjustedReturnSession.useDemoData;
+
     const state = {
       bundledManifest: null,
       rememberedCatalog: [],
       backendState: "unknown",
-      lastLoadedSelectionSignature: "none",
-      lastLoadedSnapshot: null,
-      lastStudyRun: null,
+      lastLoadedSelectionSignature:
+        riskAdjustedReturnSession.lastLoadedSelectionSignature,
+      lastLoadedSnapshot: riskAdjustedReturnSession.lastLoadedSnapshot,
+      lastStudyRun: riskAdjustedReturnSession.lastStudyRun,
     };
 
     function setStatus(message, statusState = "info") {
       status.className = `status ${statusState}`;
       status.textContent = message;
+    }
+
+    function persistFormState() {
+      riskAdjustedReturnSession.indexQuery = indexQueryInput.value;
+      riskAdjustedReturnSession.startDateValue = startDateInput.value;
+      riskAdjustedReturnSession.endDateValue = endDateInput.value;
+      riskAdjustedReturnSession.riskFreeRateValue = constantRateInput.value;
+      riskAdjustedReturnSession.useDemoData = useDemoDataInput.checked;
     }
 
     function getSuggestions() {
@@ -272,6 +320,9 @@ function mountRiskAdjustedReturnOverview(root) {
     function applyLoadedSnapshot(selection, snapshot, rememberedEntry) {
       state.lastLoadedSelectionSignature = buildSelectionSignature(selection);
       state.lastLoadedSnapshot = snapshot;
+      riskAdjustedReturnSession.lastLoadedSelectionSignature =
+        state.lastLoadedSelectionSignature;
+      riskAdjustedReturnSession.lastLoadedSnapshot = snapshot;
 
       if (rememberedEntry) {
         rememberCatalogEntry(rememberedEntry);
@@ -296,7 +347,9 @@ function mountRiskAdjustedReturnOverview(root) {
 
     async function handleSubmit(event) {
       event.preventDefault();
+      persistFormState();
       state.lastStudyRun = null;
+      riskAdjustedReturnSession.lastStudyRun = null;
       setStatus("Running study...", "info");
 
       try {
@@ -377,18 +430,13 @@ function mountRiskAdjustedReturnOverview(root) {
           useDemoData: useDemoDataInput.checked,
           exportedAt: new Date(),
         };
-
-        resultsRoot.innerHTML = renderResults({
-          metrics,
-          startDate: indexSeries[0].date,
-          endDate: indexSeries[indexSeries.length - 1].date,
-          methodLabel,
-          warnings,
-        });
+        riskAdjustedReturnSession.lastStudyRun = state.lastStudyRun;
+        renderStudyRunResults(resultsRoot, state.lastStudyRun);
 
         setStatus("Study completed.", "success");
       } catch (error) {
         state.lastStudyRun = null;
+        riskAdjustedReturnSession.lastStudyRun = null;
         resultsRoot.innerHTML = `
           <div class="empty-state">
             ${error.message}
@@ -404,6 +452,7 @@ function mountRiskAdjustedReturnOverview(root) {
       start.setFullYear(start.getFullYear() - 5);
       startDateInput.value = toInputDate(start);
       endDateInput.value = toInputDate(end);
+      persistFormState();
       setStatus("Loaded a trailing 5-year window.", "info");
     }
 
@@ -437,12 +486,21 @@ function mountRiskAdjustedReturnOverview(root) {
     }
 
     function handleSelectionInput() {
+      persistFormState();
       updateIndexSummary();
+    }
+
+    function handleFormFieldChange() {
+      persistFormState();
     }
 
     indexQueryInput.addEventListener("input", handleSelectionInput);
     indexQueryInput.addEventListener("change", handleSelectionInput);
     useDemoDataInput.addEventListener("change", updateIndexSummary);
+    useDemoDataInput.addEventListener("change", handleFormFieldChange);
+    startDateInput.addEventListener("input", handleFormFieldChange);
+    endDateInput.addEventListener("input", handleFormFieldChange);
+    constantRateInput.addEventListener("input", handleFormFieldChange);
     form.addEventListener("submit", handleSubmit);
     lastFiveYearsButton.addEventListener("click", applyLastFiveYears);
     resultsRoot.addEventListener("click", handleResultsClick);
@@ -450,15 +508,27 @@ function mountRiskAdjustedReturnOverview(root) {
     refreshSelectionUi();
     loadBundledManifest();
     loadRememberedSymbols();
+    if (state.lastStudyRun) {
+      renderStudyRunResults(resultsRoot, state.lastStudyRun);
+      setStatus("Loaded the last completed study run.", "success");
+    }
 
     return () => {
       form.removeEventListener("submit", handleSubmit);
       indexQueryInput.removeEventListener("input", handleSelectionInput);
       indexQueryInput.removeEventListener("change", handleSelectionInput);
       useDemoDataInput.removeEventListener("change", updateIndexSummary);
+      useDemoDataInput.removeEventListener("change", handleFormFieldChange);
+      startDateInput.removeEventListener("input", handleFormFieldChange);
+      endDateInput.removeEventListener("input", handleFormFieldChange);
+      constantRateInput.removeEventListener("input", handleFormFieldChange);
       lastFiveYearsButton.removeEventListener("click", applyLastFiveYears);
       resultsRoot.removeEventListener("click", handleResultsClick);
     };
+}
+
+function mountRiskAdjustedReturnVisualsView(root) {
+  return mountRiskAdjustedReturnVisuals(root, riskAdjustedReturnSession);
 }
 
 const riskAdjustedReturnStudy = {
@@ -469,7 +539,7 @@ const riskAdjustedReturnStudy = {
   inputSummary:
     "Dataset or symbol, date range, and annual risk-free rate.",
   capabilities: {
-    visuals: "planned",
+    visuals: "ready",
     relative: "planned",
     exports: ["csv", "xls"],
   },
@@ -484,25 +554,15 @@ const riskAdjustedReturnStudy = {
       default: true,
       mount: mountRiskAdjustedReturnOverview,
     },
-    createPlaceholderView({
+    {
       id: "visuals",
       label: "Visuals",
       summary: "Study-specific charts and rolling views.",
       description:
-        "This view is reserved for growth, drawdown, rolling return, and rolling volatility visuals that are specific to this study.",
-      bullets: [
-        {
-          label: "Growth",
-          copy:
-            "Add a growth-of-100 chart plus rolling return bands for the active window.",
-        },
-        {
-          label: "Risk",
-          copy:
-            "Use drawdown and rolling volatility views that match this study's return model.",
-        },
-      ],
-    }),
+        "Inspect the last completed run through growth, drawdown, rolling volatility, and return-distribution charts.",
+      status: "ready",
+      mount: mountRiskAdjustedReturnVisualsView,
+    },
     createPlaceholderView({
       id: "relative",
       label: "Relative",

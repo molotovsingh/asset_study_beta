@@ -420,4 +420,9 @@ function computeRiskAdjustedMetrics(indexSeries, options = {}) {
   };
 }
 
-export { filterSeriesByDate, computeRiskAdjustedMetrics };
+export {
+  computeRiskAdjustedMetrics,
+  filterSeriesByDate,
+  inferPeriodsPerYear,
+  toPeriodicReturns,
+};

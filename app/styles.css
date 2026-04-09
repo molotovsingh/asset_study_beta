@@ -617,6 +617,207 @@ textarea {
   display: none;
 }
 
+.visuals-shell,
+.visuals-summary-grid,
+.visuals-chart-grid,
+.visuals-context-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.visuals-hero,
+.visuals-context,
+.visual-card,
+.visuals-summary-card {
+  background: rgba(255, 252, 247, 0.78);
+}
+
+.visuals-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: end;
+}
+
+.visuals-copy h2 {
+  margin: 0 0 10px;
+  font-size: clamp(1.8rem, 2.4vw, 2.5rem);
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+}
+
+.visuals-copy .summary-meta + .summary-meta {
+  margin-top: 6px;
+}
+
+.visuals-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 10px;
+  align-items: center;
+}
+
+.visuals-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.visuals-summary-card {
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+}
+
+.visuals-summary-value {
+  display: block;
+  font-size: clamp(1.42rem, 2vw, 1.86rem);
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.visuals-context-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.visuals-status {
+  margin-top: 10px;
+}
+
+.visuals-warning-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.visuals-warning-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(135, 75, 31, 0.11);
+  color: var(--warn);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.visuals-chart-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.visual-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.visual-card-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.visual-card-stat {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+}
+
+.visual-card-stat-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.visual-card-stat strong {
+  font-size: 1.08rem;
+  line-height: 1;
+}
+
+.chart-svg {
+  inline-size: 100%;
+  block-size: auto;
+  overflow: visible;
+}
+
+.chart-grid-line,
+.chart-baseline {
+  stroke: rgba(34, 39, 37, 0.12);
+  stroke-width: 1;
+}
+
+.chart-baseline {
+  stroke: rgba(135, 75, 31, 0.22);
+  stroke-dasharray: 4 4;
+}
+
+.chart-axis-label {
+  fill: var(--muted);
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+.chart-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-line-growth,
+.chart-line-volatility {
+  stroke: var(--accent);
+}
+
+.chart-line-drawdown {
+  stroke: #8a4f26;
+}
+
+.chart-area {
+  opacity: 0.2;
+}
+
+.chart-area-growth {
+  fill: rgba(13, 95, 77, 0.22);
+}
+
+.chart-area-drawdown {
+  fill: rgba(138, 79, 38, 0.22);
+}
+
+.chart-bar {
+  fill: rgba(13, 95, 77, 0.76);
+}
+
+.visual-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.visual-chart-empty,
+.visual-empty {
+  display: grid;
+  gap: 12px;
+}
+
+.visual-empty {
+  justify-items: start;
+}
+
+.visual-empty h2 {
+  margin: 0;
+  font-size: clamp(1.6rem, 2.1vw, 2rem);
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
 .results-section-head {
   display: flex;
   align-items: end;
@@ -933,6 +1134,9 @@ button:focus-visible {
   .card-grid,
   .inline-row,
   .onboarding-grid,
+  .visuals-summary-grid,
+  .visuals-context-grid,
+  .visuals-chart-grid,
   .study-placeholder-grid {
     grid-template-columns: 1fr;
   }
@@ -991,6 +1195,14 @@ button:focus-visible {
 
   .results-export-actions {
     width: 100%;
+    justify-content: start;
+  }
+
+  .visuals-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .visuals-actions {
     justify-content: start;
   }
 }
