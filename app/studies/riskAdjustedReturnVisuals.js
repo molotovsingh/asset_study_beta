@@ -12,6 +12,7 @@ import {
   inferPeriodsPerYear,
   toPeriodicReturns,
 } from "../lib/stats.js";
+import { createExportClickHandler } from "./shared/exportClickHandler.js";
 
 const OVERVIEW_HASH = "#risk-adjusted-return/overview";
 const CHART_WIDTH = 720;
@@ -637,27 +638,16 @@ function mountRiskAdjustedReturnVisuals(root, session) {
     status.textContent = message;
   }
 
-  function handleClick(event) {
-    const exportTrigger = event.target.closest("[data-visual-export]");
-    if (!exportTrigger) {
-      return;
-    }
-
-    try {
-      if (exportTrigger.dataset.visualExport === "csv") {
-        exportStudyCsv(studyRun);
-        setStatus("Downloaded the CSV export.", "success");
-        return;
-      }
-
-      if (exportTrigger.dataset.visualExport === "xls") {
-        exportStudyXls(studyRun);
-        setStatus("Downloaded the XLS export.", "success");
-      }
-    } catch (error) {
-      setStatus(error.message, "error");
-    }
-  }
+  const handleClick = createExportClickHandler({
+    triggerSelector: "[data-visual-export]",
+    datasetKey: "visualExport",
+    getPayload: () => studyRun,
+    exporters: {
+      csv: exportStudyCsv,
+      xls: exportStudyXls,
+    },
+    setStatus,
+  });
 
   root.addEventListener("click", handleClick);
   return () => {

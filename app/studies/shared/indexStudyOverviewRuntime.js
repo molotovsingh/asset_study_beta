@@ -23,6 +23,9 @@ function createIndexStudyOverviewRuntime({
   summaryEl,
   statusEl,
   getSummaryContext = () => ({ useDemoData: false }),
+  selectionSignatureKey = "lastLoadedSelectionSignature",
+  snapshotKey = "lastLoadedSnapshot",
+  reuseManifestIfLoaded = false,
 }) {
   function setStatus(message, statusState = "info") {
     statusEl.className = `status ${statusState}`;
@@ -42,8 +45,8 @@ function createIndexStudyOverviewRuntime({
 
   function getRuntimeSnapshot(selection) {
     const selectionSignature = buildSelectionSignature(selection);
-    return selectionSignature === session.lastLoadedSelectionSignature
-      ? session.lastLoadedSnapshot
+    return selectionSignature === session[selectionSignatureKey]
+      ? session[snapshotKey]
       : null;
   }
 
@@ -81,8 +84,8 @@ function createIndexStudyOverviewRuntime({
   }
 
   function applyLoadedSnapshot(selection, snapshot, rememberedEntry) {
-    session.lastLoadedSelectionSignature = buildSelectionSignature(selection);
-    session.lastLoadedSnapshot = snapshot;
+    session[selectionSignatureKey] = buildSelectionSignature(selection);
+    session[snapshotKey] = snapshot;
 
     if (rememberedEntry) {
       rememberCatalogEntry(rememberedEntry);
@@ -106,6 +109,11 @@ function createIndexStudyOverviewRuntime({
   }
 
   async function loadBundledManifest() {
+    if (reuseManifestIfLoaded && session.bundledManifest) {
+      refreshSelectionUi();
+      return;
+    }
+
     try {
       session.bundledManifest = await loadSyncManifest(
         BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,

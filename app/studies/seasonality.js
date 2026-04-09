@@ -4,6 +4,7 @@ import {
   exportSeasonalityXls,
 } from "../lib/seasonalityExport.js";
 import { filterSeriesByDate } from "../lib/stats.js";
+import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
@@ -100,6 +101,17 @@ function mountSeasonalityOverview(root) {
     loadRememberedSymbols,
     updateIndexSummary,
   } = runtime;
+  const handleExportClick = createExportClickHandler({
+    triggerSelector: "[data-seasonality-export]",
+    datasetKey: "seasonalityExport",
+    getPayload: () => state.lastStudyRun,
+    exporters: {
+      csv: exportSeasonalityCsv,
+      xls: exportSeasonalityXls,
+    },
+    setStatus,
+    missingPayloadMessage: "Run the study before exporting.",
+  });
 
   function persistFormState() {
     state.indexQuery = indexQueryInput.value;
@@ -109,30 +121,7 @@ function mountSeasonalityOverview(root) {
   }
 
   function handleResultsClick(event) {
-    const exportTrigger = event.target.closest("[data-seasonality-export]");
-    if (!exportTrigger) {
-      return;
-    }
-
-    if (!state.lastStudyRun) {
-      setStatus("Run the study before exporting.", "info");
-      return;
-    }
-
-    try {
-      if (exportTrigger.dataset.seasonalityExport === "csv") {
-        exportSeasonalityCsv(state.lastStudyRun);
-        setStatus("Downloaded the seasonality CSV export.", "success");
-        return;
-      }
-
-      if (exportTrigger.dataset.seasonalityExport === "xls") {
-        exportSeasonalityXls(state.lastStudyRun);
-        setStatus("Downloaded the seasonality XLS export.", "success");
-      }
-    } catch (error) {
-      setStatus(error.message, "error");
-    }
+    handleExportClick(event);
   }
 
   async function handleSubmit(event) {

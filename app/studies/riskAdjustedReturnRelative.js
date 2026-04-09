@@ -7,22 +7,14 @@ import {
 import { exportRelativeStudyCsv, exportRelativeStudyXls } from "../lib/relativeStudyExport.js";
 import { computeRelativeMetrics, convertSeriesCurrency } from "../lib/relativeStats.js";
 import {
-  buildLocalApiUnavailableMessage,
   fetchIndexSeries,
-  getManifestDataset,
-  loadRememberedIndexCatalog,
-  loadSyncManifest,
-  loadSyncedSeries,
 } from "../lib/syncedData.js";
 import {
   buildSelectionSignature,
-  buildSeriesRequest,
-  findSelectionByQuery,
-  mergeSelectionSuggestions,
-  upsertRememberedCatalogEntry,
 } from "./shared/indexSelection.js";
+import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
+import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
-import { BUNDLED_INDEX_MANIFEST_SYNC_CONFIG } from "./shared/overviewUtils.js";
 
 const OVERVIEW_HASH = "#risk-adjusted-return/overview";
 
@@ -500,11 +492,26 @@ function mountRiskAdjustedReturnRelative(root, session) {
   const clearButton = root.querySelector("#relative-clear-results");
 
   const state = session;
+  const runtime = createIndexStudyOverviewRuntime({
+    session: state,
+    queryInput: benchmarkQueryInput,
+    suggestionsEl: benchmarkSuggestions,
+    summaryEl: benchmarkSummary,
+    statusEl: status,
+    selectionSignatureKey: "lastRelativeLoadedSelectionSignature",
+    snapshotKey: "lastRelativeLoadedSnapshot",
+    reuseManifestIfLoaded: true,
+  });
 
-  function setStatus(message, statusState = "info") {
-    status.className = `status ${statusState}`;
-    status.textContent = message;
-  }
+  const {
+    setStatus,
+    getCurrentSelection: getBenchmarkSelection,
+    updateIndexSummary: updateSummary,
+    applyLoadedSnapshot,
+    loadSelectionData,
+    loadBundledManifest,
+    loadRememberedSymbols: loadRememberedCatalog,
+  } = runtime;
 
   function updateBasisUi() {
     const isCommon = comparisonBasisInput.value === "common";
@@ -516,79 +523,6 @@ function mountRiskAdjustedReturnRelative(root, session) {
     session.relativeBasis = comparisonBasisInput.value;
     session.relativeBaseCurrency = normalizeCurrencyCode(baseCurrencyInput.value || "USD") || "USD";
     baseCurrencyInput.value = session.relativeBaseCurrency;
-  }
-
-  function getSuggestions() {
-    return mergeSelectionSuggestions(state.bundledManifest, state.rememberedCatalog);
-  }
-
-  function getBenchmarkSelection() {
-    return findSelectionByQuery(benchmarkQueryInput.value, getSuggestions());
-  }
-
-  function populateSuggestions() {
-    benchmarkSuggestions.innerHTML = getSuggestions()
-      .map(
-        (entry) =>
-          `<option value="${entry.label}" label="${entry.symbol} · ${entry.family}"></option>`,
-      )
-      .join("");
-  }
-
-  function updateSummary(runtimeSnapshot = null) {
-    benchmarkSummary.innerHTML = renderSelectionDetails(
-      getBenchmarkSelection(),
-      runtimeSnapshot,
-      false,
-      state.backendState,
-    );
-  }
-
-  async function loadBundledManifest() {
-    if (state.bundledManifest) {
-      populateSuggestions();
-      updateSummary();
-      return;
-    }
-
-    try {
-      state.bundledManifest = await loadSyncManifest(
-        BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
-      );
-    } catch (error) {
-      state.bundledManifest = null;
-    }
-
-    populateSuggestions();
-    updateSummary();
-  }
-
-  async function loadRememberedCatalog() {
-    try {
-      state.rememberedCatalog = await loadRememberedIndexCatalog();
-      state.backendState = "ready";
-    } catch (error) {
-      state.backendState = "unavailable";
-      if (!status.textContent) {
-        setStatus(buildLocalApiUnavailableMessage(), "info");
-      }
-    }
-
-    populateSuggestions();
-    updateSummary();
-  }
-
-  async function loadSelectionData(selection) {
-    if (selection.kind === "builtin" || selection.kind === "bundled") {
-      const manifestDataset =
-        state.bundledManifest && selection.sync
-          ? getManifestDataset(state.bundledManifest, selection.sync)
-          : null;
-
-      return loadSyncedSeries(selection.sync, manifestDataset);
-    }
-
-    return fetchIndexSeries(buildSeriesRequest(selection));
   }
 
   async function loadFxConversion(fromCurrency, toCurrency) {
@@ -689,13 +623,11 @@ function mountRiskAdjustedReturnRelative(root, session) {
         ...benchmarkSelection,
         currency: snapshot.currency || benchmarkSelection.currency || null,
       };
-      if (rememberedEntry) {
-        state.rememberedCatalog = upsertRememberedCatalogEntry(
-          state.rememberedCatalog,
-          rememberedEntry,
-        );
-      }
-      updateSummary(snapshot);
+      applyLoadedSnapshot(
+        resolvedBenchmarkSelection,
+        snapshot,
+        rememberedEntry,
+      );
 
       const requestedSeries = filterSeriesToWindow(
         series,
@@ -839,27 +771,16 @@ function mountRiskAdjustedReturnRelative(root, session) {
     updateSummary();
   }
 
-  function handleResultsClick(event) {
-    const trigger = event.target.closest("[data-relative-export]");
-    if (!trigger || !session.lastRelativeRun) {
-      return;
-    }
-
-    try {
-      if (trigger.dataset.relativeExport === "csv") {
-        exportRelativeStudyCsv(session.lastRelativeRun);
-        setStatus("Downloaded the relative CSV export.", "success");
-        return;
-      }
-
-      if (trigger.dataset.relativeExport === "xls") {
-        exportRelativeStudyXls(session.lastRelativeRun);
-        setStatus("Downloaded the relative XLS export.", "success");
-      }
-    } catch (error) {
-      setStatus(error.message, "error");
-    }
-  }
+  const handleResultsClick = createExportClickHandler({
+    triggerSelector: "[data-relative-export]",
+    datasetKey: "relativeExport",
+    getPayload: () => session.lastRelativeRun,
+    exporters: {
+      csv: exportRelativeStudyCsv,
+      xls: exportRelativeStudyXls,
+    },
+    setStatus,
+  });
 
   function handleClearResults() {
     session.lastRelativeRun = null;
@@ -880,7 +801,6 @@ function mountRiskAdjustedReturnRelative(root, session) {
   resultsRoot.addEventListener("click", handleResultsClick);
 
   updateBasisUi();
-  populateSuggestions();
   updateSummary();
   loadBundledManifest();
   loadRememberedCatalog();

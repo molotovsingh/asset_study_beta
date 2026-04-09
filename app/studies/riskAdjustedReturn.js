@@ -16,6 +16,7 @@ import {
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
+import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { mountRiskAdjustedReturnRelative } from "./riskAdjustedReturnRelative.js";
 import { mountRiskAdjustedReturnVisuals } from "./riskAdjustedReturnVisuals.js";
@@ -61,6 +62,8 @@ const riskAdjustedReturnSession = {
   relativeBasis: "local",
   relativeBaseCurrency: "USD",
   fxSeriesCache: {},
+  lastRelativeLoadedSelectionSignature: "none",
+  lastRelativeLoadedSnapshot: null,
   lastRelativeRun: null,
 };
 
@@ -142,6 +145,17 @@ function mountRiskAdjustedReturnOverview(root) {
       loadRememberedSymbols,
       updateIndexSummary,
     } = runtime;
+    const handleExportClick = createExportClickHandler({
+      triggerSelector: "[data-results-export]",
+      datasetKey: "resultsExport",
+      getPayload: () => state.lastStudyRun,
+      exporters: {
+        csv: exportStudyCsv,
+        xls: exportStudyXls,
+      },
+      setStatus,
+      missingPayloadMessage: "Run the study before exporting.",
+    });
 
     function persistFormState() {
       state.indexQuery = indexQueryInput.value;
@@ -172,29 +186,8 @@ function mountRiskAdjustedReturnOverview(root) {
     }
 
     function handleResultsClick(event) {
-      const exportTrigger = event.target.closest("[data-results-export]");
-      if (exportTrigger) {
-        if (!state.lastStudyRun) {
-          setStatus("Run the study before exporting.", "info");
-          return;
-        }
-
-        try {
-          if (exportTrigger.dataset.resultsExport === "csv") {
-            exportStudyCsv(state.lastStudyRun);
-            setStatus("Downloaded the CSV export.", "success");
-            return;
-          }
-
-          if (exportTrigger.dataset.resultsExport === "xls") {
-            exportStudyXls(state.lastStudyRun);
-            setStatus("Downloaded the XLS export.", "success");
-            return;
-          }
-        } catch (error) {
-          setStatus(error.message, "error");
-          return;
-        }
+      if (handleExportClick(event)) {
+        return;
       }
 
       const trigger = event.target.closest("[data-results-tab-trigger]");

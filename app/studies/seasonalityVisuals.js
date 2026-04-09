@@ -7,6 +7,7 @@ import {
   exportSeasonalityCsv,
   exportSeasonalityXls,
 } from "../lib/seasonalityExport.js";
+import { createExportClickHandler } from "./shared/exportClickHandler.js";
 
 const OVERVIEW_HASH = "#seasonality/overview";
 
@@ -401,27 +402,16 @@ function mountSeasonalityVisuals(root, session) {
     status.textContent = message;
   }
 
-  function handleClick(event) {
-    const trigger = event.target.closest("[data-seasonality-visual-export]");
-    if (!trigger) {
-      return;
-    }
-
-    try {
-      if (trigger.dataset.seasonalityVisualExport === "csv") {
-        exportSeasonalityCsv(studyRun);
-        setStatus("Downloaded the seasonality CSV export.", "success");
-        return;
-      }
-
-      if (trigger.dataset.seasonalityVisualExport === "xls") {
-        exportSeasonalityXls(studyRun);
-        setStatus("Downloaded the seasonality XLS export.", "success");
-      }
-    } catch (error) {
-      setStatus(error.message, "error");
-    }
-  }
+  const handleClick = createExportClickHandler({
+    triggerSelector: "[data-seasonality-visual-export]",
+    datasetKey: "seasonalityVisualExport",
+    getPayload: () => studyRun,
+    exporters: {
+      csv: exportSeasonalityCsv,
+      xls: exportSeasonalityXls,
+    },
+    setStatus,
+  });
 
   root.addEventListener("click", handleClick);
   return () => {
