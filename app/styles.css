@@ -811,6 +811,10 @@ textarea {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.seasonality-visuals-shell .visuals-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .seasonality-heatmap-card {
   grid-column: 1 / -1;
   overflow-x: auto;
@@ -940,7 +944,9 @@ textarea {
 }
 
 .seasonality-table thead th:first-child,
-.seasonality-table tbody th {
+.seasonality-table thead th:last-child,
+.seasonality-table tbody th,
+.seasonality-table tbody td:last-child {
   text-align: left;
 }
 
@@ -956,12 +962,44 @@ textarea {
   background: rgba(255, 255, 255, 0.62);
 }
 
+.seasonality-table tbody tr.is-thin {
+  background: rgba(135, 75, 31, 0.035);
+}
+
 .seasonality-table tbody tr.is-positive th {
   color: var(--accent-strong);
 }
 
 .seasonality-table tbody tr.is-negative th {
   color: #8a4f26;
+}
+
+.seasonality-sample-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(32, 37, 34, 0.08);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.seasonality-sample-pill.thin {
+  background: rgba(135, 75, 31, 0.12);
+  color: var(--warn);
+}
+
+.seasonality-sample-pill.fair {
+  background: rgba(13, 95, 77, 0.1);
+  color: var(--accent-strong);
+}
+
+.seasonality-sample-pill.deep {
+  background: rgba(13, 95, 77, 0.17);
+  color: var(--accent-strong);
 }
 
 .visual-empty {

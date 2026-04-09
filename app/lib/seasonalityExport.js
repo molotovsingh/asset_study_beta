@@ -18,6 +18,10 @@ function buildExportFileBaseName(payload) {
 }
 
 function buildCsvRows(payload) {
+  const bucketByMonthNumber = new Map(
+    payload.bucketStats.map((bucket) => [bucket.monthNumber, bucket]),
+  );
+
   return [
     [
       "year",
@@ -33,22 +37,44 @@ function buildCsvRows(payload) {
       "log_return",
       "is_positive",
       "partial_boundary",
+      "bucket_observations",
+      "bucket_average_log_return",
+      "bucket_confidence_low",
+      "bucket_confidence_high",
+      "bucket_confidence_width",
+      "bucket_consistency_direction",
+      "bucket_consistency_score",
+      "bucket_signal_state",
+      "bucket_sample_quality",
     ],
-    ...payload.monthlyRows.map((row) => [
-      row.year,
-      row.monthNumber,
-      row.monthLabel,
-      toIsoDate(row.monthStart),
-      toIsoDate(row.monthEnd),
-      toIsoDate(row.startDate),
-      toIsoDate(row.endDate),
-      row.startValue,
-      row.endValue,
-      row.simpleReturn,
-      row.logReturn,
-      row.isPositive ? "yes" : "no",
-      row.isBoundaryPartial ? "yes" : "no",
-    ]),
+    ...payload.monthlyRows.map((row) => {
+      const bucket = bucketByMonthNumber.get(row.monthNumber);
+
+      return [
+        row.year,
+        row.monthNumber,
+        row.monthLabel,
+        toIsoDate(row.monthStart),
+        toIsoDate(row.monthEnd),
+        toIsoDate(row.startDate),
+        toIsoDate(row.endDate),
+        row.startValue,
+        row.endValue,
+        row.simpleReturn,
+        row.logReturn,
+        row.isPositive ? "yes" : "no",
+        row.isBoundaryPartial ? "yes" : "no",
+        bucket?.observations ?? null,
+        bucket?.averageLogReturn ?? null,
+        bucket?.confidenceBandLow ?? null,
+        bucket?.confidenceBandHigh ?? null,
+        bucket?.confidenceBandWidth ?? null,
+        bucket?.dominantDirection ?? "",
+        bucket?.consistencyScore ?? null,
+        bucket?.signalState ?? "",
+        bucket?.sampleQualityLabel ?? "",
+      ];
+    }),
   ];
 }
 
@@ -70,6 +96,10 @@ function buildSummaryRows(payload) {
       createCell(payload.includePartialBoundaryMonths ? "Yes" : "No"),
     ],
     [createCell("Return Basis"), createCell("Monthly log returns")],
+    [
+      createCell("Confidence Level"),
+      createCell(summary.confidenceLevel, "percent"),
+    ],
     [createCell("Years Observed"), createCell(summary.yearsObserved, "integer")],
     [createCell("Months Used"), createCell(summary.monthsUsed, "integer")],
     [
@@ -108,6 +138,47 @@ function buildSummaryRows(payload) {
           : "",
       ),
     ],
+    [
+      createCell("Most Consistent Month"),
+      createCell(
+        summary.mostConsistentMonth
+          ? `${summary.mostConsistentMonth.monthLabel} (${summary.mostConsistentMonth.consistencyScore})`
+          : "",
+      ),
+    ],
+    [
+      createCell("Clearest Upside Month"),
+      createCell(
+        summary.clearestPositiveMonth
+          ? `${summary.clearestPositiveMonth.monthLabel} (${summary.clearestPositiveMonth.confidenceBandLow} to ${summary.clearestPositiveMonth.confidenceBandHigh})`
+          : "",
+      ),
+    ],
+    [
+      createCell("Clearest Downside Month"),
+      createCell(
+        summary.clearestNegativeMonth
+          ? `${summary.clearestNegativeMonth.monthLabel} (${summary.clearestNegativeMonth.confidenceBandLow} to ${summary.clearestNegativeMonth.confidenceBandHigh})`
+          : "",
+      ),
+    ],
+    [
+      createCell("Narrowest Band Month"),
+      createCell(
+        summary.narrowestBandMonth
+          ? `${summary.narrowestBandMonth.monthLabel} (${summary.narrowestBandMonth.confidenceBandWidth})`
+          : "",
+      ),
+    ],
+    [createCell("Thin Buckets"), createCell(summary.thinMonthCount, "integer")],
+    [
+      createCell("Clear Signals"),
+      createCell(summary.clearSignalCount, "integer"),
+    ],
+    [
+      createCell("Directional Months"),
+      createCell(summary.directionalMonthCount, "integer"),
+    ],
     [createCell("Skipped Month Gaps"), createCell(summary.skippedTransitions, "integer")],
     [createCell("Warnings"), createCell(payload.warnings.length, "integer")],
     [createCell("Exported At"), createCell(formatDateTime(payload.exportedAt))],
@@ -120,10 +191,15 @@ function buildBucketSheetRows(payload) {
       createCell("Month", "header"),
       createCell("Observations", "header"),
       createCell("Avg Log Return", "header"),
-      createCell("Median Log Return", "header"),
+      createCell("Band Low", "header"),
+      createCell("Band High", "header"),
+      createCell("Band Width", "header"),
       createCell("Win Rate", "header"),
+      createCell("Direction", "header"),
+      createCell("Consistency", "header"),
+      createCell("Signal", "header"),
+      createCell("Sample", "header"),
       createCell("Volatility", "header"),
-      createCell("Positive Years %", "header"),
       createCell("Best", "header"),
       createCell("Worst", "header"),
       createCell("Best Year", "header"),
@@ -133,10 +209,15 @@ function buildBucketSheetRows(payload) {
       createCell(bucket.monthLabel),
       createCell(bucket.observations, "integer"),
       createCell(bucket.averageLogReturn, "percent"),
-      createCell(bucket.medianLogReturn, "percent"),
+      createCell(bucket.confidenceBandLow, "percent"),
+      createCell(bucket.confidenceBandHigh, "percent"),
+      createCell(bucket.confidenceBandWidth, "percent"),
       createCell(bucket.winRate, "percent"),
+      createCell(bucket.dominantDirection),
+      createCell(bucket.consistencyScore, "percent"),
+      createCell(bucket.signalState),
+      createCell(bucket.sampleQualityLabel),
       createCell(bucket.volatility, "percent"),
-      createCell(bucket.positiveYearsPct, "percent"),
       createCell(bucket.bestLogReturn, "percent"),
       createCell(bucket.worstLogReturn, "percent"),
       createCell(bucket.bestYear, "integer"),

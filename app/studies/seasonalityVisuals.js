@@ -10,6 +10,36 @@ import {
 
 const OVERVIEW_HASH = "#seasonality/overview";
 
+function formatConfidenceBand(bucket) {
+  if (
+    !bucket ||
+    !Number.isFinite(bucket.confidenceBandLow) ||
+    !Number.isFinite(bucket.confidenceBandHigh)
+  ) {
+    return "n/a";
+  }
+
+  return `${formatPercent(bucket.confidenceBandLow)} to ${formatPercent(
+    bucket.confidenceBandHigh,
+  )}`;
+}
+
+function formatConsistencyLabel(bucket) {
+  if (!bucket || !Number.isFinite(bucket.consistencyScore)) {
+    return "n/a";
+  }
+
+  if (bucket.dominantDirection === "positive") {
+    return `Up ${formatPercent(bucket.consistencyScore)}`;
+  }
+
+  if (bucket.dominantDirection === "negative") {
+    return `Down ${formatPercent(bucket.consistencyScore)}`;
+  }
+
+  return `Split ${formatPercent(bucket.consistencyScore)}`;
+}
+
 function heatmapCellStyle(value, maxAbsValue) {
   if (!Number.isFinite(value) || maxAbsValue <= 0) {
     return "";
@@ -145,7 +175,7 @@ function renderMetricBarCard({
               <div class="seasonality-bar-row ${tone}">
                 <div class="seasonality-bar-meta">
                   <span class="seasonality-bar-label">${bucket.monthLabel}</span>
-                  <span class="seasonality-bar-value">${formatter(rawValue)}</span>
+                  <span class="seasonality-bar-value">${formatter(rawValue, bucket)}</span>
                 </div>
                 <div class="seasonality-bar-track">
                   <span class="seasonality-bar-fill" style="width: ${width};"></span>
@@ -169,7 +199,7 @@ function renderVisualsShell(studyRun) {
           <p class="study-kicker">Study 02</p>
           <h2>Seasonality Visuals</h2>
           <p class="summary-meta">
-            Read the month-of-year pattern as one heatmap first, then check return, hit rate, and volatility by bucket.
+            Read the month-of-year pattern as one heatmap first, then check return, consistency, band width, and volatility by bucket.
           </p>
           <p class="summary-meta">
             ${studyRun.seriesLabel} · ${formatDateRange(
@@ -209,10 +239,10 @@ function renderVisualsShell(studyRun) {
           </p>
         </section>
         <section class="card visuals-summary-card">
-          <p class="meta-label">Best Hit Rate</p>
-          <strong class="visuals-summary-value">${summary.bestHitRateMonth?.monthLabel || "n/a"}</strong>
+          <p class="meta-label">Most Consistent</p>
+          <strong class="visuals-summary-value">${summary.mostConsistentMonth?.monthLabel || "n/a"}</strong>
           <p class="summary-meta">
-            ${formatPercent(summary.bestHitRateMonth?.winRate)} positive months
+            ${formatConsistencyLabel(summary.mostConsistentMonth)}
           </p>
         </section>
         <section class="card visuals-summary-card">
@@ -220,6 +250,24 @@ function renderVisualsShell(studyRun) {
           <strong class="visuals-summary-value">${formatPercent(summary.seasonalitySpread)}</strong>
           <p class="summary-meta">
             Strongest minus weakest average month
+          </p>
+        </section>
+        <section class="card visuals-summary-card">
+          <p class="meta-label">Clearest Upside</p>
+          <strong class="visuals-summary-value">${summary.clearestPositiveMonth?.monthLabel || "none"}</strong>
+          <p class="summary-meta">
+            ${
+              summary.clearestPositiveMonth
+                ? `${formatNumber(summary.confidenceLevel * 100, 0)}% band ${formatConfidenceBand(summary.clearestPositiveMonth)}`
+                : "No band stays fully above zero"
+            }
+          </p>
+        </section>
+        <section class="card visuals-summary-card">
+          <p class="meta-label">Thin Buckets</p>
+          <strong class="visuals-summary-value">${formatNumber(summary.thinMonthCount, 0)}</strong>
+          <p class="summary-meta">
+            ${summary.thinMonthCount > 0 ? "Months with fewer than 4 observations" : "All observed months have 4+ samples"}
           </p>
         </section>
       </div>
@@ -237,18 +285,27 @@ function renderVisualsShell(studyRun) {
                 0,
               )} years.
             </p>
+            <p class="summary-meta">
+              ${formatNumber(summary.confidenceLevel * 100, 0)}% bands are deterministic bootstrap intervals around the average month return.
+            </p>
           </div>
           <div>
-            <p class="section-label">Boundary Rule</p>
+            <p class="section-label">Confidence Cues</p>
+            <p class="summary-meta">
+              Clear signals: ${formatNumber(summary.clearSignalCount, 0)} of ${formatNumber(
+                summary.observedBucketCount,
+                0,
+              )} observed months stay fully above or below zero.
+            </p>
+            <p class="summary-meta">
+              Directional months: ${formatNumber(summary.directionalMonthCount, 0)} buckets keep the same sign at least 75% of the time.
+            </p>
             <p class="summary-meta">
               ${
                 studyRun.includePartialBoundaryMonths
                   ? "First and last partial months are included in the bucket set."
                   : "First and last partial months are excluded unless the full calendar month is inside the window."
-              }
-            </p>
-            <p class="summary-meta">
-              Skipped month gaps: ${formatNumber(summary.skippedTransitions, 0)}.
+              } Skipped month gaps: ${formatNumber(summary.skippedTransitions, 0)}.
             </p>
           </div>
         </div>
@@ -283,13 +340,22 @@ function renderVisualsShell(studyRun) {
           statValue: summary.strongestMonth?.monthLabel || "n/a",
         })}
         ${renderMetricBarCard({
-          title: "Win Rate By Month",
-          summary: "Share of positive monthly observations in each calendar bucket.",
+          title: "Consistency By Month",
+          summary: "How often each bucket kept the same sign, regardless of whether the edge was up or down.",
           bucketStats: studyRun.bucketStats,
-          valueKey: "winRate",
-          formatter: (value) => formatPercent(value),
+          valueKey: "consistencyScore",
+          formatter: (_value, bucket) => formatConsistencyLabel(bucket),
           statLabel: "Leader",
-          statValue: summary.bestHitRateMonth?.monthLabel || "n/a",
+          statValue: summary.mostConsistentMonth?.monthLabel || "n/a",
+        })}
+        ${renderMetricBarCard({
+          title: "Confidence Band Width",
+          summary: "Width of the bootstrap band around each average month return. Smaller is tighter.",
+          bucketStats: studyRun.bucketStats,
+          valueKey: "confidenceBandWidth",
+          formatter: (value) => formatPercent(value),
+          statLabel: "Tightest",
+          statValue: summary.narrowestBandMonth?.monthLabel || "n/a",
         })}
         ${renderMetricBarCard({
           title: "Volatility By Month",

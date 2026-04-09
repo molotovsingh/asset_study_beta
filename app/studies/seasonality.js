@@ -349,6 +349,12 @@ function mountSeasonalityOverview(root) {
         );
       }
 
+      if (seasonalityModel.summary.thinMonthCount > 0) {
+        warnings.push(
+          `${seasonalityModel.summary.thinMonthCount} month buckets have fewer than 4 observations. Their confidence bands are especially fragile.`,
+        );
+      }
+
       if (seasonalityModel.summary.skippedTransitions > 0) {
         warnings.push(
           "One or more month-to-month gaps were skipped because the series did not have consecutive month anchors.",
@@ -383,6 +389,7 @@ function mountSeasonalityOverview(root) {
         actualEndDate: filteredSeries[filteredSeries.length - 1].date,
         includePartialBoundaryMonths,
         monthlyReturnMode: seasonalityModel.monthlyReturnMode,
+        confidenceLevel: seasonalityModel.confidenceLevel,
         exportedAt: new Date(),
       };
       seasonalitySession.lastStudyRun = state.lastStudyRun;

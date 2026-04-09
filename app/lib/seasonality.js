@@ -13,6 +13,12 @@ const MONTH_LABELS = [
   "Dec",
 ];
 
+const CONFIDENCE_LEVEL = 0.9;
+const BOOTSTRAP_SAMPLES = 1200;
+const THIN_SAMPLE_THRESHOLD = 4;
+const DIRECTIONAL_SHARE_THRESHOLD = 0.75;
+const CLEAR_SIGNAL_MIN_OBSERVATIONS = 4;
+
 function mean(values) {
   if (!values.length) {
     return null;
@@ -47,6 +53,165 @@ function sampleStdDev(values) {
     (values.length - 1);
 
   return Math.sqrt(variance);
+}
+
+function percentile(sortedValues, probability) {
+  if (!sortedValues.length) {
+    return null;
+  }
+
+  const boundedProbability = Math.min(Math.max(probability, 0), 1);
+  const index = boundedProbability * (sortedValues.length - 1);
+  const lowerIndex = Math.floor(index);
+  const upperIndex = Math.ceil(index);
+
+  if (lowerIndex === upperIndex) {
+    return sortedValues[lowerIndex];
+  }
+
+  const weight = index - lowerIndex;
+  return (
+    sortedValues[lowerIndex] * (1 - weight) +
+    sortedValues[upperIndex] * weight
+  );
+}
+
+function createSeededRandom(seed) {
+  let state = seed >>> 0;
+
+  if (state === 0) {
+    state = 0x6d2b79f5;
+  }
+
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function buildBootstrapMeanInterval(
+  values,
+  seed,
+  confidenceLevel = CONFIDENCE_LEVEL,
+) {
+  if (values.length < 2) {
+    return {
+      low: null,
+      high: null,
+      width: null,
+      level: confidenceLevel,
+    };
+  }
+
+  const random = createSeededRandom(seed);
+  const resampledMeans = [];
+
+  for (let sampleIndex = 0; sampleIndex < BOOTSTRAP_SAMPLES; sampleIndex += 1) {
+    let sum = 0;
+
+    for (let valueIndex = 0; valueIndex < values.length; valueIndex += 1) {
+      const pickIndex = Math.floor(random() * values.length);
+      sum += values[pickIndex];
+    }
+
+    resampledMeans.push(sum / values.length);
+  }
+
+  resampledMeans.sort((left, right) => left - right);
+  const tailProbability = (1 - confidenceLevel) / 2;
+  const low = percentile(resampledMeans, tailProbability);
+  const high = percentile(resampledMeans, 1 - tailProbability);
+
+  return {
+    low,
+    high,
+    width:
+      Number.isFinite(low) && Number.isFinite(high) ? high - low : null,
+    level: confidenceLevel,
+  };
+}
+
+function buildBootstrapSeed(monthNumber, rows) {
+  return rows.reduce(
+    (seed, row) =>
+      (((seed * 33) ^ row.year ^ Math.round(row.logReturn * 1000000)) >>> 0),
+    (monthNumber * 2654435761) >>> 0,
+  );
+}
+
+function getSampleQuality(observations) {
+  if (observations < THIN_SAMPLE_THRESHOLD) {
+    return {
+      id: "thin",
+      label: "thin",
+    };
+  }
+
+  if (observations < 7) {
+    return {
+      id: "fair",
+      label: "fair",
+    };
+  }
+
+  return {
+    id: "deep",
+    label: "deep",
+  };
+}
+
+function getDominantDirection(positiveObservations, negativeObservations) {
+  if (positiveObservations > negativeObservations) {
+    return "positive";
+  }
+
+  if (negativeObservations > positiveObservations) {
+    return "negative";
+  }
+
+  return "mixed";
+}
+
+function getSignalState({
+  observations,
+  confidenceLow,
+  confidenceHigh,
+  dominantDirection,
+  consistencyScore,
+}) {
+  if (observations < THIN_SAMPLE_THRESHOLD) {
+    return "thin";
+  }
+
+  if (
+    observations >= CLEAR_SIGNAL_MIN_OBSERVATIONS &&
+    Number.isFinite(confidenceLow) &&
+    Number.isFinite(confidenceHigh)
+  ) {
+    if (confidenceLow > 0) {
+      return "clear-positive";
+    }
+
+    if (confidenceHigh < 0) {
+      return "clear-negative";
+    }
+  }
+
+  if (
+    consistencyScore >= DIRECTIONAL_SHARE_THRESHOLD &&
+    dominantDirection === "positive"
+  ) {
+    return "directional-positive";
+  }
+
+  if (
+    consistencyScore >= DIRECTIONAL_SHARE_THRESHOLD &&
+    dominantDirection === "negative"
+  ) {
+    return "directional-negative";
+  }
+
+  return "mixed";
 }
 
 function buildMonthId(year, monthNumber) {
@@ -197,6 +362,10 @@ function buildBucketStats(monthlyRows) {
     const rows = monthlyRows.filter((row) => row.monthNumber === monthNumber);
     const logReturns = rows.map((row) => row.logReturn);
     const simpleReturns = rows.map((row) => row.simpleReturn);
+    const bootstrapInterval = buildBootstrapMeanInterval(
+      logReturns,
+      buildBootstrapSeed(monthNumber, rows),
+    );
     const bestRow =
       rows.length > 0
         ? rows.reduce((best, row) => (row.logReturn > best.logReturn ? row : best))
@@ -208,6 +377,25 @@ function buildBucketStats(monthlyRows) {
           )
         : null;
     const positiveObservations = rows.filter((row) => row.isPositive).length;
+    const negativeObservations = rows.filter((row) => row.logReturn < 0).length;
+    const flatObservations =
+      rows.length - positiveObservations - negativeObservations;
+    const dominantDirection = getDominantDirection(
+      positiveObservations,
+      negativeObservations,
+    );
+    const consistencyScore =
+      rows.length > 0
+        ? Math.max(positiveObservations, negativeObservations) / rows.length
+        : null;
+    const sampleQuality = getSampleQuality(rows.length);
+    const signalState = getSignalState({
+      observations: rows.length,
+      confidenceLow: bootstrapInterval.low,
+      confidenceHigh: bootstrapInterval.high,
+      dominantDirection,
+      consistencyScore,
+    });
 
     return {
       monthIndex,
@@ -219,6 +407,17 @@ function buildBucketStats(monthlyRows) {
       positiveYearsPct:
         rows.length > 0 ? positiveObservations / rows.length : null,
       positiveObservations,
+      negativeObservations,
+      flatObservations,
+      dominantDirection,
+      consistencyScore,
+      confidenceBandLow: bootstrapInterval.low,
+      confidenceBandHigh: bootstrapInterval.high,
+      confidenceBandWidth: bootstrapInterval.width,
+      confidenceLevel: bootstrapInterval.level,
+      sampleQualityId: sampleQuality.id,
+      sampleQualityLabel: sampleQuality.label,
+      signalState,
       averageLogReturn: mean(logReturns),
       medianLogReturn: median(logReturns),
       averageSimpleReturn: mean(simpleReturns),
@@ -258,6 +457,14 @@ function pickBucket(bucketStats, selector, direction = "max") {
   }, null);
 }
 
+function pickBucketWhere(bucketStats, predicate, selector, direction = "max") {
+  return pickBucket(
+    bucketStats.filter(predicate),
+    selector,
+    direction,
+  );
+}
+
 function buildHeatmap(monthlyRows) {
   const years = [...new Set(monthlyRows.map((row) => row.year))].sort(
     (left, right) => left - right,
@@ -294,6 +501,7 @@ function buildHeatmap(monthlyRows) {
 }
 
 function buildSeasonalitySummary(bucketStats, monthlyRows, skippedTransitions) {
+  const populatedBuckets = bucketStats.filter((bucket) => bucket.observations > 0);
   const strongestMonth = pickBucket(
     bucketStats,
     (bucket) => bucket.averageLogReturn,
@@ -310,12 +518,53 @@ function buildSeasonalitySummary(bucketStats, monthlyRows, skippedTransitions) {
     (bucket) => bucket.volatility,
     "max",
   );
+  const mostConsistentMonth = pickBucket(
+    bucketStats,
+    (bucket) => bucket.consistencyScore,
+    "max",
+  );
+  const clearestPositiveMonth = pickBucketWhere(
+    bucketStats,
+    (bucket) => bucket.signalState === "clear-positive",
+    (bucket) => bucket.averageLogReturn,
+    "max",
+  );
+  const clearestNegativeMonth = pickBucketWhere(
+    bucketStats,
+    (bucket) => bucket.signalState === "clear-negative",
+    (bucket) => bucket.averageLogReturn,
+    "min",
+  );
+  const narrowestBandMonth = pickBucketWhere(
+    bucketStats,
+    (bucket) => Number.isFinite(bucket.confidenceBandWidth),
+    (bucket) => bucket.confidenceBandWidth,
+    "min",
+  );
+  const thinMonthCount = populatedBuckets.filter(
+    (bucket) => bucket.sampleQualityId === "thin",
+  ).length;
+  const clearSignalCount = populatedBuckets.filter(
+    (bucket) =>
+      bucket.signalState === "clear-positive" ||
+      bucket.signalState === "clear-negative",
+  ).length;
+  const directionalMonthCount = populatedBuckets.filter(
+    (bucket) => bucket.consistencyScore >= DIRECTIONAL_SHARE_THRESHOLD,
+  ).length;
+  const mixedMonthCount = populatedBuckets.filter(
+    (bucket) => bucket.signalState === "mixed",
+  ).length;
 
   return {
     strongestMonth,
     weakestMonth,
     bestHitRateMonth,
     mostVolatileMonth,
+    mostConsistentMonth,
+    clearestPositiveMonth,
+    clearestNegativeMonth,
+    narrowestBandMonth,
     seasonalitySpread:
       strongestMonth && weakestMonth
         ? strongestMonth.averageLogReturn - weakestMonth.averageLogReturn
@@ -323,6 +572,12 @@ function buildSeasonalitySummary(bucketStats, monthlyRows, skippedTransitions) {
     monthsUsed: monthlyRows.length,
     yearsObserved: new Set(monthlyRows.map((row) => row.year)).size,
     skippedTransitions,
+    thinMonthCount,
+    clearSignalCount,
+    directionalMonthCount,
+    mixedMonthCount,
+    observedBucketCount: populatedBuckets.length,
+    confidenceLevel: CONFIDENCE_LEVEL,
   };
 }
 
@@ -367,6 +622,7 @@ function buildSeasonalityStudy(indexSeries, options = {}) {
     summary,
     monthlyReturnMode: "log",
     includePartialBoundaryMonths,
+    confidenceLevel: CONFIDENCE_LEVEL,
   };
 }
 

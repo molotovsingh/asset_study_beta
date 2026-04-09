@@ -30,6 +30,44 @@ function renderWarnings(warnings) {
   `;
 }
 
+function formatConfidenceBand(bucket) {
+  if (
+    !bucket ||
+    !Number.isFinite(bucket.confidenceBandLow) ||
+    !Number.isFinite(bucket.confidenceBandHigh)
+  ) {
+    return "n/a";
+  }
+
+  return `${formatPercent(bucket.confidenceBandLow)} to ${formatPercent(
+    bucket.confidenceBandHigh,
+  )}`;
+}
+
+function formatConsistencyLabel(bucket) {
+  if (!bucket || !Number.isFinite(bucket.consistencyScore)) {
+    return "n/a";
+  }
+
+  if (bucket.dominantDirection === "positive") {
+    return `Up ${formatPercent(bucket.consistencyScore)}`;
+  }
+
+  if (bucket.dominantDirection === "negative") {
+    return `Down ${formatPercent(bucket.consistencyScore)}`;
+  }
+
+  return `Split ${formatPercent(bucket.consistencyScore)}`;
+}
+
+function renderSamplePill(bucket) {
+  return `
+    <span class="seasonality-sample-pill ${bucket.sampleQualityId}">
+      ${formatNumber(bucket.observations, 0)} · ${bucket.sampleQualityLabel}
+    </span>
+  `;
+}
+
 function renderBucketTable(bucketStats) {
   return `
     <div class="seasonality-table-wrap">
@@ -38,13 +76,13 @@ function renderBucketTable(bucketStats) {
           <tr>
             <th>Month</th>
             <th>Avg Return</th>
-            <th>Median</th>
+            <th>90% Band</th>
             <th>Win Rate</th>
+            <th>Consistency</th>
             <th>Volatility</th>
-            <th>Positive Years</th>
             <th>Best</th>
             <th>Worst</th>
-            <th>Obs</th>
+            <th>Sample</th>
           </tr>
         </thead>
         <tbody>
@@ -56,18 +94,20 @@ function renderBucketTable(bucketStats) {
                   : bucket.averageLogReturn < 0
                     ? "is-negative"
                     : "";
+              const sampleTone =
+                bucket.sampleQualityId === "thin" ? " is-thin" : "";
 
               return `
-                <tr class="${tone}">
+                <tr class="${tone}${sampleTone}">
                   <th scope="row">${bucket.monthLabel}</th>
                   <td>${formatPercent(bucket.averageLogReturn)}</td>
-                  <td>${formatPercent(bucket.medianLogReturn)}</td>
+                  <td>${formatConfidenceBand(bucket)}</td>
                   <td>${formatPercent(bucket.winRate)}</td>
+                  <td>${formatConsistencyLabel(bucket)}</td>
                   <td>${formatPercent(bucket.volatility)}</td>
-                  <td>${formatPercent(bucket.positiveYearsPct)}</td>
                   <td>${formatPercent(bucket.bestLogReturn)}</td>
                   <td>${formatPercent(bucket.worstLogReturn)}</td>
-                  <td>${formatNumber(bucket.observations, 0)}</td>
+                  <td>${renderSamplePill(bucket)}</td>
                 </tr>
               `;
             })
@@ -154,8 +194,52 @@ function renderSeasonalityResults(studyRun) {
       <section class="results-section">
         <div class="results-section-head">
           <div>
+            <p class="section-label">Confidence Read</p>
+            <p class="summary-meta">
+              Deterministic ${formatNumber(summary.confidenceLevel * 100, 0)}% bootstrap bands and direction consistency keep the month view honest.
+            </p>
+          </div>
+        </div>
+        <div class="results-grid">
+          ${renderCard({
+            label: "Most Consistent",
+            value: summary.mostConsistentMonth?.monthLabel || "n/a",
+            detail: summary.mostConsistentMonth
+              ? `${formatConsistencyLabel(summary.mostConsistentMonth)} across ${formatNumber(summary.mostConsistentMonth.observations, 0)} years`
+              : "No observations",
+          })}
+          ${renderCard({
+            label: "Clearest Upside",
+            value: summary.clearestPositiveMonth?.monthLabel || "none",
+            detail: summary.clearestPositiveMonth
+              ? `${formatNumber(summary.confidenceLevel * 100, 0)}% band ${formatConfidenceBand(summary.clearestPositiveMonth)}`
+              : "No month band stays fully above zero",
+          })}
+          ${renderCard({
+            label: "Clearest Downside",
+            value: summary.clearestNegativeMonth?.monthLabel || "none",
+            detail: summary.clearestNegativeMonth
+              ? `${formatNumber(summary.confidenceLevel * 100, 0)}% band ${formatConfidenceBand(summary.clearestNegativeMonth)}`
+              : "No month band stays fully below zero",
+          })}
+          ${renderCard({
+            label: "Thin Buckets",
+            value: formatNumber(summary.thinMonthCount, 0),
+            detail:
+              summary.thinMonthCount > 0
+                ? `Months with fewer than 4 observations`
+                : "Every observed month has at least 4 samples",
+          })}
+        </div>
+      </section>
+
+      <section class="results-section">
+        <div class="results-section-head">
+          <div>
             <p class="section-label">Month Buckets</p>
-            <p class="summary-meta">Each row is a calendar month bucket across the active study window.</p>
+            <p class="summary-meta">
+              Each row is a calendar month bucket across the active study window, with a ${formatNumber(summary.confidenceLevel * 100, 0)}% band around the average month return.
+            </p>
           </div>
         </div>
         ${renderBucketTable(studyRun.bucketStats)}
@@ -199,6 +283,21 @@ function renderSeasonalityResults(studyRun) {
             Current study lens: Month of year only
           </p>
         </div>
+        <div class="detail-block">
+          <h3>Confidence Layer</h3>
+          <p class="result-detail">
+            Band rule: ${formatNumber(summary.confidenceLevel * 100, 0)}% bootstrap interval around the average monthly log return
+          </p>
+          <p class="result-detail">
+            Clear signals: ${formatNumber(summary.clearSignalCount, 0)} of ${formatNumber(summary.observedBucketCount, 0)} observed months stay fully above or below zero
+          </p>
+          <p class="result-detail">
+            Directional months: ${formatNumber(summary.directionalMonthCount, 0)} buckets show the same sign at least 75% of the time
+          </p>
+          <p class="result-detail">
+            Tightest band: ${summary.narrowestBandMonth?.monthLabel || "n/a"}${summary.narrowestBandMonth ? ` at ${formatPercent(summary.narrowestBandMonth.confidenceBandWidth)}` : ""}
+          </p>
+        </div>
         ${renderWarnings(studyRun.warnings)}
       </div>
     </div>
@@ -221,7 +320,7 @@ function seasonalityTemplate(defaultStartDate, defaultEndDate, includePartialMon
             Monthly buckets use <span class="mono">month-end log returns</span>.
           </p>
           <p>
-            The first and last partial months are excluded by default.
+            The first and last partial months are excluded by default, and each bucket now carries a confidence band.
           </p>
         </div>
       </div>
@@ -288,7 +387,7 @@ function seasonalityTemplate(defaultStartDate, defaultEndDate, includePartialMon
 
             <p class="section-label">Notes</p>
             <p class="helper">
-              Longer windows are more reliable. Price-only series and short samples can make seasonal reads fragile.
+              Longer windows are more reliable. Confidence bands narrow slowly, so short samples and price-only series can make seasonal reads fragile.
             </p>
           </div>
         </details>
