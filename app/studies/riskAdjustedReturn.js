@@ -28,6 +28,7 @@ import {
   renderSelectionDetails,
   studyTemplate,
 } from "./riskAdjustedReturnView.js";
+import { createPlaceholderView } from "./studyShell.js";
 
 const demoIndexSeries = [
   ["2021-04-07", 14500],
@@ -126,14 +127,7 @@ function validateStudyInputs(selection, startValue, endValue, riskFreeValue) {
   return { start, end, riskFreeRate };
 }
 
-const riskAdjustedReturnStudy = {
-  id: "risk-adjusted-return",
-  title: "Risk-Adjusted Return",
-  description:
-    "Measure return, risk, and drawdown for a bundled dataset or yfinance symbol.",
-  inputSummary:
-    "Dataset or symbol, date range, and annual risk-free rate.",
-  mount(root) {
+function mountRiskAdjustedReturnOverview(root) {
     const today = new Date();
     const endDate = new Date(
       today.getFullYear(),
@@ -465,7 +459,70 @@ const riskAdjustedReturnStudy = {
       lastFiveYearsButton.removeEventListener("click", applyLastFiveYears);
       resultsRoot.removeEventListener("click", handleResultsClick);
     };
+}
+
+const riskAdjustedReturnStudy = {
+  id: "risk-adjusted-return",
+  title: "Risk-Adjusted Return",
+  description:
+    "Measure return, risk, and drawdown for a bundled dataset or yfinance symbol.",
+  inputSummary:
+    "Dataset or symbol, date range, and annual risk-free rate.",
+  capabilities: {
+    visuals: "planned",
+    relative: "planned",
+    exports: ["csv", "xls"],
   },
+  views: [
+    {
+      id: "overview",
+      label: "Overview",
+      summary: "Inputs, diagnostics, and export actions for one filtered series.",
+      description:
+        "Run the current study, review the diagnostics, and export the aligned dataset.",
+      status: "ready",
+      default: true,
+      mount: mountRiskAdjustedReturnOverview,
+    },
+    createPlaceholderView({
+      id: "visuals",
+      label: "Visuals",
+      summary: "Study-specific charts and rolling views.",
+      description:
+        "This view is reserved for growth, drawdown, rolling return, and rolling volatility visuals that are specific to this study.",
+      bullets: [
+        {
+          label: "Growth",
+          copy:
+            "Add a growth-of-100 chart plus rolling return bands for the active window.",
+        },
+        {
+          label: "Risk",
+          copy:
+            "Use drawdown and rolling volatility views that match this study's return model.",
+        },
+      ],
+    }),
+    createPlaceholderView({
+      id: "relative",
+      label: "Relative",
+      summary: "Benchmark comparison when this study adds it.",
+      description:
+        "This view is reserved for aligned benchmark comparisons, excess-return math, and relative exports.",
+      bullets: [
+        {
+          label: "Benchmarks",
+          copy:
+            "Pair the current series with a benchmark selector and overlap diagnostics.",
+        },
+        {
+          label: "Relative Exports",
+          copy:
+            "Export aligned asset and benchmark returns once this view becomes active.",
+        },
+      ],
+    }),
+  ],
 };
 
 export { riskAdjustedReturnStudy };
