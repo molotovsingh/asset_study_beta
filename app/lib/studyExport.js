@@ -17,13 +17,13 @@ const METRIC_EXPORT_DEFINITIONS = [
     label: "Volatility",
     key: "annualizedVolatility",
     styleId: "percent",
-    note: "Annualized realized volatility",
+    note: "Annualized volatility of log returns",
   },
   {
     label: "Downside Deviation",
     key: "downsideDeviation",
     styleId: "percent",
-    note: "Annualized downside-only volatility",
+    note: "Annualized downside deviation of excess log returns",
   },
   {
     label: "Max Drawdown",
@@ -41,13 +41,13 @@ const METRIC_EXPORT_DEFINITIONS = [
     label: "Sharpe Ratio",
     key: "sharpeRatio",
     styleId: "number2",
-    note: "Return above risk-free divided by volatility",
+    note: "Annualized excess log return divided by log-return volatility",
   },
   {
     label: "Sortino Ratio",
     key: "sortinoRatio",
     styleId: "number2",
-    note: "Return above risk-free divided by downside deviation",
+    note: "Annualized excess log return divided by downside deviation",
   },
   {
     label: "Calmar Ratio",
@@ -74,28 +74,28 @@ const METRIC_EXPORT_DEFINITIONS = [
     note: "Share of positive periods",
   },
   {
-    label: "Average Period Return",
+    label: "Average Log Return",
     key: "averagePeriodReturn",
-    styleId: "percent",
-    note: "Arithmetic mean of period returns",
+    styleId: "number4",
+    note: "Arithmetic mean of period log returns",
   },
   {
-    label: "Median Period Return",
+    label: "Median Log Return",
     key: "medianPeriodReturn",
-    styleId: "percent",
-    note: "Median period return",
+    styleId: "number4",
+    note: "Median period log return",
   },
   {
     label: "VaR 95%",
     key: "valueAtRisk95",
-    styleId: "percent",
-    note: "5th percentile period return",
+    styleId: "number4",
+    note: "5th percentile period log return",
   },
   {
     label: "CVaR 95%",
     key: "conditionalValueAtRisk95",
-    styleId: "percent",
-    note: "Average return beyond VaR",
+    styleId: "number4",
+    note: "Average log return beyond VaR",
   },
   {
     label: "Skewness",
@@ -114,6 +114,24 @@ const METRIC_EXPORT_DEFINITIONS = [
     key: "periodsPerYear",
     styleId: "integer",
     note: "Sampling frequency inferred from date gaps",
+  },
+  {
+    label: "Annualized Log Return",
+    key: "annualizedLogReturn",
+    styleId: "number4",
+    note: "Continuously compounded annualized return",
+  },
+  {
+    label: "Annualized Excess Log Return",
+    key: "annualizedExcessLogReturn",
+    styleId: "number4",
+    note: "Annualized mean excess log return used in Sharpe and Sortino",
+  },
+  {
+    label: "Average Annual Log Risk-Free Rate",
+    key: "averageAnnualLogRiskFreeRate",
+    styleId: "number4",
+    note: "Log-rate equivalent of the average annual risk-free rate",
   },
   {
     label: "Observations",
@@ -151,6 +169,10 @@ function toExcelDateTime(date) {
 
 function annualRateToPeriodReturn(annualRate, days) {
   return (1 + annualRate) ** (days / 365) - 1;
+}
+
+function annualRateToPeriodLogReturn(annualRate, days) {
+  return Math.log1p(annualRate) * (days / 365);
 }
 
 function slugify(value) {
@@ -212,18 +234,27 @@ function buildSeriesRows(indexSeries, annualRiskFreeRate) {
       previous && annualRiskFreeRate !== null
         ? annualRateToPeriodReturn(annualRiskFreeRate, periodDays)
         : null;
+    const logReturn = previous
+      ? Math.log(point.value / previous.value)
+      : null;
+    const periodRiskFreeLogReturn =
+      previous && annualRiskFreeRate !== null
+        ? annualRateToPeriodLogReturn(annualRiskFreeRate, periodDays)
+        : null;
     const excessReturn =
-      periodReturn !== null && periodRiskFreeReturn !== null
-        ? periodReturn - periodRiskFreeReturn
+      logReturn !== null && periodRiskFreeLogReturn !== null
+        ? logReturn - periodRiskFreeLogReturn
         : null;
 
     return {
       date: point.date,
       indexValue: point.value,
       periodReturn,
+      logReturn,
       periodDays,
       annualRiskFreeRate,
       periodRiskFreeReturn,
+      periodRiskFreeLogReturn,
       excessReturn,
       drawdown: peakValue > 0 ? point.value / peakValue - 1 : null,
     };
@@ -238,9 +269,14 @@ function buildPeriodRows(indexSeries, annualRiskFreeRate) {
     const end = indexSeries[index];
     const periodDays = (end.date - start.date) / 86400000;
     const periodReturn = end.value / start.value - 1;
+    const logReturn = Math.log(end.value / start.value);
     const periodRiskFreeReturn =
       annualRiskFreeRate !== null
         ? annualRateToPeriodReturn(annualRiskFreeRate, periodDays)
+        : null;
+    const periodRiskFreeLogReturn =
+      annualRiskFreeRate !== null
+        ? annualRateToPeriodLogReturn(annualRiskFreeRate, periodDays)
         : null;
 
     rows.push({
@@ -250,11 +286,13 @@ function buildPeriodRows(indexSeries, annualRiskFreeRate) {
       endValue: end.value,
       periodDays,
       periodReturn,
+      logReturn,
       annualRiskFreeRate,
       periodRiskFreeReturn,
+      periodRiskFreeLogReturn,
       excessReturn:
-        periodRiskFreeReturn !== null
-          ? periodReturn - periodRiskFreeReturn
+        periodRiskFreeLogReturn !== null
+          ? logReturn - periodRiskFreeLogReturn
           : null,
     });
   }
@@ -276,11 +314,13 @@ function buildCsvRows(payload) {
     "method",
     "date",
     "index_value",
-    "period_return_decimal",
+    "period_simple_return_decimal",
+    "period_log_return_decimal",
     "period_days",
     "annual_risk_free_rate_decimal",
     "period_risk_free_return_decimal",
-    "excess_return_decimal",
+    "period_risk_free_log_return_decimal",
+    "excess_log_return_decimal",
     "drawdown_decimal",
   ];
 
@@ -294,9 +334,11 @@ function buildCsvRows(payload) {
       toIsoDate(row.date),
       row.indexValue,
       row.periodReturn,
+      row.logReturn,
       row.periodDays,
       row.annualRiskFreeRate,
       row.periodRiskFreeReturn,
+      row.periodRiskFreeLogReturn,
       row.excessReturn,
       row.drawdown,
     ]),
@@ -312,6 +354,7 @@ function buildSummarySheetRows(payload) {
     [createCell("Provider"), createCell(payload.selection?.providerName ?? "")],
     [createCell("Series Type"), createCell(payload.selection?.targetSeriesType ?? "")],
     [createCell("Method"), createCell(payload.methodLabel)],
+    [createCell("Periodic Return Mode"), createCell("Log returns for volatility and distribution metrics")],
     [createCell("Requested Start"), createCell(payload.requestedStartDate, "date")],
     [createCell("Requested End"), createCell(payload.requestedEndDate, "date")],
     [createCell("Actual Start"), createCell(payload.actualStartDate, "date")],
@@ -369,21 +412,25 @@ function buildSeriesSheetRows(payload) {
     [
       createCell("Date", "header"),
       createCell("Index Value", "header"),
-      createCell("Period Return", "header"),
+      createCell("Simple Return", "header"),
+      createCell("Log Return", "header"),
       createCell("Period Days", "header"),
       createCell("Annual Risk-Free Rate", "header"),
       createCell("Period Risk-Free Return", "header"),
-      createCell("Excess Return", "header"),
+      createCell("Period Risk-Free Log Return", "header"),
+      createCell("Excess Log Return", "header"),
       createCell("Drawdown", "header"),
     ],
     ...rows.map((row) => [
       createCell(row.date, "date"),
       createCell(row.indexValue, "number2"),
       createCell(row.periodReturn, "percent"),
+      createCell(row.logReturn, "number4"),
       createCell(row.periodDays, "integer"),
       createCell(row.annualRiskFreeRate, "percent"),
       createCell(row.periodRiskFreeReturn, "percent"),
-      createCell(row.excessReturn, "percent"),
+      createCell(row.periodRiskFreeLogReturn, "number4"),
+      createCell(row.excessReturn, "number4"),
       createCell(row.drawdown, "percent"),
     ]),
   ];
@@ -399,10 +446,12 @@ function buildPeriodsSheetRows(payload) {
       createCell("Start Value", "header"),
       createCell("End Value", "header"),
       createCell("Period Days", "header"),
-      createCell("Period Return", "header"),
+      createCell("Simple Return", "header"),
+      createCell("Log Return", "header"),
       createCell("Annual Risk-Free Rate", "header"),
       createCell("Period Risk-Free Return", "header"),
-      createCell("Excess Return", "header"),
+      createCell("Period Risk-Free Log Return", "header"),
+      createCell("Excess Log Return", "header"),
     ],
     ...rows.map((row) => [
       createCell(row.startDate, "date"),
@@ -411,9 +460,11 @@ function buildPeriodsSheetRows(payload) {
       createCell(row.endValue, "number2"),
       createCell(row.periodDays, "integer"),
       createCell(row.periodReturn, "percent"),
+      createCell(row.logReturn, "number4"),
       createCell(row.annualRiskFreeRate, "percent"),
       createCell(row.periodRiskFreeReturn, "percent"),
-      createCell(row.excessReturn, "percent"),
+      createCell(row.periodRiskFreeLogReturn, "number4"),
+      createCell(row.excessReturn, "number4"),
     ]),
   ];
 }
@@ -507,6 +558,9 @@ function buildWorkbookXml(payload) {
     </Style>
     <Style ss:ID="number2">
       <NumberFormat ss:Format="0.00"/>
+    </Style>
+    <Style ss:ID="number4">
+      <NumberFormat ss:Format="0.0000"/>
     </Style>
     <Style ss:ID="integer">
       <NumberFormat ss:Format="0"/>

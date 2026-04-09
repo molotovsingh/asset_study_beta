@@ -33,7 +33,7 @@ const RESULT_TAB_DEFINITIONS = [
           {
             label: "Volatility",
             value: ({ metrics }) => formatPercent(metrics.annualizedVolatility),
-            detail: "Annualized",
+            detail: "Annualized log-return volatility",
           },
           {
             label: "Max Drawdown",
@@ -43,12 +43,12 @@ const RESULT_TAB_DEFINITIONS = [
           {
             label: "Sharpe Ratio",
             value: ({ metrics }) => formatNumber(metrics.sharpeRatio),
-            detail: "Uses total volatility",
+            detail: "Uses annualized excess log return",
           },
           {
             label: "Sortino Ratio",
             value: ({ metrics }) => formatNumber(metrics.sortinoRatio),
-            detail: "Uses downside deviation",
+            detail: "Uses downside log deviation",
           },
         ],
       },
@@ -65,12 +65,12 @@ const RESULT_TAB_DEFINITIONS = [
           {
             label: "Volatility",
             value: ({ metrics }) => formatPercent(metrics.annualizedVolatility),
-            detail: "Annualized realized volatility",
+            detail: "Annualized volatility of log returns",
           },
           {
             label: "Downside Deviation",
             value: ({ metrics }) => formatPercent(metrics.downsideDeviation),
-            detail: "Annualized downside-only volatility",
+            detail: "Annualized downside deviation of excess log returns",
           },
           {
             label: "Ulcer Index",
@@ -80,13 +80,13 @@ const RESULT_TAB_DEFINITIONS = [
           {
             label: "VaR 95%",
             value: ({ metrics }) => formatPercent(metrics.valueAtRisk95),
-            detail: "5th percentile period return",
+            detail: "5th percentile log return",
           },
           {
             label: "CVaR 95%",
             value: ({ metrics }) =>
               formatPercent(metrics.conditionalValueAtRisk95),
-            detail: "Average beyond VaR",
+            detail: "Average log return beyond VaR",
           },
           {
             label: "Skewness",
@@ -144,14 +144,14 @@ const RESULT_TAB_DEFINITIONS = [
             detail: "Positive return periods",
           },
           {
-            label: "Avg Period Return",
+            label: "Avg Log Return",
             value: ({ metrics }) => formatPercent(metrics.averagePeriodReturn),
-            detail: "Arithmetic mean",
+            detail: "Arithmetic mean of log returns",
           },
           {
-            label: "Median Period Return",
+            label: "Median Log Return",
             value: ({ metrics }) => formatPercent(metrics.medianPeriodReturn),
-            detail: "Middle observed period",
+            detail: "Median log return per period",
           },
           {
             label: "Winning Periods",
@@ -171,6 +171,7 @@ const RESULT_TAB_DEFINITIONS = [
           <h3>Study Context</h3>
           <p class="result-detail">Window: ${formatDateRange(startDate, endDate)}</p>
           <p class="result-detail">Method: ${methodLabel}</p>
+          <p class="result-detail">Return mode: log returns for volatility, tail risk, and Sharpe/Sortino statistics</p>
           <p class="result-detail">Sampling frequency: ${formatNumber(metrics.periodsPerYear, 0)} periods per year</p>
           <p class="result-detail">Index observations: ${formatNumber(metrics.observations, 0)}</p>
           <p class="result-detail">Return observations: ${formatNumber(metrics.periodicObservations, 0)}</p>
@@ -461,10 +462,10 @@ function studyTemplate(defaultStartDate, defaultEndDate) {
         </div>
         <div class="note-box">
           <p>
-            <span class="mono">Sharpe</span> uses total volatility.
+            Period risk statistics use <span class="mono">log returns</span>.
           </p>
           <p>
-            <span class="mono">Sortino</span> isolates downside volatility.
+            Total return and drawdown stay price-based.
           </p>
         </div>
       </div>
