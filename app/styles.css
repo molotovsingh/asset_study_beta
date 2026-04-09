@@ -807,6 +807,163 @@ textarea {
   gap: 12px;
 }
 
+.seasonality-visual-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.seasonality-heatmap-card {
+  grid-column: 1 / -1;
+  overflow-x: auto;
+}
+
+.seasonality-heatmap-grid {
+  display: grid;
+  grid-template-columns: 74px repeat(12, minmax(58px, 1fr));
+  gap: 8px;
+  min-width: 920px;
+}
+
+.seasonality-heatmap-corner,
+.seasonality-heatmap-axis,
+.seasonality-heatmap-cell {
+  border-radius: 14px;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.seasonality-heatmap-axis {
+  background: rgba(32, 37, 34, 0.04);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.seasonality-heatmap-year {
+  justify-items: start;
+  padding-inline: 12px;
+  letter-spacing: 0.04em;
+}
+
+.seasonality-heatmap-corner {
+  background: transparent;
+}
+
+.seasonality-heatmap-cell {
+  border: 1px solid rgba(34, 39, 37, 0.06);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.seasonality-heatmap-cell.is-empty {
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--muted);
+}
+
+.seasonality-bar-list {
+  display: grid;
+  gap: 10px;
+}
+
+.seasonality-bar-row {
+  display: grid;
+  gap: 8px;
+}
+
+.seasonality-bar-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.seasonality-bar-label,
+.seasonality-bar-value {
+  font-size: 0.88rem;
+}
+
+.seasonality-bar-value {
+  color: var(--muted);
+}
+
+.seasonality-bar-track {
+  position: relative;
+  overflow: hidden;
+  min-height: 10px;
+  border-radius: 999px;
+  background: rgba(32, 37, 34, 0.08);
+}
+
+.seasonality-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(13, 95, 77, 0.74);
+}
+
+.seasonality-bar-row.is-negative .seasonality-bar-fill {
+  background: rgba(138, 79, 38, 0.76);
+}
+
+.seasonality-bar-row.is-empty .seasonality-bar-fill {
+  width: 0 !important;
+}
+
+.seasonality-result-value {
+  font-size: clamp(1.2rem, 1.8vw, 1.7rem);
+}
+
+.seasonality-table-wrap {
+  overflow-x: auto;
+}
+
+.seasonality-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.seasonality-table thead th {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: right;
+}
+
+.seasonality-table thead th:first-child,
+.seasonality-table tbody th {
+  text-align: left;
+}
+
+.seasonality-table tbody th,
+.seasonality-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(34, 39, 37, 0.08);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.seasonality-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.seasonality-table tbody tr.is-positive th {
+  color: var(--accent-strong);
+}
+
+.seasonality-table tbody tr.is-negative th {
+  color: #8a4f26;
+}
+
 .visual-empty {
   justify-items: start;
 }
