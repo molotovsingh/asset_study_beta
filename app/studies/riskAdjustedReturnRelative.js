@@ -155,7 +155,9 @@ function renderMetricCard({ label, value, detail }) {
   `;
 }
 
-function renderMetricSection({ title, summary, cards }) {
+function renderMetricSection({ title, summary, cards, gridClass = "" }) {
+  const gridClasses = ["results-grid", gridClass].filter(Boolean).join(" ");
+
   return `
     <section class="results-section">
       <div class="results-section-head">
@@ -164,7 +166,7 @@ function renderMetricSection({ title, summary, cards }) {
           <p class="summary-meta">${summary}</p>
         </div>
       </div>
-      <div class="results-grid">
+      <div class="${gridClasses}">
         ${cards.join("")}
       </div>
     </section>
@@ -212,6 +214,7 @@ function renderRelativeResults(payload) {
       ${renderMetricSection({
         title: "Relative Quick Read",
         summary: "First-pass spread, fit, and benchmark sensitivity.",
+        gridClass: "relative-results-grid",
         cards: [
           renderMetricCard({
             label: "Asset CAGR",
@@ -250,6 +253,7 @@ function renderRelativeResults(payload) {
       ${renderMetricSection({
         title: "Relative Risk",
         summary: "How noisy, efficient, and asymmetric the active return stream is.",
+        gridClass: "relative-results-grid",
         cards: [
           renderMetricCard({
             label: "Tracking Error",

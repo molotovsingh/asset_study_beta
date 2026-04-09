@@ -839,6 +839,10 @@ textarea {
   gap: 12px;
 }
 
+.relative-results-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .result-card {
   position: relative;
   overflow: hidden;
