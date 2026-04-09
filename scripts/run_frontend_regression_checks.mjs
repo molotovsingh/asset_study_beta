@@ -2,7 +2,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildRollingReturnsStudy } from "../app/lib/rollingReturns.js";
 import { computeRelativeMetrics } from "../app/lib/relativeStats.js";
+import {
+  buildCsvRows as buildRollingCsvRows,
+  buildWorkbookXml as buildRollingWorkbookXml,
+} from "../app/lib/rollingReturnsExport.js";
 import { buildSeasonalityStudy } from "../app/lib/seasonality.js";
 import {
   buildCsvRows as buildRelativeCsvRows,
@@ -216,6 +221,12 @@ function inferPeriodsPerYear(series) {
 
 function annualRateToPeriodLogReturn(annualRate, days) {
   return Math.log1p(annualRate) * (days / 365);
+}
+
+function shiftDateByYears(date, years) {
+  const nextDate = new Date(date);
+  nextDate.setFullYear(nextDate.getFullYear() - years);
+  return nextDate;
 }
 
 function filterSeriesByDate(series, startDate, endDate) {
@@ -508,6 +519,115 @@ function maxRelativeDrawdown(relativeWealthSeries) {
   }
 
   return maxValue;
+}
+
+function computeAnnualizedGrowth(startValue, endValue, elapsedDays) {
+  const totalReturn = endValue / startValue - 1;
+  const annualizedLogReturn = Math.log(endValue / startValue) * (365 / elapsedDays);
+
+  return {
+    totalReturn,
+    annualizedLogReturn,
+    annualizedReturn: Math.expm1(annualizedLogReturn),
+  };
+}
+
+function buildRollingWindowRowsIndependent(series, windowYears) {
+  const rows = [];
+  let startIndex = 0;
+
+  for (let endIndex = 0; endIndex < series.length; endIndex += 1) {
+    const endPoint = series[endIndex];
+    const targetStartDate = shiftDateByYears(endPoint.date, windowYears);
+
+    while (
+      startIndex + 1 < endIndex &&
+      series[startIndex + 1].date <= targetStartDate
+    ) {
+      startIndex += 1;
+    }
+
+    const startPoint = series[startIndex];
+    if (!startPoint || startPoint.date > targetStartDate) {
+      continue;
+    }
+
+    const elapsedDays = (endPoint.date - startPoint.date) / 86400000;
+    if (elapsedDays <= 0) {
+      continue;
+    }
+
+    rows.push({
+      windowYears,
+      windowLabel: `${windowYears}Y`,
+      startDate: startPoint.date,
+      endDate: endPoint.date,
+      elapsedDays,
+      ...computeAnnualizedGrowth(startPoint.value, endPoint.value, elapsedDays),
+    });
+  }
+
+  return rows;
+}
+
+function buildRollingSummaryIndependent(windowYears, rows) {
+  const annualizedReturns = rows.map((row) => row.annualizedReturn);
+  const latestWindow = rows[rows.length - 1] || null;
+  const bestWindow = rows.reduce(
+    (best, row) =>
+      !best || row.annualizedReturn > best.annualizedReturn ? row : best,
+    null,
+  );
+  const worstWindow = rows.reduce(
+    (worst, row) =>
+      !worst || row.annualizedReturn < worst.annualizedReturn ? row : worst,
+    null,
+  );
+  const positiveWindows = rows.filter((row) => row.annualizedReturn > 0).length;
+
+  return {
+    windowYears,
+    windowLabel: `${windowYears}Y`,
+    observations: rows.length,
+    latestCagr: latestWindow?.annualizedReturn ?? null,
+    medianCagr: median(annualizedReturns),
+    percentile25Cagr: percentile(annualizedReturns, 0.25),
+    percentile75Cagr: percentile(annualizedReturns, 0.75),
+    bestCagr: bestWindow?.annualizedReturn ?? null,
+    worstCagr: worstWindow?.annualizedReturn ?? null,
+    positiveRate: rows.length ? positiveWindows / rows.length : null,
+    cagrRange:
+      bestWindow && worstWindow
+        ? bestWindow.annualizedReturn - worstWindow.annualizedReturn
+        : null,
+  };
+}
+
+function buildRollingStudyIndependent(series, windowYears = [1, 3, 5, 10]) {
+  const elapsedDays = (series.at(-1).date - series[0].date) / 86400000;
+  const fullPeriodGrowth = computeAnnualizedGrowth(
+    series[0].value,
+    series.at(-1).value,
+    elapsedDays,
+  );
+  const windowSummaries = windowYears.map((windowYearsValue) =>
+    buildRollingSummaryIndependent(
+      windowYearsValue,
+      buildRollingWindowRowsIndependent(series, windowYearsValue),
+    ),
+  );
+
+  return {
+    fullPeriodCagr: fullPeriodGrowth.annualizedReturn,
+    fullPeriodTotalReturn: fullPeriodGrowth.totalReturn,
+    windowSummaries,
+    availableWindowSummaries: windowSummaries.filter(
+      (windowSummary) => windowSummary.observations > 0,
+    ),
+    unavailableWindowSummaries: windowSummaries.filter(
+      (windowSummary) => windowSummary.observations === 0,
+    ),
+  };
 }
 
 function computeRelativeMetricsIndependent(assetSeries, benchmarkSeries, annualRiskFreeRate) {
@@ -1119,6 +1239,106 @@ async function runRelativeRegressionChecks() {
   console.log("ok relative");
 }
 
+async function runRollingRegressionChecks() {
+  const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
+  const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
+  const actual = buildRollingReturnsStudy(series);
+  const expected = buildRollingStudyIndependent(series);
+
+  assertClose(actual.fullPeriodCagr, expected.fullPeriodCagr, "rolling fullPeriodCagr");
+  assertClose(actual.fullPeriodTotalReturn, expected.fullPeriodTotalReturn, "rolling fullPeriodTotalReturn");
+  assert(
+    actual.availableWindowSummaries.length === expected.availableWindowSummaries.length,
+    "rolling availableWindowSummaries length mismatch",
+  );
+  assert(
+    actual.unavailableWindowSummaries.length === expected.unavailableWindowSummaries.length,
+    "rolling unavailableWindowSummaries length mismatch",
+  );
+
+  for (const expectedSummary of expected.windowSummaries) {
+    const actualSummary = actual.windowSummaries.find(
+      (windowSummary) => windowSummary.windowYears === expectedSummary.windowYears,
+    );
+    assert(actualSummary, `rolling summary missing for ${expectedSummary.windowLabel}`);
+    assert(
+      actualSummary.observations === expectedSummary.observations,
+      `rolling observations mismatch for ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.latestCagr,
+      expectedSummary.latestCagr,
+      `rolling latestCagr ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.medianCagr,
+      expectedSummary.medianCagr,
+      `rolling medianCagr ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.percentile25Cagr,
+      expectedSummary.percentile25Cagr,
+      `rolling percentile25Cagr ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.percentile75Cagr,
+      expectedSummary.percentile75Cagr,
+      `rolling percentile75Cagr ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.bestCagr,
+      expectedSummary.bestCagr,
+      `rolling bestCagr ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.worstCagr,
+      expectedSummary.worstCagr,
+      `rolling worstCagr ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.positiveRate,
+      expectedSummary.positiveRate,
+      `rolling positiveRate ${expectedSummary.windowLabel}`,
+    );
+    assertClose(
+      actualSummary.cagrRange,
+      expectedSummary.cagrRange,
+      `rolling cagrRange ${expectedSummary.windowLabel}`,
+    );
+  }
+
+  const payload = {
+    studyTitle: "Rolling Returns",
+    selection: buildSelection(snapshot),
+    seriesLabel: snapshot.label,
+    methodLabel: `Bundled snapshot using ${snapshot.symbol}`,
+    requestedStartDate: FIVE_YEAR_START,
+    requestedEndDate: FIXED_END,
+    actualStartDate: series[0].date,
+    actualEndDate: series.at(-1).date,
+    warnings: [],
+    exportedAt: EXPORTED_AT,
+    ...actual,
+  };
+  const csvRows = buildRollingCsvRows(payload);
+  const workbookXml = buildRollingWorkbookXml(payload);
+  assert(
+    csvRows.length ===
+      actual.availableWindowSummaries.reduce(
+        (sum, windowSummary) => sum + windowSummary.observations,
+        0,
+      ) + 1,
+    "rolling CSV row count mismatch",
+  );
+  const worksheetNames = extractWorksheetNames(workbookXml);
+  assert(
+    worksheetNames.join("|") === "Summary|Window Stats|Rolling Rows|Warnings",
+    `rolling worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+
+  console.log("ok rolling returns");
+}
+
 async function runExportRegressionChecks() {
   const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
   const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
@@ -1164,6 +1384,7 @@ async function main() {
   await runRiskRegressionChecks();
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();
+  await runRollingRegressionChecks();
   await runExportRegressionChecks();
 
   console.log(`frontend regression checks passed (${assertionCount} assertions)`);

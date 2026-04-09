@@ -5,7 +5,8 @@ Minimal static scaffold for a study library.
 ## What it does
 
 - Hosts studies in a registry instead of hardcoding everything into one page.
-- Ships the first study: risk-adjusted return for an Indian index.
+- Ships multiple studies on the same shared shell:
+  risk-adjusted return, seasonality, and rolling returns.
 - Loads bundled snapshots for built-in datasets and optionally uses a local
   backend for raw yfinance symbols.
 - Keeps index catalog metadata separate from study logic.
@@ -25,9 +26,18 @@ different data and different goals. The code is shaped around that:
 
 This avoids a single giant "study page" that keeps growing conditionals forever.
 
-## First study
+## Current studies
 
-`Risk-Adjusted Return` supports:
+- `Risk-Adjusted Return`
+  Risk, drawdown, and risk-adjusted diagnostics for one filtered series, with
+  overview, visuals, and relative benchmark views.
+- `Seasonality`
+  Month-of-year behavior with win rates, heatmaps, and confidence cues.
+- `Rolling Returns`
+  1Y, 3Y, 5Y, and 10Y rolling CAGR analysis with horizon tables and rolling
+  path visuals.
+
+Shared support across studies includes:
 
 - built-in or bundled index datasets
 - raw yfinance symbols through the optional local backend
@@ -78,9 +88,9 @@ machine caching backed by SQLite:
 
 Then open `http://127.0.0.1:8000`.
 
-The first study can load built-in bundled datasets from committed snapshots with
-either server. Raw symbols and remembered local symbols need the local server
-because they go through `/api/yfinance/...`.
+The study shell can load built-in bundled datasets from committed snapshots
+with either server. Raw symbols and remembered local symbols need the local
+server because they go through `/api/yfinance/...`.
 
 ## Data Flow
 
@@ -158,8 +168,12 @@ runtime format, the local server imports them into SQLite on startup.
 
 1. Create a new module under `app/studies/`.
 2. Export an object with `id`, `title`, `description`, `inputSummary`, and
-   `mount(root)`.
+   either a legacy `mount(root)` entrypoint or a `views` map for study-first
+   routing.
 3. Add that object to `app/studies/registry.js`.
+
+Optional study capabilities can declare whether the shell should expose
+`visuals`, `relative`, and `exports` affordances for that study.
 
 If a future study needs a different file shape or a different dataset, put that
 adapter in `app/lib/` or a dedicated data folder, not inside another study's
