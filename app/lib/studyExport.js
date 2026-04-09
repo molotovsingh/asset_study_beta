@@ -160,7 +160,10 @@ const METRIC_EXPORT_DEFINITIONS = [
 ];
 
 function toIsoDate(date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function toExcelDateTime(date) {
@@ -529,6 +532,10 @@ function buildWorkbookXml(payload) {
     },
   ];
 
+  return buildXmlWorkbook(sheets);
+}
+
+function buildXmlWorkbook(sheets) {
   return `<?xml version="1.0"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook
@@ -616,8 +623,14 @@ function exportStudyXls(payload) {
 }
 
 export {
+  buildXmlWorkbook,
   buildCsvRows,
   buildWorkbookXml,
+  createCell,
+  downloadTextFile,
   exportStudyCsv,
   exportStudyXls,
+  serializeCsv,
+  slugify,
+  toIsoDate,
 };

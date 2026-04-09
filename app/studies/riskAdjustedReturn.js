@@ -28,8 +28,8 @@ import {
   renderSelectionDetails,
   studyTemplate,
 } from "./riskAdjustedReturnView.js";
+import { mountRiskAdjustedReturnRelative } from "./riskAdjustedReturnRelative.js";
 import { mountRiskAdjustedReturnVisuals } from "./riskAdjustedReturnVisuals.js";
-import { createPlaceholderView } from "./studyShell.js";
 
 const demoIndexSeries = [
   ["2021-04-07", 14500],
@@ -90,9 +90,14 @@ const riskAdjustedReturnSession = {
   endDateValue: toInputDate(defaultStudyWindow.endDate),
   riskFreeRateValue: "5.50",
   useDemoData: false,
+  bundledManifest: null,
+  rememberedCatalog: [],
+  backendState: "unknown",
   lastLoadedSelectionSignature: "none",
   lastLoadedSnapshot: null,
   lastStudyRun: null,
+  relativeBenchmarkQuery: "",
+  lastRelativeRun: null,
 };
 
 function appendCoverageWarnings(series, startDate, endDate, warnings) {
@@ -191,9 +196,9 @@ function mountRiskAdjustedReturnOverview(root) {
     useDemoDataInput.checked = riskAdjustedReturnSession.useDemoData;
 
     const state = {
-      bundledManifest: null,
-      rememberedCatalog: [],
-      backendState: "unknown",
+      bundledManifest: riskAdjustedReturnSession.bundledManifest,
+      rememberedCatalog: riskAdjustedReturnSession.rememberedCatalog,
+      backendState: riskAdjustedReturnSession.backendState,
       lastLoadedSelectionSignature:
         riskAdjustedReturnSession.lastLoadedSelectionSignature,
       lastLoadedSnapshot: riskAdjustedReturnSession.lastLoadedSnapshot,
@@ -314,6 +319,7 @@ function mountRiskAdjustedReturnOverview(root) {
         state.rememberedCatalog,
         entry,
       );
+      riskAdjustedReturnSession.rememberedCatalog = state.rememberedCatalog;
       refreshSelectionUi();
     }
 
@@ -350,6 +356,7 @@ function mountRiskAdjustedReturnOverview(root) {
       persistFormState();
       state.lastStudyRun = null;
       riskAdjustedReturnSession.lastStudyRun = null;
+      riskAdjustedReturnSession.lastRelativeRun = null;
       setStatus("Running study...", "info");
 
       try {
@@ -459,9 +466,11 @@ function mountRiskAdjustedReturnOverview(root) {
     async function loadBundledManifest() {
       try {
         state.bundledManifest = await loadSyncManifest(bundledManifestSyncConfig);
+        riskAdjustedReturnSession.bundledManifest = state.bundledManifest;
         refreshSelectionUi();
       } catch (error) {
         state.bundledManifest = null;
+        riskAdjustedReturnSession.bundledManifest = null;
         refreshSelectionUi();
         setStatus(
           `${error.message} Built-in datasets can still load directly if their snapshot files exist.`,
@@ -474,10 +483,14 @@ function mountRiskAdjustedReturnOverview(root) {
       try {
         state.rememberedCatalog = await loadRememberedIndexCatalog();
         state.backendState = "ready";
+        riskAdjustedReturnSession.rememberedCatalog = state.rememberedCatalog;
+        riskAdjustedReturnSession.backendState = "ready";
         refreshSelectionUi();
       } catch (error) {
         state.rememberedCatalog = [];
         state.backendState = "unavailable";
+        riskAdjustedReturnSession.rememberedCatalog = [];
+        riskAdjustedReturnSession.backendState = "unavailable";
         refreshSelectionUi();
         if (!status.textContent) {
           setStatus(buildLocalApiUnavailableMessage(), "info");
@@ -531,6 +544,10 @@ function mountRiskAdjustedReturnVisualsView(root) {
   return mountRiskAdjustedReturnVisuals(root, riskAdjustedReturnSession);
 }
 
+function mountRiskAdjustedReturnRelativeView(root) {
+  return mountRiskAdjustedReturnRelative(root, riskAdjustedReturnSession);
+}
+
 const riskAdjustedReturnStudy = {
   id: "risk-adjusted-return",
   title: "Risk-Adjusted Return",
@@ -540,7 +557,7 @@ const riskAdjustedReturnStudy = {
     "Dataset or symbol, date range, and annual risk-free rate.",
   capabilities: {
     visuals: "ready",
-    relative: "planned",
+    relative: "ready",
     exports: ["csv", "xls"],
   },
   views: [
@@ -563,25 +580,15 @@ const riskAdjustedReturnStudy = {
       status: "ready",
       mount: mountRiskAdjustedReturnVisualsView,
     },
-    createPlaceholderView({
+    {
       id: "relative",
       label: "Relative",
-      summary: "Benchmark comparison when this study adds it.",
+      summary: "Benchmark comparison against any other dataset or symbol.",
       description:
-        "This view is reserved for aligned benchmark comparisons, excess-return math, and relative exports.",
-      bullets: [
-        {
-          label: "Benchmarks",
-          copy:
-            "Pair the current series with a benchmark selector and overlap diagnostics.",
-        },
-        {
-          label: "Relative Exports",
-          copy:
-            "Export aligned asset and benchmark returns once this view becomes active.",
-        },
-      ],
-    }),
+        "Compare the last completed study run against any other dataset or symbol using aligned overlapping dates only.",
+      status: "ready",
+      mount: mountRiskAdjustedReturnRelativeView,
+    },
   ],
 };
 
