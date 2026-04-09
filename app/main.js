@@ -8,11 +8,11 @@ let unmountCurrentStudy = null;
 
 function renderStudyMeta(study) {
   studyMeta.innerHTML = `
-    <div class="meta-card">
+    <div class="meta-row">
       <p class="meta-label">Summary</p>
       <p>${study.description}</p>
     </div>
-    <div class="meta-card">
+    <div class="meta-row">
       <p class="meta-label">Inputs</p>
       <p>${study.inputSummary}</p>
     </div>

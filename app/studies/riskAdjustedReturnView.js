@@ -18,7 +18,7 @@ const RESULT_TAB_DEFINITIONS = [
     sections: [
       {
         title: "Quick Read",
-        summary: "The six default metrics that matter most on a first pass.",
+        summary: "Six first-pass metrics for the current window.",
         cards: [
           {
             label: "CAGR",
@@ -60,8 +60,7 @@ const RESULT_TAB_DEFINITIONS = [
     sections: [
       {
         title: "Volatility",
-        summary:
-          "How variable the series was, with increasing downside and tail sensitivity.",
+        summary: "Realized, downside, and tail-risk views of the same return stream.",
         cards: [
           {
             label: "Volatility",
@@ -109,8 +108,7 @@ const RESULT_TAB_DEFINITIONS = [
     sections: [
       {
         title: "Risk Context",
-        summary:
-          "Secondary ratios and assumptions that add more context after the quick read.",
+        summary: "Secondary ratios and assumptions behind the headline read.",
         cards: [
           {
             label: "Calmar Ratio",
@@ -138,7 +136,7 @@ const RESULT_TAB_DEFINITIONS = [
       },
       {
         title: "Distribution",
-        summary: "How returns were distributed across periods.",
+        summary: "How often and how evenly periods finished positive.",
         cards: [
           {
             label: "Win Rate",
@@ -311,11 +309,19 @@ function renderSelectionDetails(
       : "";
 
   return `
-    <div class="note-box">
-      <p><span class="section-label">${sourceLabel}</span>${selection.label}</p>
-      <p>${providerName} · ${family} · ${targetSeriesType}</p>
-      <p>Source: <a href="${sourceUrl}" target="_blank" rel="noreferrer">${sourceUrl}</a></p>
-      <p class="summary-meta">Resolved symbol: <span class="mono">${selection.symbol}</span></p>
+    <div class="note-box selection-panel">
+      <div class="selection-head">
+        <div>
+          <p class="section-label">${sourceLabel}</p>
+          <h3 class="selection-title">${selection.label}</h3>
+        </div>
+        <div class="selection-chip-row">
+          <span class="selection-chip">${family}</span>
+          <span class="selection-chip">${targetSeriesType}</span>
+        </div>
+      </div>
+      <p class="summary-meta">${providerName} · Symbol <span class="mono">${selection.symbol}</span></p>
+      <p class="summary-meta">History source: <a href="${sourceUrl}" target="_blank" rel="noreferrer">Open source</a></p>
       ${proxyWarning}
       ${note ? `<p class="summary-meta">${note}</p>` : ""}
       ${runtimeMeta}
@@ -327,8 +333,8 @@ function renderMetricCard({ label, value, detail }) {
   return `
     <div class="result-card">
       <p class="meta-label">${label}</p>
-      <strong>${value}</strong>
-      <span>${detail}</span>
+      <strong class="result-value">${value}</strong>
+      <span class="result-caption">${detail}</span>
     </div>
   `;
 }
@@ -436,31 +442,27 @@ function studyTemplate(defaultStartDate, defaultEndDate) {
           <p class="study-kicker">Study 01</p>
           <h2>Risk-Adjusted Return</h2>
           <p>
-            Pick a bundled dataset or enter a yfinance symbol, choose a date
-            range, set the annual risk-free rate, and run the study. Bundled
-            datasets load from repo snapshots. Raw symbols use the optional
-            local backend.
+            Compare return, risk, and drawdown for a bundled dataset or live symbol.
           </p>
         </div>
         <div class="note-box">
           <p>
-            <span class="mono">Sharpe = (CAGR - average risk-free rate) / annualized volatility</span>
+            <span class="mono">Sharpe</span> uses total volatility.
           </p>
           <p>
-            Sortino replaces total volatility with downside deviation.
+            <span class="mono">Sortino</span> isolates downside volatility.
           </p>
         </div>
       </div>
 
-      <div class="study-grid">
-        <section class="card">
+      <section class="card study-primary">
           <form id="risk-study-form" class="card-grid">
             <div class="card-wide">
               <label class="field-label" for="index-query">Index Or Symbol</label>
               <input id="index-query" class="input" type="text" list="index-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
               <datalist id="index-suggestions"></datalist>
               <p class="helper">
-                Try <span class="mono">Nifty 50</span>, <span class="mono">S&amp;P BSE Sensex</span>, <span class="mono">AAPL</span>, <span class="mono">^NSEI</span>, or <span class="mono">ETH-USD</span>.
+                Examples: <span class="mono">Nifty 50</span>, <span class="mono">Sensex</span>, <span class="mono">AAPL</span>, <span class="mono">^NSEI</span>, <span class="mono">ETH-USD</span>.
               </p>
               <div id="index-summary"></div>
             </div>
@@ -497,29 +499,38 @@ function studyTemplate(defaultStartDate, defaultEndDate) {
               <p id="study-status" class="status"></p>
             </div>
           </form>
-        </section>
+      </section>
 
-        <aside class="card">
-          <p class="section-label">Data Mode</p>
-          <ul class="source-list">
-            <li>Bundled datasets load from <span class="mono">data/snapshots/</span>.</li>
-            <li>Typed symbols use the local backend: <span class="mono">${LOCAL_API_COMMAND}</span>.</li>
-            <li>Risk-free reference: <a href="https://data.rbi.org.in" target="_blank" rel="noreferrer">RBI 91-day T-bill data</a>.</li>
-          </ul>
-
-          <p class="section-label">Notes</p>
-          <p class="helper">
-            This study is built for return, risk, and drawdown diagnostics.
-            Price-only series can understate long-run quality versus true TRI data.
-          </p>
-        </aside>
-      </div>
-
-      <section id="results-root" class="card">
+      <section id="results-root" class="card results-card">
         <div class="empty-state">
           Run the study to see return, risk, and drawdown metrics.
         </div>
       </section>
+
+      <aside class="card reference-card">
+        <details class="reference-panel">
+          <summary class="reference-summary">
+            <div>
+              <p class="section-label">Reference</p>
+              <p class="summary-meta">Sources, backend path, and the TRI caveat.</p>
+            </div>
+            <span class="reference-marker" aria-hidden="true"></span>
+          </summary>
+
+          <div class="reference-body">
+            <ul class="source-list">
+              <li>Bundled datasets load from <span class="mono">data/snapshots/</span>.</li>
+              <li>Typed symbols use the local backend: <span class="mono">${LOCAL_API_COMMAND}</span>.</li>
+              <li>Risk-free reference: <a href="https://data.rbi.org.in" target="_blank" rel="noreferrer">RBI 91-day T-bill data</a>.</li>
+            </ul>
+
+            <p class="section-label">Notes</p>
+            <p class="helper">
+              Use TRI data when available. Price-only series can understate long-run quality.
+            </p>
+          </div>
+        </details>
+      </aside>
     </div>
   `;
 }
