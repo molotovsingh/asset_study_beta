@@ -243,6 +243,7 @@ function renderSelectionDetails(
   const sourceUrl = runtimeSnapshot?.sourceUrl || selection.sourceUrl;
   const providerName = runtimeSnapshot?.providerName || selection.providerName;
   const family = runtimeSnapshot?.family || selection.family;
+  const currency = runtimeSnapshot?.currency || selection.currency || null;
   const targetSeriesType =
     runtimeSnapshot?.targetSeriesType || selection.targetSeriesType;
   const sourceSeriesType =
@@ -319,6 +320,7 @@ function renderSelectionDetails(
         <div class="selection-chip-row">
           <span class="selection-chip">${family}</span>
           <span class="selection-chip">${targetSeriesType}</span>
+          ${currency ? `<span class="selection-chip">${currency}</span>` : ""}
         </div>
       </div>
       <p class="summary-meta">${providerName} · Symbol <span class="mono">${selection.symbol}</span></p>

@@ -97,6 +97,9 @@ const riskAdjustedReturnSession = {
   lastLoadedSnapshot: null,
   lastStudyRun: null,
   relativeBenchmarkQuery: "",
+  relativeBasis: "local",
+  relativeBaseCurrency: "USD",
+  fxSeriesCache: {},
   lastRelativeRun: null,
 };
 
@@ -421,7 +424,13 @@ function mountRiskAdjustedReturnOverview(root) {
 
         state.lastStudyRun = {
           studyTitle: riskAdjustedReturnStudy.title,
-          selection,
+          selection: {
+            ...selection,
+            currency:
+              (useDemoDataInput.checked
+                ? selection.currency
+                : state.lastLoadedSnapshot?.currency || selection.currency || null),
+          },
           seriesLabel: useDemoDataInput.checked
             ? `${selection.label} Demo`
             : selection.label,

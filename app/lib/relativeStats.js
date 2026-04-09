@@ -12,6 +12,13 @@ function mean(values) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function toLocalDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function sampleStdDev(values) {
   if (values.length < 2) {
     return null;
@@ -45,8 +52,23 @@ function sampleCovariance(leftValues, rightValues) {
 
 function buildDateMap(series) {
   return new Map(
-    series.map((point) => [point.date.toISOString().slice(0, 10), point]),
+    series.map((point) => [toLocalDateKey(point.date), point]),
   );
+}
+
+function findLatestPointOnOrBefore(series, date) {
+  let latest = null;
+
+  for (const point of series) {
+    if (point.date <= date) {
+      latest = point;
+      continue;
+    }
+
+    break;
+  }
+
+  return latest;
 }
 
 function alignSeriesByDate(assetSeries, benchmarkSeries) {
@@ -126,6 +148,25 @@ function maxRelativeDrawdown(relativeWealthSeries) {
   });
 
   return maxDrawdown;
+}
+
+function convertSeriesCurrency(series, fxSeries, mode = "multiply") {
+  const convertedSeries = [];
+
+  for (const point of series) {
+    const fxPoint = findLatestPointOnOrBefore(fxSeries, point.date);
+    if (!fxPoint || !Number.isFinite(fxPoint.value) || fxPoint.value <= 0) {
+      continue;
+    }
+
+    convertedSeries.push({
+      date: point.date,
+      value:
+        mode === "divide" ? point.value / fxPoint.value : point.value * fxPoint.value,
+    });
+  }
+
+  return convertedSeries;
 }
 
 function computeRelativeMetrics(
@@ -235,4 +276,8 @@ function computeRelativeMetrics(
   };
 }
 
-export { alignSeriesByDate, computeRelativeMetrics };
+export {
+  alignSeriesByDate,
+  computeRelativeMetrics,
+  convertSeriesCurrency,
+};

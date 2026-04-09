@@ -124,6 +124,7 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             symbol TEXT PRIMARY KEY,
             cache_key TEXT NOT NULL,
             generated_at TEXT NOT NULL,
+            currency TEXT,
             source_series_type TEXT NOT NULL,
             range_start_date TEXT NOT NULL,
             range_end_date TEXT NOT NULL,
@@ -140,6 +141,7 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             symbol TEXT NOT NULL,
             provider_name TEXT NOT NULL,
             family TEXT NOT NULL,
+            currency TEXT,
             target_series_type TEXT NOT NULL,
             source_series_type TEXT NOT NULL,
             source_url TEXT NOT NULL,
@@ -155,6 +157,18 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             ON remembered_datasets (symbol);
         """
     )
+    existing_series_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(series_cache)")
+    }
+    if "currency" not in existing_series_columns:
+        connection.execute("ALTER TABLE series_cache ADD COLUMN currency TEXT")
+
+    existing_remembered_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(remembered_datasets)")
+    }
+    if "currency" not in existing_remembered_columns:
+        connection.execute("ALTER TABLE remembered_datasets ADD COLUMN currency TEXT")
+
     connection.commit()
 
 
@@ -164,6 +178,7 @@ def row_to_cached_snapshot(row: sqlite3.Row) -> dict:
         "datasetType": "index",
         "cacheKey": row["cache_key"],
         "symbol": row["symbol"],
+        "currency": row["currency"],
         "generatedAt": row["generated_at"],
         "sourceSeriesType": row["source_series_type"],
         "range": {
@@ -181,6 +196,7 @@ def row_to_remembered_entry(row: sqlite3.Row) -> dict:
         "datasetId": row["dataset_id"],
         "label": row["label"],
         "symbol": row["symbol"],
+        "currency": row["currency"],
         "providerName": row["provider_name"],
         "family": row["family"],
         "targetSeriesType": row["target_series_type"],
@@ -205,15 +221,17 @@ def upsert_cached_snapshot(connection: sqlite3.Connection, snapshot: dict) -> No
             symbol,
             cache_key,
             generated_at,
+            currency,
             source_series_type,
             range_start_date,
             range_end_date,
             observations,
             points_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(symbol) DO UPDATE SET
             cache_key = excluded.cache_key,
             generated_at = excluded.generated_at,
+            currency = excluded.currency,
             source_series_type = excluded.source_series_type,
             range_start_date = excluded.range_start_date,
             range_end_date = excluded.range_end_date,
@@ -224,6 +242,7 @@ def upsert_cached_snapshot(connection: sqlite3.Connection, snapshot: dict) -> No
             normalize_symbol(snapshot.get("symbol")),
             snapshot.get("cacheKey") or symbol_cache_key(snapshot["symbol"]),
             snapshot.get("generatedAt") or to_iso(now_utc()),
+            str(snapshot.get("currency") or "").strip().upper() or None,
             snapshot.get("sourceSeriesType") or "Price",
             range_data["startDate"],
             range_data["endDate"],
@@ -254,6 +273,7 @@ def upsert_remembered_dataset(connection: sqlite3.Connection, entry: dict) -> No
             symbol,
             provider_name,
             family,
+            currency,
             target_series_type,
             source_series_type,
             source_url,
@@ -263,12 +283,13 @@ def upsert_remembered_dataset(connection: sqlite3.Connection, entry: dict) -> No
             range_end_date,
             observations,
             cache_key
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(dataset_id) DO UPDATE SET
             label = excluded.label,
             symbol = excluded.symbol,
             provider_name = excluded.provider_name,
             family = excluded.family,
+            currency = excluded.currency,
             target_series_type = excluded.target_series_type,
             source_series_type = excluded.source_series_type,
             source_url = excluded.source_url,
@@ -285,6 +306,7 @@ def upsert_remembered_dataset(connection: sqlite3.Connection, entry: dict) -> No
             symbol,
             str(entry.get("providerName") or "Yahoo Finance").strip() or "Yahoo Finance",
             str(entry.get("family") or "Remembered").strip() or "Remembered",
+            str(entry.get("currency") or "").strip().upper() or None,
             str(entry.get("targetSeriesType") or "Price").strip() or "Price",
             str(entry.get("sourceSeriesType") or "Price").strip() or "Price",
             str(entry.get("sourceUrl") or build_symbol_source_url(symbol)).strip(),
@@ -372,6 +394,7 @@ def migrate_legacy_local_cache(connection: sqlite3.Connection) -> None:
                     "cacheKey": snapshot.get("cacheKey") or snapshot_path.stem or symbol_cache_key(symbol),
                     "symbol": symbol,
                     "generatedAt": generated_at,
+                    "currency": snapshot.get("currency"),
                     "sourceSeriesType": snapshot.get("sourceSeriesType") or "Price",
                     "range": snapshot.get("range") or build_range(points),
                     "points": points,
@@ -434,6 +457,7 @@ def load_cached_series(symbol: str) -> dict | None:
                 symbol,
                 cache_key,
                 generated_at,
+                currency,
                 source_series_type,
                 range_start_date,
                 range_end_date,
@@ -454,7 +478,11 @@ def load_cached_series(symbol: str) -> dict | None:
         return None
 
 
-def write_cached_series(symbol: str, points: list[list[str | float]]) -> dict:
+def write_cached_series(
+    symbol: str,
+    points: list[list[str | float]],
+    currency: str | None = None,
+) -> dict:
     normalized_symbol = normalize_symbol(symbol)
     snapshot = {
         "provider": "yfinance",
@@ -462,6 +490,7 @@ def write_cached_series(symbol: str, points: list[list[str | float]]) -> dict:
         "cacheKey": symbol_cache_key(normalized_symbol),
         "symbol": normalized_symbol,
         "generatedAt": to_iso(now_utc()),
+        "currency": str(currency or "").strip().upper() or None,
         "sourceSeriesType": "Price",
         "range": build_range(points),
         "points": points,
@@ -489,6 +518,7 @@ def find_remembered_entry(dataset_id: str | None, symbol: str | None) -> dict | 
                     symbol,
                     provider_name,
                     family,
+                    currency,
                     target_series_type,
                     source_series_type,
                     source_url,
@@ -516,6 +546,7 @@ def find_remembered_entry(dataset_id: str | None, symbol: str | None) -> dict | 
                     symbol,
                     provider_name,
                     family,
+                    currency,
                     target_series_type,
                     source_series_type,
                     source_url,
@@ -543,6 +574,7 @@ def remember_symbol(snapshot: dict) -> dict:
         "datasetId": snapshot["datasetId"],
         "label": snapshot["label"],
         "symbol": snapshot["symbol"],
+        "currency": snapshot.get("currency"),
         "providerName": snapshot["providerName"],
         "family": snapshot["family"],
         "targetSeriesType": snapshot["targetSeriesType"],
@@ -572,6 +604,7 @@ def load_remembered_catalog() -> list[dict]:
                 symbol,
                 provider_name,
                 family,
+                currency,
                 target_series_type,
                 source_series_type,
                 source_url,

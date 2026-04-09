@@ -11,9 +11,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 try:
-    from sync_yfinance import load_yfinance, normalize_points
+    from sync_yfinance import load_yfinance, normalize_points, resolve_ticker_currency
 except ModuleNotFoundError:
-    from scripts.sync_yfinance import load_yfinance, normalize_points
+    from scripts.sync_yfinance import load_yfinance, normalize_points, resolve_ticker_currency
 
 try:
     from runtime_store import (
@@ -67,12 +67,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def fetch_symbol_points(
+def fetch_symbol_snapshot(
     symbol: str,
     period: str = DEFAULT_HISTORY_PERIOD,
-) -> list[list[str | float]]:
+) -> tuple[list[list[str | float]], str | None]:
     yf = load_yfinance()
-    frame = yf.Ticker(symbol).history(
+    ticker = yf.Ticker(symbol)
+    frame = ticker.history(
         interval="1d",
         auto_adjust=False,
         actions=False,
@@ -108,7 +109,28 @@ def fetch_symbol_points(
             f"yfinance returned fewer than two usable rows for symbol {symbol}.",
         )
 
-    return normalize_points(points)
+    return normalize_points(points), resolve_ticker_currency(ticker)
+
+
+def ensure_snapshot_currency(snapshot: dict) -> dict:
+    if snapshot.get("currency"):
+        return snapshot
+
+    symbol = normalize_symbol(snapshot.get("symbol"))
+    if not symbol:
+        return snapshot
+
+    try:
+        yf = load_yfinance()
+        ticker = yf.Ticker(symbol)
+        currency = resolve_ticker_currency(ticker)
+    except Exception:  # noqa: BLE001
+        return snapshot
+
+    if not currency:
+        return snapshot
+
+    return write_cached_series(symbol, snapshot["points"], currency)
 
 
 def cache_is_fresh(snapshot: dict, now: datetime | None = None) -> bool:
@@ -124,10 +146,10 @@ def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
     normalized_symbol = normalize_symbol(symbol)
     cached = load_cached_series(normalized_symbol)
     if cached and cache_is_fresh(cached):
-        return cached, "hit"
+        return ensure_snapshot_currency(cached), "hit"
 
-    points = fetch_symbol_points(normalized_symbol)
-    refreshed = write_cached_series(normalized_symbol, points)
+    points, currency = fetch_symbol_snapshot(normalized_symbol)
+    refreshed = write_cached_series(normalized_symbol, points, currency)
     return refreshed, "refreshed"
 
 
@@ -158,6 +180,7 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
         "datasetId": dataset_id,
         "label": label,
         "symbol": symbol,
+        "currency": raw_snapshot.get("currency"),
         "targetSeriesType": target_series_type,
         "sourceSeriesType": source_series_type,
         "providerName": provider_name,

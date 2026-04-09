@@ -19,6 +19,7 @@ class DatasetConfig:
     symbol: str
     target_series_type: str
     source_series_type: str
+    currency: str | None = None
     note: str | None = None
     provider_name: str = "Yahoo Finance"
     family: str = "Custom"
@@ -32,6 +33,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^NSEI",
         target_series_type="Price",
         source_series_type="Price",
+        currency="INR",
         provider_name="NSE Indices",
         family="Broad Market",
         source_url="https://www.niftyindices.com/reports/historical-data",
@@ -42,6 +44,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^NSEI",
         target_series_type="TRI",
         source_series_type="Price",
+        currency="INR",
         note="Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
         provider_name="NSE Indices",
         family="Broad Market",
@@ -53,6 +56,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^BSESN",
         target_series_type="Price",
         source_series_type="Price",
+        currency="INR",
         provider_name="BSE",
         family="Broad Market",
         source_url="https://www.bseindia.com/indices/IndexArchiveData.html",
@@ -63,6 +67,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^BSESN",
         target_series_type="TRI",
         source_series_type="Price",
+        currency="INR",
         note="Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
         provider_name="BSE",
         family="Broad Market",
@@ -170,6 +175,7 @@ def dataset_from_dict(raw: dict) -> DatasetConfig:
 
     target_series_type = str(raw.get("targetSeriesType") or "Price").strip() or "Price"
     source_series_type = str(raw.get("sourceSeriesType") or target_series_type).strip() or target_series_type
+    currency = str(raw.get("currency") or "").strip().upper() or None
     provider_name = str(raw.get("providerName") or "Yahoo Finance").strip() or "Yahoo Finance"
     family = str(raw.get("family") or "Custom").strip() or "Custom"
     source_url = str(raw.get("sourceUrl") or build_yahoo_quote_url(symbol)).strip()
@@ -183,6 +189,7 @@ def dataset_from_dict(raw: dict) -> DatasetConfig:
         symbol=symbol,
         target_series_type=target_series_type,
         source_series_type=source_series_type,
+        currency=currency,
         note=note,
         provider_name=provider_name,
         family=family,
@@ -219,7 +226,13 @@ def load_all_datasets(config_path: Path) -> dict[str, DatasetConfig]:
     return datasets
 
 
-def fetch_points_once(yf, config: DatasetConfig, start: str | None, end: str | None, period: str) -> list[list[str | float]]:
+def fetch_points_once(
+    ticker,
+    config: DatasetConfig,
+    start: str | None,
+    end: str | None,
+    period: str,
+) -> list[list[str | float]]:
     history_kwargs = {
         "interval": "1d",
         "auto_adjust": False,
@@ -235,7 +248,7 @@ def fetch_points_once(yf, config: DatasetConfig, start: str | None, end: str | N
         if end:
             history_kwargs["end"] = end
 
-    frame = yf.Ticker(config.symbol).history(**history_kwargs)
+    frame = ticker.history(**history_kwargs)
     if frame.empty:
         raise RuntimeError(f"{config.dataset_id}: yfinance returned no rows for symbol {config.symbol}.")
 
@@ -266,6 +279,32 @@ def fetch_points_once(yf, config: DatasetConfig, start: str | None, end: str | N
     return normalized_points
 
 
+def resolve_ticker_currency(ticker, fallback: str | None = None) -> str | None:
+    if fallback:
+        return fallback.strip().upper() or None
+
+    try:
+        metadata = ticker.get_history_metadata() or {}
+        currency = metadata.get("currency")
+        if currency:
+            return str(currency).strip().upper() or None
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        fast_info = getattr(ticker, "fast_info", None)
+        if isinstance(fast_info, dict):
+            currency = fast_info.get("currency")
+        else:
+            currency = getattr(fast_info, "currency", None)
+        if currency:
+            return str(currency).strip().upper() or None
+    except Exception:  # noqa: BLE001
+        pass
+
+    return None
+
+
 def fetch_points(
     yf,
     config: DatasetConfig,
@@ -274,12 +313,16 @@ def fetch_points(
     period: str,
     retries: int,
     retry_delay_sec: float,
-) -> list[list[str | float]]:
+) -> tuple[list[list[str | float]], str | None]:
     last_error: Exception | None = None
 
     for attempt in range(retries + 1):
         try:
-            return fetch_points_once(yf, config, start, end, period)
+            ticker = yf.Ticker(config.symbol)
+            return (
+                fetch_points_once(ticker, config, start, end, period),
+                resolve_ticker_currency(ticker, config.currency),
+            )
         except Exception as error:  # noqa: BLE001
             last_error = error
             if attempt >= retries:
@@ -295,13 +338,18 @@ def fetch_points(
     raise last_error
 
 
-def build_snapshot(config: DatasetConfig, points: list[list[str | float]]) -> dict:
+def build_snapshot(
+    config: DatasetConfig,
+    points: list[list[str | float]],
+    currency: str | None,
+) -> dict:
     return {
         "provider": "yfinance",
         "datasetType": "index",
         "datasetId": config.dataset_id,
         "label": config.label,
         "symbol": config.symbol,
+        "currency": currency or config.currency,
         "targetSeriesType": config.target_series_type,
         "sourceSeriesType": config.source_series_type,
         "providerName": config.provider_name,
@@ -330,6 +378,7 @@ def build_manifest_entry(snapshot: dict, output_path: Path, output_root: Path) -
         "datasetId": snapshot["datasetId"],
         "label": snapshot["label"],
         "symbol": snapshot["symbol"],
+        "currency": snapshot.get("currency"),
         "targetSeriesType": snapshot["targetSeriesType"],
         "sourceSeriesType": snapshot["sourceSeriesType"],
         "providerName": snapshot.get("providerName"),
@@ -394,7 +443,7 @@ def main() -> int:
     for dataset_id in selected_ids:
         config = datasets[dataset_id]
         try:
-            points = fetch_points(
+            points, currency = fetch_points(
                 yf,
                 config,
                 start=args.start,
@@ -403,7 +452,7 @@ def main() -> int:
                 retries=max(args.retries, 0),
                 retry_delay_sec=max(args.retry_delay_sec, 0),
             )
-            snapshot = build_snapshot(config, points)
+            snapshot = build_snapshot(config, points, currency)
             output_path = write_snapshot(output_root, config, snapshot)
             print(f"Wrote {output_path} ({len(points)} observations)")
         except Exception as error:  # noqa: BLE001
