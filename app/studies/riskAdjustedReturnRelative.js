@@ -20,13 +20,9 @@ import {
   findSelectionByQuery,
   mergeSelectionSuggestions,
   upsertRememberedCatalogEntry,
-} from "./riskAdjustedReturnSelection.js";
-import { renderSelectionDetails } from "./riskAdjustedReturnView.js";
-
-const BUNDLED_MANIFEST_SYNC_CONFIG = {
-  provider: "yfinance",
-  datasetType: "index",
-};
+} from "./shared/indexSelection.js";
+import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
+import { BUNDLED_INDEX_MANIFEST_SYNC_CONFIG } from "./shared/overviewUtils.js";
 
 const OVERVIEW_HASH = "#risk-adjusted-return/overview";
 
@@ -503,11 +499,7 @@ function mountRiskAdjustedReturnRelative(root, session) {
   const status = root.querySelector("#relative-status");
   const clearButton = root.querySelector("#relative-clear-results");
 
-  const state = {
-    bundledManifest: session.bundledManifest || null,
-    rememberedCatalog: session.rememberedCatalog || [],
-    backendState: session.backendState || "unknown",
-  };
+  const state = session;
 
   function setStatus(message, statusState = "info") {
     status.className = `status ${statusState}`;
@@ -560,8 +552,9 @@ function mountRiskAdjustedReturnRelative(root, session) {
     }
 
     try {
-      state.bundledManifest = await loadSyncManifest(BUNDLED_MANIFEST_SYNC_CONFIG);
-      session.bundledManifest = state.bundledManifest;
+      state.bundledManifest = await loadSyncManifest(
+        BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
+      );
     } catch (error) {
       state.bundledManifest = null;
     }
@@ -574,11 +567,8 @@ function mountRiskAdjustedReturnRelative(root, session) {
     try {
       state.rememberedCatalog = await loadRememberedIndexCatalog();
       state.backendState = "ready";
-      session.rememberedCatalog = state.rememberedCatalog;
-      session.backendState = "ready";
     } catch (error) {
       state.backendState = "unavailable";
-      session.backendState = "unavailable";
       if (!status.textContent) {
         setStatus(buildLocalApiUnavailableMessage(), "info");
       }
@@ -704,7 +694,6 @@ function mountRiskAdjustedReturnRelative(root, session) {
           state.rememberedCatalog,
           rememberedEntry,
         );
-        session.rememberedCatalog = state.rememberedCatalog;
       }
       updateSummary(snapshot);
 

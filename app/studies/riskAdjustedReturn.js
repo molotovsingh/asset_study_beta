@@ -1,4 +1,3 @@
-import { formatDate } from "../lib/format.js";
 import {
   exportStudyCsv,
   exportStudyXls,
@@ -11,7 +10,6 @@ import {
   buildLocalApiUnavailableMessage,
   fetchIndexSeries,
   getManifestDataset,
-  getSnapshotFreshness,
   loadRememberedIndexCatalog,
   loadSyncManifest,
   loadSyncedSeries,
@@ -22,12 +20,19 @@ import {
   findSelectionByQuery,
   mergeSelectionSuggestions,
   upsertRememberedCatalogEntry,
-} from "./riskAdjustedReturnSelection.js";
+} from "./shared/indexSelection.js";
 import {
   renderResults,
-  renderSelectionDetails,
   studyTemplate,
 } from "./riskAdjustedReturnView.js";
+import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
+import {
+  BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
+  appendCoverageWarnings,
+  appendSnapshotWarnings,
+  buildDefaultStudyWindow,
+  toInputDate,
+} from "./shared/overviewUtils.js";
 import { mountRiskAdjustedReturnRelative } from "./riskAdjustedReturnRelative.js";
 import { mountRiskAdjustedReturnVisuals } from "./riskAdjustedReturnVisuals.js";
 
@@ -55,35 +60,7 @@ const demoIndexSeries = [
   ["2026-04-07", 29520],
 ].map(([date, value]) => ({ date: new Date(`${date}T00:00:00`), value }));
 
-const bundledManifestSyncConfig = {
-  provider: "yfinance",
-  datasetType: "index",
-};
-
-function toInputDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildDefaultWindow() {
-  const today = new Date();
-  const endDate = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  );
-  const startDate = new Date(endDate);
-  startDate.setFullYear(startDate.getFullYear() - 5);
-
-  return {
-    startDate,
-    endDate,
-  };
-}
-
-const defaultStudyWindow = buildDefaultWindow();
+const defaultStudyWindow = buildDefaultStudyWindow();
 const riskAdjustedReturnSession = {
   indexQuery: "Nifty 50",
   startDateValue: toInputDate(defaultStudyWindow.startDate),
@@ -102,44 +79,6 @@ const riskAdjustedReturnSession = {
   fxSeriesCache: {},
   lastRelativeRun: null,
 };
-
-function appendCoverageWarnings(series, startDate, endDate, warnings) {
-  if (!series.length) {
-    return;
-  }
-
-  const firstDate = series[0].date;
-  const lastDate = series[series.length - 1].date;
-
-  if (firstDate > startDate) {
-    warnings.push(
-      `The loaded data starts on ${formatDate(firstDate)}, later than your requested start date.`,
-    );
-  }
-
-  if (lastDate < endDate) {
-    warnings.push(
-      `The loaded data ends on ${formatDate(lastDate)}, earlier than your requested end date.`,
-    );
-  }
-}
-
-function appendSnapshotWarnings(snapshot, warnings) {
-  const freshness = getSnapshotFreshness(snapshot);
-
-  if (freshness.marketLagDays !== null && freshness.marketLagDays > 5) {
-    warnings.push(
-      `Latest market date is ${formatDate(freshness.latestDate)}, which is ${freshness.marketLagDays} days behind today.`,
-    );
-  }
-
-  if (freshness.syncAgeDays !== null && freshness.syncAgeDays > 2) {
-    const fetchLabel = snapshot.cache ? "fetched" : "synced";
-    warnings.push(
-      `This series was last ${fetchLabel} ${freshness.syncAgeDays} days ago.`,
-    );
-  }
-}
 
 function validateStudyInputs(selection, startValue, endValue, riskFreeValue) {
   const start = new Date(`${startValue}T00:00:00`);
@@ -198,15 +137,7 @@ function mountRiskAdjustedReturnOverview(root) {
     constantRateInput.value = riskAdjustedReturnSession.riskFreeRateValue;
     useDemoDataInput.checked = riskAdjustedReturnSession.useDemoData;
 
-    const state = {
-      bundledManifest: riskAdjustedReturnSession.bundledManifest,
-      rememberedCatalog: riskAdjustedReturnSession.rememberedCatalog,
-      backendState: riskAdjustedReturnSession.backendState,
-      lastLoadedSelectionSignature:
-        riskAdjustedReturnSession.lastLoadedSelectionSignature,
-      lastLoadedSnapshot: riskAdjustedReturnSession.lastLoadedSnapshot,
-      lastStudyRun: riskAdjustedReturnSession.lastStudyRun,
-    };
+    const state = riskAdjustedReturnSession;
 
     function setStatus(message, statusState = "info") {
       status.className = `status ${statusState}`;
@@ -214,11 +145,11 @@ function mountRiskAdjustedReturnOverview(root) {
     }
 
     function persistFormState() {
-      riskAdjustedReturnSession.indexQuery = indexQueryInput.value;
-      riskAdjustedReturnSession.startDateValue = startDateInput.value;
-      riskAdjustedReturnSession.endDateValue = endDateInput.value;
-      riskAdjustedReturnSession.riskFreeRateValue = constantRateInput.value;
-      riskAdjustedReturnSession.useDemoData = useDemoDataInput.checked;
+      state.indexQuery = indexQueryInput.value;
+      state.startDateValue = startDateInput.value;
+      state.endDateValue = endDateInput.value;
+      state.riskFreeRateValue = constantRateInput.value;
+      state.useDemoData = useDemoDataInput.checked;
     }
 
     function getSuggestions() {
@@ -322,16 +253,12 @@ function mountRiskAdjustedReturnOverview(root) {
         state.rememberedCatalog,
         entry,
       );
-      riskAdjustedReturnSession.rememberedCatalog = state.rememberedCatalog;
       refreshSelectionUi();
     }
 
     function applyLoadedSnapshot(selection, snapshot, rememberedEntry) {
       state.lastLoadedSelectionSignature = buildSelectionSignature(selection);
       state.lastLoadedSnapshot = snapshot;
-      riskAdjustedReturnSession.lastLoadedSelectionSignature =
-        state.lastLoadedSelectionSignature;
-      riskAdjustedReturnSession.lastLoadedSnapshot = snapshot;
 
       if (rememberedEntry) {
         rememberCatalogEntry(rememberedEntry);
@@ -358,8 +285,7 @@ function mountRiskAdjustedReturnOverview(root) {
       event.preventDefault();
       persistFormState();
       state.lastStudyRun = null;
-      riskAdjustedReturnSession.lastStudyRun = null;
-      riskAdjustedReturnSession.lastRelativeRun = null;
+      state.lastRelativeRun = null;
       setStatus("Running study...", "info");
 
       try {
@@ -446,13 +372,11 @@ function mountRiskAdjustedReturnOverview(root) {
           useDemoData: useDemoDataInput.checked,
           exportedAt: new Date(),
         };
-        riskAdjustedReturnSession.lastStudyRun = state.lastStudyRun;
         renderStudyRunResults(resultsRoot, state.lastStudyRun);
 
         setStatus("Study completed.", "success");
       } catch (error) {
         state.lastStudyRun = null;
-        riskAdjustedReturnSession.lastStudyRun = null;
         resultsRoot.innerHTML = `
           <div class="empty-state">
             ${error.message}
@@ -474,12 +398,12 @@ function mountRiskAdjustedReturnOverview(root) {
 
     async function loadBundledManifest() {
       try {
-        state.bundledManifest = await loadSyncManifest(bundledManifestSyncConfig);
-        riskAdjustedReturnSession.bundledManifest = state.bundledManifest;
+        state.bundledManifest = await loadSyncManifest(
+          BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
+        );
         refreshSelectionUi();
       } catch (error) {
         state.bundledManifest = null;
-        riskAdjustedReturnSession.bundledManifest = null;
         refreshSelectionUi();
         setStatus(
           `${error.message} Built-in datasets can still load directly if their snapshot files exist.`,
@@ -492,14 +416,10 @@ function mountRiskAdjustedReturnOverview(root) {
       try {
         state.rememberedCatalog = await loadRememberedIndexCatalog();
         state.backendState = "ready";
-        riskAdjustedReturnSession.rememberedCatalog = state.rememberedCatalog;
-        riskAdjustedReturnSession.backendState = "ready";
         refreshSelectionUi();
       } catch (error) {
         state.rememberedCatalog = [];
         state.backendState = "unavailable";
-        riskAdjustedReturnSession.rememberedCatalog = [];
-        riskAdjustedReturnSession.backendState = "unavailable";
         refreshSelectionUi();
         if (!status.textContent) {
           setStatus(buildLocalApiUnavailableMessage(), "info");

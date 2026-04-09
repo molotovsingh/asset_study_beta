@@ -1,4 +1,3 @@
-import { formatDate } from "../lib/format.js";
 import { buildSeasonalityStudy } from "../lib/seasonality.js";
 import {
   exportSeasonalityCsv,
@@ -8,7 +7,6 @@ import {
   buildLocalApiUnavailableMessage,
   fetchIndexSeries,
   getManifestDataset,
-  getSnapshotFreshness,
   loadRememberedIndexCatalog,
   loadSyncManifest,
   loadSyncedSeries,
@@ -20,43 +18,22 @@ import {
   findSelectionByQuery,
   mergeSelectionSuggestions,
   upsertRememberedCatalogEntry,
-} from "./riskAdjustedReturnSelection.js";
-import { renderSelectionDetails } from "./riskAdjustedReturnView.js";
+} from "./shared/indexSelection.js";
+import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
+import {
+  BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
+  appendCoverageWarnings,
+  appendSnapshotWarnings,
+  buildDefaultStudyWindow,
+  toInputDate,
+} from "./shared/overviewUtils.js";
 import {
   renderSeasonalityResults,
   seasonalityTemplate,
 } from "./seasonalityView.js";
 import { mountSeasonalityVisuals } from "./seasonalityVisuals.js";
 
-const bundledManifestSyncConfig = {
-  provider: "yfinance",
-  datasetType: "index",
-};
-
-function toInputDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildDefaultWindow() {
-  const today = new Date();
-  const endDate = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  );
-  const startDate = new Date(endDate);
-  startDate.setFullYear(startDate.getFullYear() - 5);
-
-  return {
-    startDate,
-    endDate,
-  };
-}
-
-const defaultStudyWindow = buildDefaultWindow();
+const defaultStudyWindow = buildDefaultStudyWindow();
 const seasonalitySession = {
   indexQuery: "Nifty 50",
   startDateValue: toInputDate(defaultStudyWindow.startDate),
@@ -69,44 +46,6 @@ const seasonalitySession = {
   lastLoadedSnapshot: null,
   lastStudyRun: null,
 };
-
-function appendCoverageWarnings(series, startDate, endDate, warnings) {
-  if (!series.length) {
-    return;
-  }
-
-  const firstDate = series[0].date;
-  const lastDate = series[series.length - 1].date;
-
-  if (firstDate > startDate) {
-    warnings.push(
-      `The loaded data starts on ${formatDate(firstDate)}, later than your requested start date.`,
-    );
-  }
-
-  if (lastDate < endDate) {
-    warnings.push(
-      `The loaded data ends on ${formatDate(lastDate)}, earlier than your requested end date.`,
-    );
-  }
-}
-
-function appendSnapshotWarnings(snapshot, warnings) {
-  const freshness = getSnapshotFreshness(snapshot);
-
-  if (freshness.marketLagDays !== null && freshness.marketLagDays > 5) {
-    warnings.push(
-      `Latest market date is ${formatDate(freshness.latestDate)}, which is ${freshness.marketLagDays} days behind today.`,
-    );
-  }
-
-  if (freshness.syncAgeDays !== null && freshness.syncAgeDays > 2) {
-    const fetchLabel = snapshot.cache ? "fetched" : "synced";
-    warnings.push(
-      `This series was last ${fetchLabel} ${freshness.syncAgeDays} days ago.`,
-    );
-  }
-}
 
 function validateStudyInputs(selection, startValue, endValue) {
   const start = new Date(`${startValue}T00:00:00`);
@@ -159,15 +98,7 @@ function mountSeasonalityOverview(root) {
   includePartialInput.checked =
     seasonalitySession.includePartialBoundaryMonths;
 
-  const state = {
-    bundledManifest: seasonalitySession.bundledManifest,
-    rememberedCatalog: seasonalitySession.rememberedCatalog,
-    backendState: seasonalitySession.backendState,
-    lastLoadedSelectionSignature:
-      seasonalitySession.lastLoadedSelectionSignature,
-    lastLoadedSnapshot: seasonalitySession.lastLoadedSnapshot,
-    lastStudyRun: seasonalitySession.lastStudyRun,
-  };
+  const state = seasonalitySession;
 
   function setStatus(message, statusState = "info") {
     status.className = `status ${statusState}`;
@@ -175,11 +106,10 @@ function mountSeasonalityOverview(root) {
   }
 
   function persistFormState() {
-    seasonalitySession.indexQuery = indexQueryInput.value;
-    seasonalitySession.startDateValue = startDateInput.value;
-    seasonalitySession.endDateValue = endDateInput.value;
-    seasonalitySession.includePartialBoundaryMonths =
-      includePartialInput.checked;
+    state.indexQuery = indexQueryInput.value;
+    state.startDateValue = startDateInput.value;
+    state.endDateValue = endDateInput.value;
+    state.includePartialBoundaryMonths = includePartialInput.checked;
   }
 
   function getSuggestions() {
@@ -256,16 +186,12 @@ function mountSeasonalityOverview(root) {
       state.rememberedCatalog,
       entry,
     );
-    seasonalitySession.rememberedCatalog = state.rememberedCatalog;
     refreshSelectionUi();
   }
 
   function applyLoadedSnapshot(selection, snapshot, rememberedEntry) {
     state.lastLoadedSelectionSignature = buildSelectionSignature(selection);
     state.lastLoadedSnapshot = snapshot;
-    seasonalitySession.lastLoadedSelectionSignature =
-      state.lastLoadedSelectionSignature;
-    seasonalitySession.lastLoadedSnapshot = snapshot;
 
     if (rememberedEntry) {
       rememberCatalogEntry(rememberedEntry);
@@ -292,7 +218,6 @@ function mountSeasonalityOverview(root) {
     event.preventDefault();
     persistFormState();
     state.lastStudyRun = null;
-    seasonalitySession.lastStudyRun = null;
     setStatus("Running seasonality study...", "info");
 
     try {
@@ -392,12 +317,10 @@ function mountSeasonalityOverview(root) {
         confidenceLevel: seasonalityModel.confidenceLevel,
         exportedAt: new Date(),
       };
-      seasonalitySession.lastStudyRun = state.lastStudyRun;
       renderStudyRunResults(resultsRoot, state.lastStudyRun);
       setStatus("Seasonality study completed.", "success");
     } catch (error) {
       state.lastStudyRun = null;
-      seasonalitySession.lastStudyRun = null;
       resultsRoot.innerHTML = `
         <div class="empty-state">
           ${error.message}
@@ -419,12 +342,12 @@ function mountSeasonalityOverview(root) {
 
   async function loadBundledManifest() {
     try {
-      state.bundledManifest = await loadSyncManifest(bundledManifestSyncConfig);
-      seasonalitySession.bundledManifest = state.bundledManifest;
+      state.bundledManifest = await loadSyncManifest(
+        BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
+      );
       refreshSelectionUi();
     } catch (error) {
       state.bundledManifest = null;
-      seasonalitySession.bundledManifest = null;
       refreshSelectionUi();
       setStatus(
         `${error.message} Built-in datasets can still load directly if their snapshot files exist.`,
@@ -437,14 +360,10 @@ function mountSeasonalityOverview(root) {
     try {
       state.rememberedCatalog = await loadRememberedIndexCatalog();
       state.backendState = "ready";
-      seasonalitySession.rememberedCatalog = state.rememberedCatalog;
-      seasonalitySession.backendState = "ready";
       refreshSelectionUi();
     } catch (error) {
       state.rememberedCatalog = [];
       state.backendState = "unavailable";
-      seasonalitySession.rememberedCatalog = [];
-      seasonalitySession.backendState = "unavailable";
       refreshSelectionUi();
       if (!status.textContent) {
         setStatus(buildLocalApiUnavailableMessage(), "info");

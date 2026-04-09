@@ -286,6 +286,149 @@ function filterSeriesByDate(series, startDate, endDate) {
   );
 }
 
+function buildRiskFreeContext(periodicReturns, options = {}) {
+  const annualRiskFreeRates = periodicReturns.map((period) =>
+    getAnnualRiskFreeRate(
+      period,
+      options.riskFreeSeries,
+      options.constantRiskFreeRate,
+    ),
+  );
+  const averageAnnualRiskFreeRate = mean(annualRiskFreeRates) ?? 0;
+  const averageAnnualLogRiskFreeRate =
+    mean(annualRiskFreeRates.map((rate) => Math.log1p(rate))) ?? 0;
+  const periodRiskFreeLogReturns = periodicReturns.map((period, index) =>
+    annualRateToPeriodLogReturn(annualRiskFreeRates[index], period.days),
+  );
+  const excessLogReturns = periodicReturns.map(
+    (period, index) => period.logReturn - periodRiskFreeLogReturns[index],
+  );
+
+  return {
+    annualRiskFreeRates,
+    averageAnnualRiskFreeRate,
+    averageAnnualLogRiskFreeRate,
+    periodRiskFreeLogReturns,
+    excessLogReturns,
+  };
+}
+
+function buildReturnMetrics(
+  indexSeries,
+  excessLogReturns,
+  periodsPerYear,
+  annualizedVolatility,
+  averageAnnualRiskFreeRate,
+) {
+  const startValue = indexSeries[0].value;
+  const endValue = indexSeries[indexSeries.length - 1].value;
+  const totalReturn = endValue / startValue - 1;
+  const elapsedDays =
+    (indexSeries[indexSeries.length - 1].date - indexSeries[0].date) / 86400000;
+  const annualizedLogReturn = Math.log(endValue / startValue) * (365 / elapsedDays);
+  const annualizedReturn = Math.expm1(annualizedLogReturn);
+  const annualizedExcessLogReturn =
+    (mean(excessLogReturns) ?? 0) * periodsPerYear;
+  const downsideDeviation =
+    Math.sqrt(
+      mean(excessLogReturns.map((value) => Math.min(value, 0) ** 2)) ?? 0,
+    ) * Math.sqrt(periodsPerYear);
+  const sharpeRatio =
+    annualizedVolatility > 0
+      ? annualizedExcessLogReturn / annualizedVolatility
+      : null;
+  const sortinoRatio =
+    downsideDeviation > 0
+      ? annualizedExcessLogReturn / downsideDeviation
+      : null;
+  const maxDrawdownValue = maxDrawdown(indexSeries);
+  const calmarRatio =
+    maxDrawdownValue < 0
+      ? annualizedReturn / Math.abs(maxDrawdownValue)
+      : null;
+  const ulcerIndexValue = ulcerIndex(indexSeries);
+  const martinRatio =
+    ulcerIndexValue && ulcerIndexValue > 0
+      ? (annualizedReturn - averageAnnualRiskFreeRate) / ulcerIndexValue
+      : null;
+
+  return {
+    annualizedExcessLogReturn,
+    annualizedLogReturn,
+    annualizedReturn,
+    downsideDeviation,
+    sharpeRatio,
+    sortinoRatio,
+    totalReturn,
+    maxDrawdown: maxDrawdownValue,
+    calmarRatio,
+    ulcerIndex: ulcerIndexValue,
+    martinRatio,
+  };
+}
+
+function buildDistributionMetrics(
+  periodicReturns,
+  logPeriodReturnValues,
+  simplePeriodReturnValues,
+) {
+  const positivePeriods = periodicReturns.filter(
+    (period) => period.logReturn > 0,
+  ).length;
+  const nonPositivePeriods = periodicReturns.length - positivePeriods;
+  const winRate =
+    periodicReturns.length > 0
+      ? positivePeriods / periodicReturns.length
+      : null;
+
+  return {
+    averagePeriodReturn: mean(logPeriodReturnValues),
+    medianPeriodReturn: median(logPeriodReturnValues),
+    simpleAveragePeriodReturn: mean(simplePeriodReturnValues),
+    simpleMedianPeriodReturn: median(simplePeriodReturnValues),
+    positivePeriods,
+    nonPositivePeriods,
+    winRate,
+  };
+}
+
+function buildTailMetrics(logPeriodReturnValues) {
+  const valueAtRisk95 = percentile(logPeriodReturnValues, 0.05);
+  const cvarSample = logPeriodReturnValues.filter(
+    (value) => valueAtRisk95 !== null && value <= valueAtRisk95,
+  );
+
+  return {
+    valueAtRisk95,
+    conditionalValueAtRisk95: mean(cvarSample),
+    skewness: sampleSkewness(logPeriodReturnValues),
+    excessKurtosis: sampleExcessKurtosis(logPeriodReturnValues),
+  };
+}
+
+function buildPeriodExtremes(periodicReturns) {
+  const rankedReturns = [...periodicReturns].sort(
+    (left, right) => left.logReturn - right.logReturn,
+  );
+  const worstPeriod = rankedReturns[0] || null;
+  const bestPeriod = rankedReturns[rankedReturns.length - 1] || null;
+
+  return {
+    bestPeriod: bestPeriod
+      ? {
+          ...bestPeriod,
+          value: bestPeriod.simpleReturn,
+        }
+      : null,
+    worstPeriod: worstPeriod
+      ? {
+          ...worstPeriod,
+          value: worstPeriod.simpleReturn,
+        }
+      : null,
+  };
+}
+
 function computeRiskAdjustedMetrics(indexSeries, options = {}) {
   const periodicReturns = toPeriodicReturns(indexSeries);
   if (!periodicReturns.length) {
@@ -301,122 +444,44 @@ function computeRiskAdjustedMetrics(indexSeries, options = {}) {
     (sampleStdDev(logPeriodReturnValues) ?? 0) *
     Math.sqrt(periodsPerYear);
 
-  const annualRiskFreeRates = periodicReturns.map((period) =>
-    getAnnualRiskFreeRate(period, options.riskFreeSeries, options.constantRiskFreeRate),
+  const {
+    averageAnnualRiskFreeRate,
+    averageAnnualLogRiskFreeRate,
+    excessLogReturns,
+  } = buildRiskFreeContext(periodicReturns, options);
+  const returnMetrics = buildReturnMetrics(
+    indexSeries,
+    excessLogReturns,
+    periodsPerYear,
+    annualizedVolatility,
+    averageAnnualRiskFreeRate,
   );
-  const averageAnnualRiskFreeRate = mean(annualRiskFreeRates) ?? 0;
-  const averageAnnualLogRiskFreeRate =
-    mean(annualRiskFreeRates.map((rate) => Math.log1p(rate))) ?? 0;
-  const periodRiskFreeLogReturns = periodicReturns.map((period, index) =>
-    annualRateToPeriodLogReturn(annualRiskFreeRates[index], period.days),
+  const distributionMetrics = buildDistributionMetrics(
+    periodicReturns,
+    logPeriodReturnValues,
+    simplePeriodReturnValues,
   );
-  const excessLogReturns = periodicReturns.map(
-    (period, index) => period.logReturn - periodRiskFreeLogReturns[index],
-  );
-  const downsideDeviation =
-    Math.sqrt(
-      mean(excessLogReturns.map((value) => Math.min(value, 0) ** 2)) ?? 0,
-    ) * Math.sqrt(periodsPerYear);
-
-  const startValue = indexSeries[0].value;
-  const endValue = indexSeries[indexSeries.length - 1].value;
-  const totalReturn = endValue / startValue - 1;
-  const elapsedDays =
-    (indexSeries[indexSeries.length - 1].date - indexSeries[0].date) / 86400000;
-  const annualizedLogReturn = Math.log(endValue / startValue) * (365 / elapsedDays);
-  const annualizedReturn = Math.expm1(annualizedLogReturn);
-  const annualizedExcessLogReturn =
-    (mean(excessLogReturns) ?? 0) * periodsPerYear;
-  const sharpeRatio =
-    annualizedVolatility > 0
-      ? annualizedExcessLogReturn / annualizedVolatility
-      : null;
-  const sortinoRatio =
-    downsideDeviation > 0
-      ? annualizedExcessLogReturn / downsideDeviation
-      : null;
-  const maxDrawdownValue = maxDrawdown(indexSeries);
-  const calmarRatio =
-    maxDrawdownValue < 0
-      ? annualizedReturn / Math.abs(maxDrawdownValue)
-      : null;
-  const positivePeriods = periodicReturns.filter(
-    (period) => period.logReturn > 0,
-  ).length;
-  const nonPositivePeriods = periodicReturns.length - positivePeriods;
-  const winRate =
-    periodicReturns.length > 0
-      ? positivePeriods / periodicReturns.length
-      : null;
-  const averagePeriodReturn = mean(logPeriodReturnValues);
-  const medianPeriodReturn = median(logPeriodReturnValues);
-  const ulcerIndexValue = ulcerIndex(indexSeries);
-  const martinRatio =
-    ulcerIndexValue && ulcerIndexValue > 0
-      ? (annualizedReturn - averageAnnualRiskFreeRate) / ulcerIndexValue
-      : null;
-  const valueAtRisk95 = percentile(logPeriodReturnValues, 0.05);
-  const cvarSample = logPeriodReturnValues.filter(
-    (value) => valueAtRisk95 !== null && value <= valueAtRisk95,
-  );
-  const conditionalValueAtRisk95 = mean(cvarSample);
-  const skewness = sampleSkewness(logPeriodReturnValues);
-  const excessKurtosis = sampleExcessKurtosis(logPeriodReturnValues);
+  const tailMetrics = buildTailMetrics(logPeriodReturnValues);
   const {
     maxDrawdownDurationDays,
     maxDrawdownDurationPeriods,
   } = getDrawdownDurationStats(indexSeries);
-
-  const rankedReturns = [...periodicReturns].sort(
-    (left, right) => left.logReturn - right.logReturn,
-  );
-  const worstPeriod = rankedReturns[0] || null;
-  const bestPeriod = rankedReturns[rankedReturns.length - 1] || null;
+  const periodExtremes = buildPeriodExtremes(periodicReturns);
 
   return {
-    annualizedExcessLogReturn,
-    annualizedLogReturn,
-    annualizedReturn,
+    ...returnMetrics,
+    ...distributionMetrics,
+    ...tailMetrics,
+    ...periodExtremes,
     annualizedVolatility,
     averageAnnualLogRiskFreeRate,
     averageAnnualRiskFreeRate,
-    averagePeriodReturn,
-    calmarRatio,
-    conditionalValueAtRisk95,
-    downsideDeviation,
-    excessKurtosis,
-    martinRatio,
     maxDrawdownDurationDays,
     maxDrawdownDurationPeriods,
-    medianPeriodReturn,
-    winRate,
-    positivePeriods,
-    nonPositivePeriods,
-    sharpeRatio,
-    skewness,
-    sortinoRatio,
-    ulcerIndex: ulcerIndexValue,
-    valueAtRisk95,
-    maxDrawdown: maxDrawdownValue,
     periodicReturnMode: "log",
-    totalReturn,
     periodsPerYear,
     observations: indexSeries.length,
     periodicObservations: periodicReturns.length,
-    bestPeriod: bestPeriod
-      ? {
-          ...bestPeriod,
-          value: bestPeriod.simpleReturn,
-        }
-      : null,
-    worstPeriod: worstPeriod
-      ? {
-          ...worstPeriod,
-          value: worstPeriod.simpleReturn,
-        }
-      : null,
-    simpleAveragePeriodReturn: mean(simplePeriodReturnValues),
-    simpleMedianPeriodReturn: median(simplePeriodReturnValues),
   };
 }
 
