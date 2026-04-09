@@ -1,5 +1,9 @@
 import { formatDate } from "../lib/format.js";
 import {
+  exportStudyCsv,
+  exportStudyXls,
+} from "../lib/studyExport.js";
+import {
   filterSeriesByDate,
   computeRiskAdjustedMetrics,
 } from "../lib/stats.js";
@@ -159,6 +163,7 @@ const riskAdjustedReturnStudy = {
       backendState: "unknown",
       lastLoadedSelectionSignature: "none",
       lastLoadedSnapshot: null,
+      lastStudyRun: null,
     };
 
     function setStatus(message, statusState = "info") {
@@ -229,6 +234,31 @@ const riskAdjustedReturnStudy = {
     }
 
     function handleResultsClick(event) {
+      const exportTrigger = event.target.closest("[data-results-export]");
+      if (exportTrigger) {
+        if (!state.lastStudyRun) {
+          setStatus("Run the study before exporting.", "info");
+          return;
+        }
+
+        try {
+          if (exportTrigger.dataset.resultsExport === "csv") {
+            exportStudyCsv(state.lastStudyRun);
+            setStatus("Downloaded the CSV export.", "success");
+            return;
+          }
+
+          if (exportTrigger.dataset.resultsExport === "xls") {
+            exportStudyXls(state.lastStudyRun);
+            setStatus("Downloaded the XLS export.", "success");
+            return;
+          }
+        } catch (error) {
+          setStatus(error.message, "error");
+          return;
+        }
+      }
+
       const trigger = event.target.closest("[data-results-tab-trigger]");
       if (!trigger) {
         return;
@@ -272,6 +302,7 @@ const riskAdjustedReturnStudy = {
 
     async function handleSubmit(event) {
       event.preventDefault();
+      state.lastStudyRun = null;
       setStatus("Running study...", "info");
 
       try {
@@ -334,6 +365,25 @@ const riskAdjustedReturnStudy = {
           );
         }
 
+        state.lastStudyRun = {
+          studyTitle: riskAdjustedReturnStudy.title,
+          selection,
+          seriesLabel: useDemoDataInput.checked
+            ? `${selection.label} Demo`
+            : selection.label,
+          indexSeries,
+          metrics,
+          warnings,
+          methodLabel,
+          annualRiskFreeRate: riskFreeRate / 100,
+          requestedStartDate: start,
+          requestedEndDate: end,
+          actualStartDate: indexSeries[0].date,
+          actualEndDate: indexSeries[indexSeries.length - 1].date,
+          useDemoData: useDemoDataInput.checked,
+          exportedAt: new Date(),
+        };
+
         resultsRoot.innerHTML = renderResults({
           metrics,
           startDate: indexSeries[0].date,
@@ -344,6 +394,7 @@ const riskAdjustedReturnStudy = {
 
         setStatus("Study completed.", "success");
       } catch (error) {
+        state.lastStudyRun = null;
         resultsRoot.innerHTML = `
           <div class="empty-state">
             ${error.message}

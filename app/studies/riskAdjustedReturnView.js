@@ -400,18 +400,32 @@ function renderResults({ metrics, startDate, endDate, methodLabel, warnings }) {
   return `
     <div class="results-shell">
       <div class="results-tabs" data-results-tabs>
-        <div class="results-tab-list" role="tablist" aria-label="Result sections">
-          ${RESULT_TAB_DEFINITIONS.map(
-            (tab, index) => `
-              <button
-                class="results-tab-button${index === 0 ? " is-active" : ""}"
-                type="button"
-                role="tab"
-                aria-selected="${index === 0}"
-                data-results-tab-trigger="${tab.id}"
-              >${tab.label}</button>
-            `,
-          ).join("")}
+        <div class="results-toolbar">
+          <div class="results-tab-list" role="tablist" aria-label="Result sections">
+            ${RESULT_TAB_DEFINITIONS.map(
+              (tab, index) => `
+                <button
+                  class="results-tab-button${index === 0 ? " is-active" : ""}"
+                  type="button"
+                  role="tab"
+                  aria-selected="${index === 0}"
+                  data-results-tab-trigger="${tab.id}"
+                >${tab.label}</button>
+              `,
+            ).join("")}
+          </div>
+          <div class="results-export-actions">
+            <button
+              class="results-export-button"
+              type="button"
+              data-results-export="csv"
+            >Export CSV</button>
+            <button
+              class="results-export-button"
+              type="button"
+              data-results-export="xls"
+            >Export XLS</button>
+          </div>
         </div>
 
         ${RESULT_TAB_DEFINITIONS.map(
