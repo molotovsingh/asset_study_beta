@@ -1047,7 +1047,58 @@ textarea {
   background: rgba(135, 75, 31, 0.035);
 }
 
+.sip-table-wrap {
+  overflow-x: auto;
+}
+
+.sip-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.sip-table thead th {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: right;
+}
+
+.sip-table thead th:first-child,
+.sip-table tbody th {
+  text-align: left;
+}
+
+.sip-table tbody th,
+.sip-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(34, 39, 37, 0.08);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.sip-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.sip-table tbody tr.is-positive th {
+  color: var(--accent-strong);
+}
+
+.sip-table tbody tr.is-negative th {
+  color: #8a4f26;
+}
+
 .rolling-returns-chart-card {
+  grid-column: 1 / -1;
+}
+
+.sip-chart-card {
   grid-column: 1 / -1;
 }
 

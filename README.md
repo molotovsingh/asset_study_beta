@@ -6,7 +6,7 @@ Minimal static scaffold for a study library.
 
 - Hosts studies in a registry instead of hardcoding everything into one page.
 - Ships multiple studies on the same shared shell:
-  risk-adjusted return, seasonality, and rolling returns.
+  risk-adjusted return, seasonality, rolling returns, and SIP simulation.
 - Loads bundled snapshots for built-in datasets and optionally uses a local
   backend for raw yfinance symbols.
 - Keeps index catalog metadata separate from study logic.
@@ -36,6 +36,9 @@ This avoids a single giant "study page" that keeps growing conditionals forever.
 - `Rolling Returns`
   1Y, 3Y, 5Y, and 10Y rolling CAGR analysis with horizon tables and rolling
   path visuals.
+- `SIP Simulator`
+  Fixed monthly contribution cohorts with XIRR, terminal wealth, and
+  chart-based cohort comparisons across historical start months.
 
 Shared support across studies includes:
 

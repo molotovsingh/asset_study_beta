@@ -9,6 +9,11 @@ import {
   buildWorkbookXml as buildRollingWorkbookXml,
 } from "../app/lib/rollingReturnsExport.js";
 import { buildSeasonalityStudy } from "../app/lib/seasonality.js";
+import { buildSipStudy } from "../app/lib/sipSimulator.js";
+import {
+  buildCsvRows as buildSipCsvRows,
+  buildWorkbookXml as buildSipWorkbookXml,
+} from "../app/lib/sipSimulatorExport.js";
 import {
   buildCsvRows as buildRelativeCsvRows,
   buildWorkbookXml as buildRelativeWorkbookXml,
@@ -940,6 +945,29 @@ function buildSeasonalityPayload(snapshot, series, seasonalityModel, warnings = 
   };
 }
 
+function buildSipPayload(snapshot, series, sipModel, monthlyContribution, warnings = []) {
+  return {
+    studyTitle: "SIP Simulator",
+    selection: buildSelection(snapshot),
+    seriesLabel: snapshot.label,
+    indexSeries: series,
+    monthlyPoints: sipModel.monthlyPoints,
+    cohorts: sipModel.cohorts,
+    summary: sipModel.summary,
+    warnings,
+    methodLabel: `Bundled snapshot using ${snapshot.symbol}`,
+    monthlyContribution,
+    minContributions: sipModel.summary.minContributions,
+    requestedStartDate: FIVE_YEAR_START,
+    requestedEndDate: FIXED_END,
+    actualStartDate: series[0].date,
+    actualEndDate: series[series.length - 1].date,
+    endMonthLabel:
+      sipModel.monthlyPoints[sipModel.monthlyPoints.length - 1]?.monthLabel ?? null,
+    exportedAt: EXPORTED_AT,
+  };
+}
+
 function buildRelativePayload(assetSnapshot, benchmarkSnapshot, relativeMetrics) {
   return {
     studyTitle: "Risk-Adjusted Relative Performance",
@@ -1339,6 +1367,86 @@ async function runRollingRegressionChecks() {
   console.log("ok rolling returns");
 }
 
+async function runSipRegressionChecks() {
+  const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
+  const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
+  const monthlyContribution = 10000;
+  const actual = buildSipStudy(series, {
+    monthlyContribution,
+    minContributions: 12,
+  });
+
+  assert(
+    actual.monthlyPoints.length === 61,
+    `sip monthly anchor count mismatch: ${actual.monthlyPoints.length}`,
+  );
+  assert(
+    actual.cohorts.length === 50,
+    `sip cohort count mismatch: ${actual.cohorts.length}`,
+  );
+  assert(
+    actual.summary.totalCohorts === actual.cohorts.length,
+    "sip total cohort summary mismatch",
+  );
+  assert(
+    actual.summary.fullWindowCohort.contributionCount === actual.monthlyPoints.length,
+    "sip full-window contribution count mismatch",
+  );
+  assertClose(
+    actual.summary.fullWindowCohort.totalInvested,
+    actual.monthlyPoints.length * monthlyContribution,
+    "sip full-window total invested",
+  );
+  assertClose(
+    actual.summary.fullWindowCohort.path.at(-1).portfolioValue,
+    actual.summary.fullWindowCohort.terminalValue,
+    "sip full-window terminal path value",
+  );
+  assertDateEqual(
+    actual.summary.fullWindowCohort.startDate,
+    actual.monthlyPoints[0].date,
+    "sip full-window start date",
+  );
+  assertDateEqual(
+    actual.summary.shortestIncludedCohort.startDate,
+    actual.monthlyPoints[actual.monthlyPoints.length - 12].date,
+    "sip shortest included cohort start date",
+  );
+  assert(
+    actual.summary.bestCohort.xirr >= actual.summary.worstCohort.xirr,
+    "sip best cohort should beat worst cohort",
+  );
+  assert(
+    actual.summary.positiveRate >= 0 && actual.summary.positiveRate <= 1,
+    "sip positive rate should be bounded",
+  );
+  assert(
+    actual.summary.percentile25Xirr <= actual.summary.percentile75Xirr,
+    "sip XIRR percentiles should be ordered",
+  );
+
+  const payload = buildSipPayload(
+    snapshot,
+    series,
+    actual,
+    monthlyContribution,
+  );
+  const csvRows = buildSipCsvRows(payload);
+  const workbookXml = buildSipWorkbookXml(payload);
+  assert(
+    csvRows.length === actual.cohorts.length + 1,
+    "sip CSV row count mismatch",
+  );
+  const worksheetNames = extractWorksheetNames(workbookXml);
+  assert(
+    worksheetNames.join("|") ===
+      "Summary|Cohorts|Full Window Path|Cash Flows|Warnings",
+    `sip worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+
+  console.log("ok sip simulator");
+}
+
 async function runExportRegressionChecks() {
   const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
   const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
@@ -1385,6 +1493,7 @@ async function main() {
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();
   await runRollingRegressionChecks();
+  await runSipRegressionChecks();
   await runExportRegressionChecks();
 
   console.log(`frontend regression checks passed (${assertionCount} assertions)`);
