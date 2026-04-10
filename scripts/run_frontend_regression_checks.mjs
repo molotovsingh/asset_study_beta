@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildLumpsumVsSipStudy } from "../app/lib/lumpsumVsSip.js";
+import { buildDrawdownStudy } from "../app/lib/drawdownStudy.js";
 import {
   buildStudyViewHash,
   parseStudyViewHash,
@@ -35,10 +36,15 @@ import { renderSeasonalityResults } from "../app/studies/seasonalityView.js";
 import { renderRollingReturnsResults } from "../app/studies/rollingReturnsView.js";
 import { renderSipSimulatorResults } from "../app/studies/sipSimulatorView.js";
 import { renderLumpsumVsSipResults } from "../app/studies/lumpsumVsSipView.js";
+import { renderDrawdownStudyResults } from "../app/studies/drawdownStudyView.js";
 import {
   buildCsvRows as buildLumpsumVsSipCsvRows,
   buildWorkbookXml as buildLumpsumVsSipWorkbookXml,
 } from "../app/lib/lumpsumVsSipExport.js";
+import {
+  buildCsvRows as buildDrawdownCsvRows,
+  buildWorkbookXml as buildDrawdownWorkbookXml,
+} from "../app/lib/drawdownStudyExport.js";
 import { buildRollingReturnsStudy } from "../app/lib/rollingReturns.js";
 import { computeRelativeMetrics } from "../app/lib/relativeStats.js";
 import {
@@ -1204,6 +1210,26 @@ function buildLumpsumVsSipPayload(
   };
 }
 
+function buildDrawdownPayload(snapshot, series, drawdownModel, warnings = []) {
+  return {
+    studyTitle: "Drawdown Study",
+    selection: buildSelection(snapshot),
+    seriesLabel: snapshot.label,
+    indexSeries: series,
+    underwaterSeries: drawdownModel.underwaterSeries,
+    episodes: drawdownModel.episodes,
+    episodesByDepth: drawdownModel.episodesByDepth,
+    summary: drawdownModel.summary,
+    warnings,
+    methodLabel: `Bundled snapshot using ${snapshot.symbol}`,
+    requestedStartDate: FIVE_YEAR_START,
+    requestedEndDate: FIXED_END,
+    actualStartDate: series[0].date,
+    actualEndDate: series[series.length - 1].date,
+    exportedAt: EXPORTED_AT,
+  };
+}
+
 function buildRelativePayload(assetSnapshot, benchmarkSnapshot, relativeMetrics) {
   return {
     studyTitle: "Risk-Adjusted Relative Performance",
@@ -1817,6 +1843,94 @@ async function runLumpsumVsSipRegressionChecks() {
   console.log("ok lumpsum vs sip");
 }
 
+async function runDrawdownRegressionChecks() {
+  const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
+  const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
+  const actual = buildDrawdownStudy(series);
+
+  assert(
+    actual.underwaterSeries.length === series.length,
+    "drawdown underwater series should align with index observations",
+  );
+  assertClose(
+    actual.underwaterSeries[0].depth,
+    0,
+    "drawdown underwater series should start at zero",
+  );
+  assert(
+    actual.underwaterSeries.every((point) => point.depth <= 0),
+    "drawdown underwater points should be non-positive",
+  );
+  assert(
+    actual.episodes.length === actual.episodesByDepth.length,
+    "drawdown ranked episode count mismatch",
+  );
+  assert(
+    actual.summary.totalEpisodes === actual.episodes.length,
+    "drawdown summary total episodes mismatch",
+  );
+  assert(
+    actual.summary.recoveredEpisodes + actual.summary.unrecoveredEpisodes ===
+      actual.summary.totalEpisodes,
+    "drawdown recovered/unrecovered split mismatch",
+  );
+  assert(
+    actual.summary.timeUnderwaterRate >= 0 &&
+      actual.summary.timeUnderwaterRate <= 1,
+    "drawdown time underwater rate should be bounded",
+  );
+
+  for (const [index, episode] of actual.episodesByDepth.entries()) {
+    assert(
+      episode.depthRank === index + 1,
+      "drawdown depth rank sequence mismatch",
+    );
+    if (index > 0) {
+      assert(
+        actual.episodesByDepth[index - 1].maxDepth <= episode.maxDepth,
+        "drawdown depth ranking should be sorted from deepest to shallowest",
+      );
+    }
+    assert(
+      episode.peakDate <= episode.troughDate &&
+        episode.troughDate <= episode.endDate,
+      "drawdown episode dates should be ordered",
+    );
+    if (episode.recovered) {
+      assert(
+        episode.recoveryDate !== null && episode.recoveryDate >= episode.troughDate,
+        "drawdown recovered episode should have a recovery date",
+      );
+    } else {
+      assert(
+        episode.recoveryDate === null &&
+          toIsoDate(episode.endDate) === toIsoDate(series.at(-1).date),
+        "drawdown open episode should end at the latest observation",
+      );
+    }
+  }
+
+  const payload = buildDrawdownPayload(snapshot, series, actual);
+  const resultHtml = renderDrawdownStudyResults(payload);
+  assert(
+    resultHtml.includes("Ranked Episodes"),
+    "drawdown result view should include ranked episode table",
+  );
+  const csvRows = buildDrawdownCsvRows(payload);
+  const workbookXml = buildDrawdownWorkbookXml(payload);
+  assert(
+    csvRows.length === actual.episodesByDepth.length + 1,
+    "drawdown CSV row count mismatch",
+  );
+  const worksheetNames = extractWorksheetNames(workbookXml);
+  assert(
+    worksheetNames.join("|") === "Summary|Episodes|Underwater|Warnings",
+    `drawdown worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+
+  console.log("ok drawdown");
+}
+
 async function runExportRegressionChecks() {
   const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
   const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
@@ -1869,6 +1983,7 @@ async function main() {
   await runRollingRegressionChecks();
   await runSipRegressionChecks();
   await runLumpsumVsSipRegressionChecks();
+  await runDrawdownRegressionChecks();
   await runExportRegressionChecks();
 
   console.log(`frontend regression checks passed (${assertionCount} assertions)`);

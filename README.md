@@ -6,8 +6,8 @@ Minimal static scaffold for a study library.
 
 - Hosts studies in a registry instead of hardcoding everything into one page.
 - Ships multiple studies on the same shared shell:
-  risk-adjusted return, seasonality, rolling returns, SIP simulation, and
-  Lumpsum vs SIP comparison.
+  risk-adjusted return, seasonality, rolling returns, SIP simulation, Lumpsum
+  vs SIP comparison, and a dedicated drawdown study.
 - Loads bundled snapshots for built-in datasets and optionally uses a local
   backend for raw yfinance symbols.
 - Keeps index catalog metadata separate from study logic.
@@ -43,6 +43,9 @@ This avoids a single giant "study page" that keeps growing conditionals forever.
 - `Lumpsum vs SIP`
   Same-capital cohort comparison between upfront deployment and monthly
   deployment over fixed historical horizons.
+- `Drawdown Study`
+  Ranked peak-to-trough episodes with underwater path analysis, recovery
+  durations, and dedicated overview/visual export surfaces.
 
 Shared support across studies includes:
 
