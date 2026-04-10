@@ -1228,6 +1228,77 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
+.interpretation-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(13, 95, 77, 0.13);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(13, 95, 77, 0.08), rgba(255, 255, 255, 0.68)),
+    rgba(255, 255, 255, 0.84);
+}
+
+.interpretation-head .section-label {
+  margin-bottom: 6px;
+}
+
+.interpretation-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.interpretation-item {
+  display: grid;
+  gap: 8px;
+  padding: 13px 14px;
+  border: 1px solid rgba(34, 39, 37, 0.08);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.interpretation-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.interpretation-item p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.interpretation-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(32, 37, 34, 0.08);
+  color: var(--muted);
+}
+
+.interpretation-badge.positive {
+  background: rgba(13, 95, 77, 0.13);
+  color: var(--accent-strong);
+}
+
+.interpretation-badge.caution {
+  background: rgba(135, 75, 31, 0.14);
+  color: var(--warn);
+}
+
+.interpretation-footnote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
 .results-grid {
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
@@ -1655,6 +1726,7 @@ button:focus-visible {
   .results-grid,
   .result-details,
   .card-grid,
+  .interpretation-grid,
   .inline-row,
   .onboarding-grid,
   .relative-context-grid,

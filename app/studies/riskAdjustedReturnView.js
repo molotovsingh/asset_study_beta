@@ -5,6 +5,7 @@ import {
   formatPercent,
 } from "../lib/format.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
+import { renderRiskInterpretation } from "./shared/interpretation.js";
 import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
 
 const RESULT_TAB_DEFINITIONS = [
@@ -301,6 +302,7 @@ function renderResults({ metrics, startDate, endDate, methodLabel, warnings }) {
               ${tab.sections
                 .map((section) => renderSectionFromDefinition(section, context))
                 .join("")}
+              ${tab.id === "overview" ? renderRiskInterpretation(metrics) : ""}
               ${tab.renderDetails ? tab.renderDetails(context) : ""}
             </section>
           `,

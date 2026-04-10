@@ -5,6 +5,7 @@ import {
 } from "../lib/format.js";
 import { DEFAULT_HORIZON_OPTIONS } from "../lib/lumpsumVsSip.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
+import { renderLumpsumVsSipInterpretation } from "./shared/interpretation.js";
 
 function renderCard({ label, value, detail }) {
   return `
@@ -161,6 +162,7 @@ function renderLumpsumVsSipResults(studyRun) {
           })}
         </div>
       </section>
+      ${renderLumpsumVsSipInterpretation(studyRun)}
 
       <section class="results-section">
         <div class="results-section-head">

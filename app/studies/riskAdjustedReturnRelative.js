@@ -14,6 +14,7 @@ import {
 } from "./shared/indexSelection.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { renderRelativeInterpretation } from "./shared/interpretation.js";
 import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
 
 const OVERVIEW_HASH = "#risk-adjusted-return/overview";
@@ -237,6 +238,11 @@ function renderRelativeResults(payload) {
             detail: "Asset sensitivity to benchmark moves",
           }),
         ],
+      })}
+      ${renderRelativeInterpretation({
+        relativeMetrics,
+        assetLabel: payload.assetLabel,
+        benchmarkLabel: payload.benchmarkLabel,
       })}
       ${renderMetricSection({
         title: "Relative Risk",
@@ -817,4 +823,4 @@ function mountRiskAdjustedReturnRelative(root, session) {
   };
 }
 
-export { mountRiskAdjustedReturnRelative };
+export { mountRiskAdjustedReturnRelative, renderRelativeResults };

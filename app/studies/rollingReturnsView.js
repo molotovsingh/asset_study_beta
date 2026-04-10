@@ -5,6 +5,7 @@ import {
   formatPercent,
 } from "../lib/format.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
+import { renderRollingReturnsInterpretation } from "./shared/interpretation.js";
 
 function renderCard({ label, value, detail }) {
   return `
@@ -150,6 +151,7 @@ function renderRollingReturnsResults(studyRun) {
           ${latestCards.join("")}
         </div>
       </section>
+      ${renderRollingReturnsInterpretation(studyRun)}
 
       <section class="results-section">
         <div class="results-section-head">

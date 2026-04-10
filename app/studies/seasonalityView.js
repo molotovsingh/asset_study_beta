@@ -4,6 +4,7 @@ import {
   formatPercent,
 } from "../lib/format.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
+import { renderSeasonalityInterpretation } from "./shared/interpretation.js";
 
 function renderCard({ label, value, detail }) {
   return `
@@ -190,6 +191,7 @@ function renderSeasonalityResults(studyRun) {
           })}
         </div>
       </section>
+      ${renderSeasonalityInterpretation(summary)}
 
       <section class="results-section">
         <div class="results-section-head">

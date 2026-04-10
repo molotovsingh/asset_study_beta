@@ -26,6 +26,16 @@ import {
   readCommonIndexParams,
 } from "../app/studies/shared/shareableInputs.js";
 import {
+  renderRiskInterpretation,
+  renderSeasonalityInterpretation,
+} from "../app/studies/shared/interpretation.js";
+import { renderResults as renderRiskResults } from "../app/studies/riskAdjustedReturnView.js";
+import { renderRelativeResults } from "../app/studies/riskAdjustedReturnRelative.js";
+import { renderSeasonalityResults } from "../app/studies/seasonalityView.js";
+import { renderRollingReturnsResults } from "../app/studies/rollingReturnsView.js";
+import { renderSipSimulatorResults } from "../app/studies/sipSimulatorView.js";
+import { renderLumpsumVsSipResults } from "../app/studies/lumpsumVsSipView.js";
+import {
   buildCsvRows as buildLumpsumVsSipCsvRows,
   buildWorkbookXml as buildLumpsumVsSipWorkbookXml,
 } from "../app/lib/lumpsumVsSipExport.js";
@@ -247,6 +257,48 @@ function testShareableInputUrls() {
     "share URL common params should serialize subject",
   );
   console.log("ok shareable inputs");
+}
+
+function testInterpretationPanels() {
+  const riskHtml = renderRiskInterpretation({
+    annualizedReturn: 0.11,
+    totalReturn: 0.68,
+    annualizedVolatility: 0.18,
+    maxDrawdown: -0.22,
+    maxDrawdownDurationDays: 180,
+    sharpeRatio: 0.74,
+    sortinoRatio: 1.08,
+  });
+  assert(
+    riskHtml.includes("What This Means"),
+    "risk interpretation should render the shared panel heading",
+  );
+  assert(
+    riskHtml.includes("not a forecast or recommendation"),
+    "interpretation copy should retain the non-advisory framing",
+  );
+
+  const seasonalityHtml = renderSeasonalityInterpretation({
+    seasonalitySpread: 0.044,
+    yearsObserved: 5,
+    monthsUsed: 60,
+    thinMonthCount: 0,
+    mostConsistentMonth: {
+      monthLabel: "Apr",
+      consistencyScore: 0.8,
+    },
+    clearSignalCount: 2,
+  });
+  assert(
+    seasonalityHtml.includes("Seasonality Spread"),
+    "seasonality interpretation should include spread context",
+  );
+  assert(
+    seasonalityHtml.includes("confidence bands"),
+    "seasonality interpretation should explain confidence bands",
+  );
+
+  console.log("ok interpretation panels");
 }
 
 function mean(values) {
@@ -1282,6 +1334,20 @@ async function runRiskRegressionChecks() {
         CONSTANT_RISK_FREE_RATE,
       );
       compareRiskMetrics(`${datasetId} ${window.label}`, actual, expected);
+
+      if (datasetId === "nifty-50" && window.label === "5y") {
+        const html = renderRiskResults({
+          metrics: actual,
+          startDate: filteredSeries[0].date,
+          endDate: filteredSeries.at(-1).date,
+          methodLabel: "Regression snapshot",
+          warnings: [],
+        });
+        assert(
+          html.includes("What This Means"),
+          "risk result view should include interpretation panel",
+        );
+      }
     }
   }
 
@@ -1396,6 +1462,11 @@ async function runSeasonalityRegressionChecks() {
     filteredSeries,
     modelWithoutPartials,
   );
+  const resultHtml = renderSeasonalityResults(payload);
+  assert(
+    resultHtml.includes("What This Means"),
+    "seasonality result view should include interpretation panel",
+  );
   const csvRows = buildSeasonalityCsvRows(payload);
   const workbookXml = buildSeasonalityWorkbookXml(payload);
   assert(
@@ -1436,6 +1507,11 @@ async function runRelativeRegressionChecks() {
   compareRelativeMetrics("relative 5y", actual, expected);
 
   const payload = buildRelativePayload(assetSnapshot, benchmarkSnapshot, actual);
+  const resultHtml = renderRelativeResults(payload);
+  assert(
+    resultHtml.includes("Relative Read"),
+    "relative result view should include interpretation panel",
+  );
   const csvRows = buildRelativeCsvRows(payload);
   const workbookXml = buildRelativeWorkbookXml(payload);
   assert(
@@ -1532,6 +1608,11 @@ async function runRollingRegressionChecks() {
     exportedAt: EXPORTED_AT,
     ...actual,
   };
+  const resultHtml = renderRollingReturnsResults(payload);
+  assert(
+    resultHtml.includes("What This Means"),
+    "rolling result view should include interpretation panel",
+  );
   const csvRows = buildRollingCsvRows(payload);
   const workbookXml = buildRollingWorkbookXml(payload);
   assert(
@@ -1614,6 +1695,11 @@ async function runSipRegressionChecks() {
     series,
     actual,
     monthlyContribution,
+  );
+  const resultHtml = renderSipSimulatorResults(payload);
+  assert(
+    resultHtml.includes("What This Means"),
+    "sip result view should include interpretation panel",
   );
   const csvRows = buildSipCsvRows(payload);
   const workbookXml = buildSipWorkbookXml(payload);
@@ -1700,6 +1786,11 @@ async function runLumpsumVsSipRegressionChecks() {
     totalInvestment,
     horizonYears,
   );
+  const resultHtml = renderLumpsumVsSipResults(payload);
+  assert(
+    resultHtml.includes("What This Means"),
+    "lumpsum vs sip result view should include interpretation panel",
+  );
   const csvRows = buildLumpsumVsSipCsvRows(payload);
   const workbookXml = buildLumpsumVsSipWorkbookXml(payload);
   assert(
@@ -1761,6 +1852,7 @@ async function main() {
   testActiveSubjectStore();
   testRunHistoryStore();
   testShareableInputUrls();
+  testInterpretationPanels();
   await runRiskRegressionChecks();
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();
