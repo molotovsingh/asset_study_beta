@@ -302,6 +302,15 @@ function reduceByMetric(items, metricKey, compare) {
   }, null);
 }
 
+function trimCohortDetailPayload(cohort, keepDetails) {
+  if (keepDetails) {
+    return cohort;
+  }
+
+  const { path, cashFlows, ...summaryOnlyCohort } = cohort;
+  return summaryOnlyCohort;
+}
+
 function buildSipStudySummary(cohorts, monthlyPoints, monthlyContribution, minContributions) {
   const xirrValues = cohorts
     .map((cohort) => cohort.xirr)
@@ -383,12 +392,15 @@ function buildSipStudy(
       "The active window is too short to form any SIP cohort with the current minimum contribution count.",
     );
   }
+  const retainedCohorts = cohorts.map((cohort, index) =>
+    trimCohortDetailPayload(cohort, index === 0),
+  );
 
   return {
     monthlyPoints,
-    cohorts,
+    cohorts: retainedCohorts,
     summary: buildSipStudySummary(
-      cohorts,
+      retainedCohorts,
       monthlyPoints,
       monthlyContribution,
       minContributions,

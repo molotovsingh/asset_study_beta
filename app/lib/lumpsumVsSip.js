@@ -236,6 +236,15 @@ function reduceByMetric(items, metricKey, compare) {
   }, null);
 }
 
+function trimComparisonDetailPayload(cohort, keepDetails) {
+  if (keepDetails) {
+    return cohort;
+  }
+
+  const { sipPath, sipCashFlows, ...summaryOnlyCohort } = cohort;
+  return summaryOnlyCohort;
+}
+
 function buildStudySummary(cohorts, monthlyPoints, totalInvestment, horizonYears) {
   const advantageRates = cohorts.map((cohort) => cohort.advantageRate);
   const lumpsumCagrs = cohorts
@@ -326,12 +335,15 @@ function buildLumpsumVsSipStudy(
       "The active window is too short to form any full Lumpsum vs SIP comparison cohort.",
     );
   }
+  const retainedCohorts = cohorts.map((cohort, index) =>
+    trimComparisonDetailPayload(cohort, index === 0),
+  );
 
   return {
     monthlyPoints,
-    cohorts,
+    cohorts: retainedCohorts,
     summary: buildStudySummary(
-      cohorts,
+      retainedCohorts,
       monthlyPoints,
       totalInvestment,
       horizonYears,

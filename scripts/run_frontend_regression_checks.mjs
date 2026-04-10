@@ -1667,6 +1667,11 @@ async function runSipRegressionChecks() {
     actual.summary.fullWindowCohort.terminalValue,
     "sip full-window terminal path value",
   );
+  assert(
+    actual.cohorts[1].path === undefined &&
+      actual.cohorts[1].cashFlows === undefined,
+    "sip should trim detailed paths from non-representative cohorts",
+  );
   assertDateEqual(
     actual.summary.fullWindowCohort.startDate,
     actual.monthlyPoints[0].date,
@@ -1772,6 +1777,11 @@ async function runLumpsumVsSipRegressionChecks() {
       .reduce((sum, row) => sum + row.contributionAmount, 0),
     totalInvestment,
     "lumpsum vs sip SIP deployed capital should equal total investment",
+  );
+  assert(
+    actual.cohorts[1].sipPath === undefined &&
+      actual.cohorts[1].sipCashFlows === undefined,
+    "lumpsum vs sip should trim detailed paths from non-representative cohorts",
   );
   assert(
     actual.summary.bestLumpsumAdvantage.advantageRate >=
