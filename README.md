@@ -48,6 +48,7 @@ Shared support across studies includes:
 
 - built-in or bundled index datasets
 - raw yfinance symbols through the optional local backend
+- lightweight yfinance instrument profiles for selected symbols
 - date window selection
 - bundled snapshot loading from `data/snapshots/...`
 - local backend fetch and machine-local SQLite cache under
@@ -109,6 +110,9 @@ What happens:
   `data/snapshots/`
 - raw symbols are sent to the local backend
 - successful ad hoc symbols are remembered locally on that machine
+- selected symbols can be enriched with cached yfinance profile metadata such as
+  quote type, sector, industry, country, exchange, market cap, beta, and
+  valuation basics when Yahoo provides them
 - backend-fetched series and remembered symbols are stored in
   `data/local-cache/yfinance/index/cache.sqlite3`
 
@@ -164,6 +168,8 @@ runtime format, the local server imports them into SQLite on startup.
 ### Current limits
 
 - The local backend currently uses `yfinance` directly.
+- yfinance profile metadata is opportunistic. It is useful for orientation, but
+  it should not be treated as audited fundamentals.
 - Built-in names only cover a small curated set of mapped symbols.
 - `Nifty 50 TRI` and `S&P BSE Sensex TRI` currently use price index proxies from
   Yahoo Finance, not true TRI series.

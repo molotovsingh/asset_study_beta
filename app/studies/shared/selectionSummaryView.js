@@ -7,6 +7,7 @@ import {
   describeFreshness,
   getSnapshotFreshness,
 } from "../../lib/syncedData.js";
+import { renderInstrumentProfile } from "./instrumentProfileView.js";
 
 function renderFreshnessDetails(snapshot, prefixLabel, extraMeta = "") {
   const freshness = getSnapshotFreshness(snapshot);
@@ -44,6 +45,7 @@ function renderSelectionDetails(
   runtimeSnapshot,
   useDemoData,
   backendState,
+  instrumentProfileState = null,
 ) {
   if (!selection) {
     return `
@@ -141,6 +143,7 @@ function renderSelectionDetails(
       ${proxyWarning}
       ${note ? `<p class="summary-meta">${note}</p>` : ""}
       ${runtimeMeta}
+      ${renderInstrumentProfile(instrumentProfileState)}
     </div>
   `;
 }

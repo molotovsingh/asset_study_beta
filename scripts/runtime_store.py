@@ -155,6 +155,29 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_remembered_symbol
             ON remembered_datasets (symbol);
+
+        CREATE TABLE IF NOT EXISTS instrument_profiles (
+            symbol TEXT PRIMARY KEY,
+            fetched_at TEXT NOT NULL,
+            quote_type TEXT,
+            short_name TEXT,
+            long_name TEXT,
+            sector TEXT,
+            industry TEXT,
+            country TEXT,
+            exchange TEXT,
+            exchange_name TEXT,
+            currency TEXT,
+            market_cap REAL,
+            beta REAL,
+            trailing_pe REAL,
+            forward_pe REAL,
+            price_to_book REAL,
+            dividend_yield REAL,
+            full_time_employees INTEGER,
+            website TEXT,
+            raw_info_json TEXT NOT NULL
+        );
         """
     )
     existing_series_columns = {
@@ -210,6 +233,144 @@ def row_to_remembered_entry(row: sqlite3.Row) -> dict:
             "observations": row["observations"],
         },
         "path": build_runtime_cache_path(row["cache_key"]),
+    }
+
+
+def row_to_profile(row: sqlite3.Row) -> dict:
+    raw_info = _raw_info_from_row(row)
+    return {
+        "symbol": row["symbol"],
+        "fetchedAt": row["fetched_at"],
+        "quoteType": row["quote_type"],
+        "shortName": row["short_name"],
+        "longName": row["long_name"],
+        "sector": row["sector"],
+        "industry": row["industry"],
+        "country": row["country"],
+        "exchange": row["exchange"],
+        "exchangeName": row["exchange_name"],
+        "currency": row["currency"],
+        "marketCap": row["market_cap"],
+        "beta": row["beta"],
+        "trailingPE": row["trailing_pe"],
+        "forwardPE": row["forward_pe"],
+        "priceToBook": row["price_to_book"],
+        "dividendYield": (
+            _clean_dividend_yield(raw_info)
+            if raw_info
+            else _normalize_yield_ratio(row["dividend_yield"])
+        ),
+        "fullTimeEmployees": row["full_time_employees"],
+        "website": row["website"],
+        "sourceUrl": build_symbol_source_url(row["symbol"]),
+    }
+
+
+def _clean_text(value) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _clean_number(value) -> float | None:
+    if value is None:
+        return None
+
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if numeric_value != numeric_value:
+        return None
+
+    return numeric_value
+
+
+def _clean_int(value) -> int | None:
+    numeric_value = _clean_number(value)
+    if numeric_value is None:
+        return None
+
+    return int(numeric_value)
+
+
+def _normalize_yield_ratio(value) -> float | None:
+    numeric_value = _clean_number(value)
+    if numeric_value is None or numeric_value < 0:
+        return None
+
+    # Yahoo's info payload can expose dividendYield as percent units
+    # (for example 0.4 for a 0.40% yield). The UI expects a ratio.
+    if numeric_value > 0.2:
+        return numeric_value / 100
+
+    return numeric_value
+
+
+def _raw_info_from_row(row: sqlite3.Row) -> dict:
+    try:
+        payload = row["raw_info_json"]
+    except (IndexError, KeyError):
+        return {}
+
+    try:
+        raw_info = json.loads(payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+    return raw_info if isinstance(raw_info, dict) else {}
+
+
+def _clean_dividend_yield(raw_info: dict) -> float | None:
+    trailing_yield = _normalize_yield_ratio(
+        raw_info.get("trailingAnnualDividendYield"),
+    )
+    if trailing_yield is not None:
+        return trailing_yield
+
+    dividend_rate = _clean_number(
+        raw_info.get("dividendRate")
+        or raw_info.get("trailingAnnualDividendRate"),
+    )
+    current_price = _clean_number(
+        raw_info.get("currentPrice")
+        or raw_info.get("regularMarketPrice")
+        or raw_info.get("previousClose"),
+    )
+    if dividend_rate is not None and current_price and current_price > 0:
+        computed_yield = dividend_rate / current_price
+        if 0 <= computed_yield <= 1:
+            return computed_yield
+
+    return _normalize_yield_ratio(raw_info.get("dividendYield"))
+
+
+def normalize_profile(symbol: str, info: dict | None) -> dict:
+    raw_info = info if isinstance(info, dict) else {}
+    normalized_symbol = normalize_symbol(symbol)
+
+    return {
+        "symbol": normalized_symbol,
+        "fetchedAt": to_iso(now_utc()),
+        "quoteType": _clean_text(raw_info.get("quoteType")),
+        "shortName": _clean_text(raw_info.get("shortName")),
+        "longName": _clean_text(raw_info.get("longName")),
+        "sector": _clean_text(raw_info.get("sector")),
+        "industry": _clean_text(raw_info.get("industry")),
+        "country": _clean_text(raw_info.get("country")),
+        "exchange": _clean_text(raw_info.get("exchange")),
+        "exchangeName": _clean_text(raw_info.get("fullExchangeName")),
+        "currency": _clean_text(raw_info.get("currency")),
+        "marketCap": _clean_number(raw_info.get("marketCap")),
+        "beta": _clean_number(raw_info.get("beta")),
+        "trailingPE": _clean_number(raw_info.get("trailingPE")),
+        "forwardPE": _clean_number(raw_info.get("forwardPE")),
+        "priceToBook": _clean_number(raw_info.get("priceToBook")),
+        "dividendYield": _clean_dividend_yield(raw_info),
+        "fullTimeEmployees": _clean_int(raw_info.get("fullTimeEmployees")),
+        "website": _clean_text(raw_info.get("website")),
+        "sourceUrl": build_symbol_source_url(normalized_symbol),
+        "rawInfo": raw_info,
     }
 
 
@@ -316,6 +477,81 @@ def upsert_remembered_dataset(connection: sqlite3.Connection, entry: dict) -> No
             str(range_data.get("endDate") or ""),
             int(range_data.get("observations") or 0),
             cache_key,
+        ),
+    )
+
+
+def upsert_instrument_profile(connection: sqlite3.Connection, profile: dict) -> None:
+    connection.execute(
+        """
+        INSERT INTO instrument_profiles (
+            symbol,
+            fetched_at,
+            quote_type,
+            short_name,
+            long_name,
+            sector,
+            industry,
+            country,
+            exchange,
+            exchange_name,
+            currency,
+            market_cap,
+            beta,
+            trailing_pe,
+            forward_pe,
+            price_to_book,
+            dividend_yield,
+            full_time_employees,
+            website,
+            raw_info_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            fetched_at = excluded.fetched_at,
+            quote_type = excluded.quote_type,
+            short_name = excluded.short_name,
+            long_name = excluded.long_name,
+            sector = excluded.sector,
+            industry = excluded.industry,
+            country = excluded.country,
+            exchange = excluded.exchange,
+            exchange_name = excluded.exchange_name,
+            currency = excluded.currency,
+            market_cap = excluded.market_cap,
+            beta = excluded.beta,
+            trailing_pe = excluded.trailing_pe,
+            forward_pe = excluded.forward_pe,
+            price_to_book = excluded.price_to_book,
+            dividend_yield = excluded.dividend_yield,
+            full_time_employees = excluded.full_time_employees,
+            website = excluded.website,
+            raw_info_json = excluded.raw_info_json
+        """,
+        (
+            normalize_symbol(profile.get("symbol")),
+            profile.get("fetchedAt") or to_iso(now_utc()),
+            profile.get("quoteType"),
+            profile.get("shortName"),
+            profile.get("longName"),
+            profile.get("sector"),
+            profile.get("industry"),
+            profile.get("country"),
+            profile.get("exchange"),
+            profile.get("exchangeName"),
+            str(profile.get("currency") or "").strip().upper() or None,
+            profile.get("marketCap"),
+            profile.get("beta"),
+            profile.get("trailingPE"),
+            profile.get("forwardPE"),
+            profile.get("priceToBook"),
+            profile.get("dividendYield"),
+            profile.get("fullTimeEmployees"),
+            profile.get("website"),
+            json.dumps(
+                profile.get("rawInfo") or {},
+                separators=(",", ":"),
+                default=str,
+            ),
         ),
     )
 
@@ -620,3 +856,54 @@ def load_remembered_catalog() -> list[dict]:
         ).fetchall()
 
     return [row_to_remembered_entry(row) for row in rows]
+
+
+def load_instrument_profile(symbol: str) -> dict | None:
+    normalized_symbol = normalize_symbol(symbol)
+    if not normalized_symbol:
+        return None
+
+    with open_runtime_store() as connection:
+        row = connection.execute(
+            """
+            SELECT
+                symbol,
+                fetched_at,
+                quote_type,
+                short_name,
+                long_name,
+                sector,
+                industry,
+                country,
+                exchange,
+                exchange_name,
+                currency,
+                market_cap,
+                beta,
+                trailing_pe,
+                forward_pe,
+                price_to_book,
+                dividend_yield,
+                full_time_employees,
+                website,
+                raw_info_json
+            FROM instrument_profiles
+            WHERE symbol = ?
+            """,
+            (normalized_symbol,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return row_to_profile(row)
+
+
+def write_instrument_profile(symbol: str, info: dict | None) -> dict:
+    profile = normalize_profile(symbol, info)
+
+    with open_runtime_store() as connection:
+        upsert_instrument_profile(connection, profile)
+        connection.commit()
+
+    return load_instrument_profile(profile["symbol"]) or profile

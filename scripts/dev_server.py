@@ -21,12 +21,14 @@ try:
         build_symbol_source_url,
         ensure_runtime_store,
         find_remembered_entry,
+        load_instrument_profile,
         load_cached_series,
         load_remembered_catalog,
         normalize_symbol,
         parse_iso_datetime,
         remember_symbol,
         symbol_cache_key,
+        write_instrument_profile,
         write_cached_series,
     )
 except ModuleNotFoundError:
@@ -35,18 +37,21 @@ except ModuleNotFoundError:
         build_symbol_source_url,
         ensure_runtime_store,
         find_remembered_entry,
+        load_instrument_profile,
         load_cached_series,
         load_remembered_catalog,
         normalize_symbol,
         parse_iso_datetime,
         remember_symbol,
         symbol_cache_key,
+        write_instrument_profile,
         write_cached_series,
     )
 
 
 DEFAULT_HISTORY_PERIOD = "10y"
 CACHE_TTL = timedelta(hours=24)
+PROFILE_CACHE_TTL = timedelta(days=7)
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,6 +117,26 @@ def fetch_symbol_snapshot(
     return normalize_points(points), resolve_ticker_currency(ticker)
 
 
+def fetch_symbol_profile(symbol: str) -> dict:
+    yf = load_yfinance()
+    ticker = yf.Ticker(symbol)
+
+    try:
+        try:
+            info = ticker.get_info()
+        except AttributeError:
+            info = ticker.info
+    except Exception as error:  # noqa: BLE001
+        raise RuntimeError(
+            f"Could not load yfinance profile for symbol {symbol}: {error}",
+        ) from error
+
+    if not isinstance(info, dict) or not info:
+        raise RuntimeError(f"yfinance returned no profile data for symbol {symbol}.")
+
+    return write_instrument_profile(symbol, info)
+
+
 def ensure_snapshot_currency(snapshot: dict) -> dict:
     if snapshot.get("currency"):
         return snapshot
@@ -142,6 +167,15 @@ def cache_is_fresh(snapshot: dict, now: datetime | None = None) -> bool:
     return (reference - generated_at) <= CACHE_TTL
 
 
+def profile_cache_is_fresh(profile: dict, now: datetime | None = None) -> bool:
+    fetched_at = parse_iso_datetime(profile.get("fetchedAt"))
+    if fetched_at is None:
+        return False
+
+    reference = now or datetime.now(timezone.utc)
+    return (reference - fetched_at) <= PROFILE_CACHE_TTL
+
+
 def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
     normalized_symbol = normalize_symbol(symbol)
     cached = load_cached_series(normalized_symbol)
@@ -150,6 +184,16 @@ def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
 
     points, currency = fetch_symbol_snapshot(normalized_symbol)
     refreshed = write_cached_series(normalized_symbol, points, currency)
+    return refreshed, "refreshed"
+
+
+def get_or_refresh_instrument_profile(symbol: str) -> tuple[dict, str]:
+    normalized_symbol = normalize_symbol(symbol)
+    cached = load_instrument_profile(normalized_symbol)
+    if cached and profile_cache_is_fresh(cached):
+        return cached, "hit"
+
+    refreshed = fetch_symbol_profile(normalized_symbol)
     return refreshed, "refreshed"
 
 
@@ -241,6 +285,48 @@ class DevServerHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/yfinance/instrument-profile":
+            try:
+                ensure_runtime_store()
+                request = self._read_json_body()
+                symbol = normalize_symbol(request.get("symbol"))
+                if not symbol:
+                    raise ValueError("A symbol is required.")
+
+                profile, cache_status = get_or_refresh_instrument_profile(symbol)
+                self._write_json(
+                    HTTPStatus.OK,
+                    {
+                        "profile": profile,
+                        "cache": {
+                            "status": cache_status,
+                        },
+                    },
+                )
+            except json.JSONDecodeError:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": "Request body must be valid JSON."},
+                )
+            except ValueError as error:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": str(error)},
+                )
+            except RuntimeError as error:
+                self._write_json(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"error": str(error)},
+                )
+            except SystemExit:
+                self._write_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {
+                        "error": "yfinance is not installed. Run ./.venv/bin/pip install -r requirements-sync.txt first.",
+                    },
+                )
+            return
+
         if parsed.path != "/api/yfinance/index-series":
             self._write_json(
                 HTTPStatus.NOT_FOUND,

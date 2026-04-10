@@ -268,10 +268,35 @@ async function fetchIndexSeries(request) {
   };
 }
 
+async function fetchInstrumentProfile(symbol) {
+  const payload = await requestJson(buildApiUrl("/yfinance/instrument-profile"), {
+    requestInit: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ symbol }),
+    },
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load that profile.",
+  });
+
+  if (!payload?.profile?.symbol) {
+    throw new Error("The local data API returned an invalid profile payload.");
+  }
+
+  return {
+    profile: payload.profile,
+    cache: payload.cache || null,
+  };
+}
+
 export {
   LOCAL_API_COMMAND,
   buildLocalApiUnavailableMessage,
   describeFreshness,
+  fetchInstrumentProfile,
   fetchIndexSeries,
   getManifestDataset,
   getSnapshotFreshness,

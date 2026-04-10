@@ -1,5 +1,6 @@
 import {
   buildLocalApiUnavailableMessage,
+  fetchInstrumentProfile,
   fetchIndexSeries,
   getManifestDataset,
   loadRememberedIndexCatalog,
@@ -27,6 +28,8 @@ function createIndexStudyOverviewRuntime({
   snapshotKey = "lastLoadedSnapshot",
   reuseManifestIfLoaded = false,
 }) {
+  session.instrumentProfiles ||= {};
+
   function setStatus(message, statusState = "info") {
     statusEl.className = `status ${statusState}`;
     statusEl.textContent = message;
@@ -43,11 +46,21 @@ function createIndexStudyOverviewRuntime({
     return findSelectionByQuery(queryInput.value, getSuggestions());
   }
 
+  function getProfileKey(selection) {
+    const symbol = String(selection?.symbol || "").trim().toUpperCase();
+    return symbol || null;
+  }
+
   function getRuntimeSnapshot(selection) {
     const selectionSignature = buildSelectionSignature(selection);
     return selectionSignature === session[selectionSignatureKey]
       ? session[snapshotKey]
       : null;
+  }
+
+  function getInstrumentProfileState(selection) {
+    const profileKey = getProfileKey(selection);
+    return profileKey ? session.instrumentProfiles[profileKey] || null : null;
   }
 
   function populateSuggestionList() {
@@ -67,7 +80,9 @@ function createIndexStudyOverviewRuntime({
       getRuntimeSnapshot(selection),
       useDemoData,
       session.backendState,
+      getInstrumentProfileState(selection),
     );
+    maybeLoadInstrumentProfile(selection);
   }
 
   function refreshSelectionUi() {
@@ -142,6 +157,56 @@ function createIndexStudyOverviewRuntime({
         setStatus(buildLocalApiUnavailableMessage(), "info");
       }
     }
+  }
+
+  function setInstrumentProfileState(profileKey, state) {
+    session.instrumentProfiles[profileKey] = state;
+  }
+
+  function maybeLoadInstrumentProfile(selection) {
+    const profileKey = getProfileKey(selection);
+    if (!profileKey || session.backendState !== "ready") {
+      return;
+    }
+
+    const currentState = session.instrumentProfiles[profileKey];
+    if (
+      currentState?.status === "ready" ||
+      currentState?.status === "loading" ||
+      currentState?.status === "unavailable"
+    ) {
+      return;
+    }
+
+    setInstrumentProfileState(profileKey, { status: "loading" });
+    summaryEl.innerHTML = renderSelectionDetails(
+      selection,
+      getRuntimeSnapshot(selection),
+      getSummaryContext().useDemoData || false,
+      session.backendState,
+      getInstrumentProfileState(selection),
+    );
+
+    fetchInstrumentProfile(selection.symbol)
+      .then(({ profile, cache }) => {
+        setInstrumentProfileState(profileKey, {
+          status: "ready",
+          profile,
+          cache,
+        });
+      })
+      .catch((error) => {
+        setInstrumentProfileState(profileKey, {
+          status: "unavailable",
+          error: error.message,
+        });
+      })
+      .finally(() => {
+        const currentSelection = getCurrentSelection();
+        if (getProfileKey(currentSelection) === profileKey) {
+          updateIndexSummary();
+        }
+      });
   }
 
   return {
