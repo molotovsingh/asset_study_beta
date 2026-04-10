@@ -181,6 +181,48 @@ function handleRunHistoryClick(event) {
   mountStudyRoute();
 }
 
+async function writeClipboardText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+async function copyCurrentStudyLink(trigger) {
+  const originalText = trigger.textContent.trim() || "Copy Link";
+  try {
+    await writeClipboardText(window.location.href);
+    trigger.textContent = "Copied";
+    trigger.classList.add("is-copied");
+  } catch (error) {
+    trigger.textContent = "Copy failed";
+  } finally {
+    window.setTimeout(() => {
+      trigger.textContent = originalText;
+      trigger.classList.remove("is-copied");
+    }, 1400);
+  }
+}
+
+function handleStudyRootClick(event) {
+  const copyLinkTrigger = event.target.closest("#copy-study-link");
+  if (!copyLinkTrigger) {
+    return;
+  }
+
+  copyCurrentStudyLink(copyLinkTrigger);
+}
+
 function mountStudyRoute() {
   const route = parseRouteHash();
   const study = getStudyById(route.studyId) || studyRegistry[0] || null;
@@ -236,6 +278,7 @@ studySelect.addEventListener("change", (event) => {
   mountStudyRoute();
 });
 runHistoryRoot.addEventListener("click", handleRunHistoryClick);
+studyRoot.addEventListener("click", handleStudyRootClick);
 
 window.addEventListener("hashchange", mountStudyRoute);
 subscribeActiveSubject(() => {

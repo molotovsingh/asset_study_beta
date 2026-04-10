@@ -361,6 +361,13 @@ textarea {
   min-width: 0;
 }
 
+.study-view-toolbar {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .study-view-nav {
   display: flex;
   flex-wrap: wrap;
@@ -417,6 +424,30 @@ textarea {
 .study-view-link.is-active .study-view-state {
   background: rgba(255, 255, 255, 0.2);
   color: white;
+}
+
+.copy-link-button {
+  flex: 0 0 auto;
+  border: 1px solid rgba(13, 95, 77, 0.18);
+  border-radius: 999px;
+  padding: 10px 13px;
+  background: rgba(255, 250, 242, 0.72);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.copy-link-button:hover {
+  border-color: rgba(13, 95, 77, 0.3);
+  background: rgba(255, 255, 255, 0.86);
+  transform: translateY(-1px);
+}
+
+.copy-link-button.is-copied {
+  background: rgba(13, 95, 77, 0.12);
 }
 
 .card-grid {
@@ -1659,6 +1690,10 @@ button:focus-visible {
 
   .study-header {
     align-items: start;
+  }
+
+  .study-view-toolbar {
+    flex-direction: column;
   }
 
   .selection-head {

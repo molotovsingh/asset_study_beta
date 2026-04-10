@@ -87,28 +87,33 @@ function renderStudyShell(study, activeViewId) {
 
   return `
     <div class="study-view-shell">
-      <nav class="study-view-nav" aria-label="Study views">
-        ${views
-          .map((view) => {
-            const isActive = view.id === activeViewId;
-            const statusLabel =
-              view.status && view.status !== "ready"
-                ? `<span class="study-view-state">${capitalize(view.status)}</span>`
-                : "";
+      <div class="study-view-toolbar">
+        <nav class="study-view-nav" aria-label="Study views">
+          ${views
+            .map((view) => {
+              const isActive = view.id === activeViewId;
+              const statusLabel =
+                view.status && view.status !== "ready"
+                  ? `<span class="study-view-state">${capitalize(view.status)}</span>`
+                  : "";
 
-            return `
-              <a
-                class="study-view-link${isActive ? " is-active" : ""}"
-                href="${buildStudyViewHash(study.id, view.id)}"
-                ${isActive ? 'aria-current="page"' : ""}
-              >
-                <span>${view.label}</span>
-                ${statusLabel}
-              </a>
-            `;
-          })
-          .join("")}
-      </nav>
+              return `
+                <a
+                  class="study-view-link${isActive ? " is-active" : ""}"
+                  href="${buildStudyViewHash(study.id, view.id)}"
+                  ${isActive ? 'aria-current="page"' : ""}
+                >
+                  <span>${view.label}</span>
+                  ${statusLabel}
+                </a>
+              `;
+            })
+            .join("")}
+        </nav>
+        <button id="copy-study-link" class="copy-link-button" type="button">
+          Copy Link
+        </button>
+      </div>
       <div id="study-view-root" class="study-view-root"></div>
     </div>
   `;
