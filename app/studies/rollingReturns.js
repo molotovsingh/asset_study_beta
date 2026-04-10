@@ -5,6 +5,10 @@ import {
 } from "../lib/rollingReturnsExport.js";
 import { filterSeriesByDate } from "../lib/stats.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import {
+  adoptActiveSubjectQuery,
+  setActiveSubjectQuery,
+} from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import {
   appendCoverageWarnings,
@@ -57,6 +61,10 @@ function renderStudyRunResults(resultsRoot, studyRun) {
 }
 
 function mountRollingReturnsOverview(root) {
+  if (adoptActiveSubjectQuery(rollingReturnsSession)) {
+    rollingReturnsSession.lastStudyRun = null;
+  }
+
   root.innerHTML = rollingReturnsTemplate(
     rollingReturnsSession.startDateValue,
     rollingReturnsSession.endDateValue,
@@ -109,9 +117,13 @@ function mountRollingReturnsOverview(root) {
   });
 
   function persistFormState() {
+    const subjectChanged = setActiveSubjectQuery(indexQueryInput.value);
     state.indexQuery = indexQueryInput.value;
     state.startDateValue = startDateInput.value;
     state.endDateValue = endDateInput.value;
+    if (subjectChanged) {
+      state.lastStudyRun = null;
+    }
   }
 
   function handleResultsClick(event) {

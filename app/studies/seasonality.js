@@ -11,6 +11,10 @@ import {
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
+import {
+  adoptActiveSubjectQuery,
+  setActiveSubjectQuery,
+} from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import {
   renderSeasonalityResults,
@@ -58,6 +62,10 @@ function renderStudyRunResults(resultsRoot, studyRun) {
 }
 
 function mountSeasonalityOverview(root) {
+  if (adoptActiveSubjectQuery(seasonalitySession)) {
+    seasonalitySession.lastStudyRun = null;
+  }
+
   root.innerHTML = seasonalityTemplate(
     seasonalitySession.startDateValue,
     seasonalitySession.endDateValue,
@@ -114,10 +122,14 @@ function mountSeasonalityOverview(root) {
   });
 
   function persistFormState() {
+    const subjectChanged = setActiveSubjectQuery(indexQueryInput.value);
     state.indexQuery = indexQueryInput.value;
     state.startDateValue = startDateInput.value;
     state.endDateValue = endDateInput.value;
     state.includePartialBoundaryMonths = includePartialInput.checked;
+    if (subjectChanged) {
+      state.lastStudyRun = null;
+    }
   }
 
   function handleResultsClick(event) {

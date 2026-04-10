@@ -9,6 +9,10 @@ import {
 } from "../lib/lumpsumVsSipExport.js";
 import { filterSeriesByDate } from "../lib/stats.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import {
+  adoptActiveSubjectQuery,
+  setActiveSubjectQuery,
+} from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import {
   appendCoverageWarnings,
@@ -79,6 +83,10 @@ function renderStudyRunResults(resultsRoot, studyRun) {
 }
 
 function mountLumpsumVsSipOverview(root) {
+  if (adoptActiveSubjectQuery(lumpsumVsSipSession)) {
+    lumpsumVsSipSession.lastStudyRun = null;
+  }
+
   root.innerHTML = lumpsumVsSipTemplate(
     lumpsumVsSipSession.startDateValue,
     lumpsumVsSipSession.endDateValue,
@@ -139,11 +147,15 @@ function mountLumpsumVsSipOverview(root) {
   });
 
   function persistFormState() {
+    const subjectChanged = setActiveSubjectQuery(indexQueryInput.value);
     state.indexQuery = indexQueryInput.value;
     state.totalInvestmentValue = totalInvestmentInput.value;
     state.horizonYearsValue = horizonYearsInput.value;
     state.startDateValue = startDateInput.value;
     state.endDateValue = endDateInput.value;
+    if (subjectChanged) {
+      state.lastStudyRun = null;
+    }
   }
 
   function handleResultsClick(event) {

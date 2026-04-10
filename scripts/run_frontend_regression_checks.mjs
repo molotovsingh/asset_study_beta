@@ -4,6 +4,12 @@ import { fileURLToPath } from "node:url";
 
 import { buildLumpsumVsSipStudy } from "../app/lib/lumpsumVsSip.js";
 import {
+  DEFAULT_ACTIVE_SUBJECT_QUERY,
+  adoptActiveSubjectQuery,
+  getActiveSubjectQuery,
+  setActiveSubjectQuery,
+} from "../app/studies/shared/activeSubject.js";
+import {
   buildCsvRows as buildLumpsumVsSipCsvRows,
   buildWorkbookXml as buildLumpsumVsSipWorkbookXml,
 } from "../app/lib/lumpsumVsSipExport.js";
@@ -96,6 +102,38 @@ function assertDateEqual(actual, expected, label) {
     toIsoDate(actual) === toIsoDate(expected),
     `${label}: expected ${toIsoDate(expected)}, received ${toIsoDate(actual)}`,
   );
+}
+
+function testActiveSubjectStore() {
+  assert(
+    getActiveSubjectQuery() === DEFAULT_ACTIVE_SUBJECT_QUERY,
+    "active subject should default to Nifty 50",
+  );
+  assert(
+    setActiveSubjectQuery("AAPL") === true,
+    "active subject should update when changed",
+  );
+  assert(
+    getActiveSubjectQuery() === "AAPL",
+    "active subject should return the latest query",
+  );
+  assert(
+    setActiveSubjectQuery("AAPL") === false,
+    "active subject should not report unchanged writes",
+  );
+
+  const session = { indexQuery: "Nifty 50" };
+  assert(
+    adoptActiveSubjectQuery(session) === true,
+    "study session should adopt the active subject",
+  );
+  assert(
+    session.indexQuery === "AAPL",
+    "study session should receive the active subject query",
+  );
+
+  setActiveSubjectQuery(DEFAULT_ACTIVE_SUBJECT_QUERY);
+  console.log("ok active subject");
 }
 
 function mean(values) {
@@ -1607,6 +1645,7 @@ async function runExportRegressionChecks() {
 }
 
 async function main() {
+  testActiveSubjectStore();
   await runRiskRegressionChecks();
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();

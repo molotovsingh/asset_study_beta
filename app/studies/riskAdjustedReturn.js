@@ -16,6 +16,10 @@ import {
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
+import {
+  adoptActiveSubjectQuery,
+  setActiveSubjectQuery,
+} from "./shared/activeSubject.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { mountRiskAdjustedReturnRelative } from "./riskAdjustedReturnRelative.js";
@@ -90,6 +94,11 @@ function validateStudyInputs(selection, startValue, endValue, riskFreeValue) {
   return { start, end, riskFreeRate };
 }
 
+function clearRiskAdjustedRuns() {
+  riskAdjustedReturnSession.lastStudyRun = null;
+  riskAdjustedReturnSession.lastRelativeRun = null;
+}
+
 function renderStudyRunResults(resultsRoot, studyRun) {
   resultsRoot.innerHTML = renderResults({
     metrics: studyRun.metrics,
@@ -101,6 +110,10 @@ function renderStudyRunResults(resultsRoot, studyRun) {
 }
 
 function mountRiskAdjustedReturnOverview(root) {
+    if (adoptActiveSubjectQuery(riskAdjustedReturnSession)) {
+      clearRiskAdjustedRuns();
+    }
+
     root.innerHTML = studyTemplate(
       riskAdjustedReturnSession.startDateValue,
       riskAdjustedReturnSession.endDateValue,
@@ -158,11 +171,15 @@ function mountRiskAdjustedReturnOverview(root) {
     });
 
     function persistFormState() {
+      const subjectChanged = setActiveSubjectQuery(indexQueryInput.value);
       state.indexQuery = indexQueryInput.value;
       state.startDateValue = startDateInput.value;
       state.endDateValue = endDateInput.value;
       state.riskFreeRateValue = constantRateInput.value;
       state.useDemoData = useDemoDataInput.checked;
+      if (subjectChanged) {
+        clearRiskAdjustedRuns();
+      }
     }
 
     function activateResultsTab(tabId) {
