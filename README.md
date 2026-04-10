@@ -6,7 +6,8 @@ Minimal static scaffold for a study library.
 
 - Hosts studies in a registry instead of hardcoding everything into one page.
 - Ships multiple studies on the same shared shell:
-  risk-adjusted return, seasonality, rolling returns, and SIP simulation.
+  risk-adjusted return, seasonality, rolling returns, SIP simulation, and
+  Lumpsum vs SIP comparison.
 - Loads bundled snapshots for built-in datasets and optionally uses a local
   backend for raw yfinance symbols.
 - Keeps index catalog metadata separate from study logic.
@@ -39,6 +40,9 @@ This avoids a single giant "study page" that keeps growing conditionals forever.
 - `SIP Simulator`
   Fixed monthly contribution cohorts with XIRR, terminal wealth, and
   chart-based cohort comparisons across historical start months.
+- `Lumpsum vs SIP`
+  Same-capital cohort comparison between upfront deployment and monthly
+  deployment over fixed historical horizons.
 
 Shared support across studies includes:
 
@@ -49,9 +53,7 @@ Shared support across studies includes:
 - local backend fetch and machine-local SQLite cache under
   `data/local-cache/yfinance/index/cache.sqlite3`
 - optional synthetic demo data mode
-- manual annual risk-free rate input
-- output for CAGR, annualized volatility, Sharpe ratio, Sortino ratio, total
-  return, and max drawdown
+- study-specific inputs, visuals, and CSV/XLS exports
 
 ## Data sources
 

@@ -2,6 +2,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildLumpsumVsSipStudy } from "../app/lib/lumpsumVsSip.js";
+import {
+  buildCsvRows as buildLumpsumVsSipCsvRows,
+  buildWorkbookXml as buildLumpsumVsSipWorkbookXml,
+} from "../app/lib/lumpsumVsSipExport.js";
 import { buildRollingReturnsStudy } from "../app/lib/rollingReturns.js";
 import { computeRelativeMetrics } from "../app/lib/relativeStats.js";
 import {
@@ -968,6 +973,34 @@ function buildSipPayload(snapshot, series, sipModel, monthlyContribution, warnin
   };
 }
 
+function buildLumpsumVsSipPayload(
+  snapshot,
+  series,
+  comparisonModel,
+  totalInvestment,
+  horizonYears,
+  warnings = [],
+) {
+  return {
+    studyTitle: "Lumpsum vs SIP",
+    selection: buildSelection(snapshot),
+    seriesLabel: snapshot.label,
+    indexSeries: series,
+    monthlyPoints: comparisonModel.monthlyPoints,
+    cohorts: comparisonModel.cohorts,
+    summary: comparisonModel.summary,
+    warnings,
+    methodLabel: `Bundled snapshot using ${snapshot.symbol}`,
+    totalInvestment,
+    horizonYears,
+    requestedStartDate: FIVE_YEAR_START,
+    requestedEndDate: FIXED_END,
+    actualStartDate: series[0].date,
+    actualEndDate: series[series.length - 1].date,
+    exportedAt: EXPORTED_AT,
+  };
+}
+
 function buildRelativePayload(assetSnapshot, benchmarkSnapshot, relativeMetrics) {
   return {
     studyTitle: "Risk-Adjusted Relative Performance",
@@ -1447,6 +1480,91 @@ async function runSipRegressionChecks() {
   console.log("ok sip simulator");
 }
 
+async function runLumpsumVsSipRegressionChecks() {
+  const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
+  const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
+  const totalInvestment = 600000;
+  const horizonYears = 3;
+  const actual = buildLumpsumVsSipStudy(series, {
+    totalInvestment,
+    horizonYears,
+  });
+
+  assert(
+    actual.monthlyPoints.length === 61,
+    `lumpsum vs sip monthly anchor count mismatch: ${actual.monthlyPoints.length}`,
+  );
+  assert(
+    actual.cohorts.length === 25,
+    `lumpsum vs sip cohort count mismatch: ${actual.cohorts.length}`,
+  );
+  assert(
+    actual.summary.totalCohorts === actual.cohorts.length,
+    "lumpsum vs sip total cohort summary mismatch",
+  );
+  assertClose(
+    actual.summary.lumpsumWinRate + actual.summary.sipWinRate + actual.summary.tieRate,
+    1,
+    "lumpsum vs sip win rates should sum to one",
+  );
+  assert(
+    actual.summary.medianAdvantageRate >= actual.summary.percentile25AdvantageRate &&
+      actual.summary.medianAdvantageRate <= actual.summary.percentile75AdvantageRate,
+    "lumpsum vs sip median advantage should sit inside IQR",
+  );
+
+  const firstCohort = actual.summary.firstCohort;
+  assertDateEqual(
+    firstCohort.startDate,
+    actual.monthlyPoints[0].date,
+    "lumpsum vs sip first cohort start date",
+  );
+  assertClose(
+    firstCohort.lumpsumTerminalValue,
+    (totalInvestment / firstCohort.startIndexValue) * firstCohort.endIndexValue,
+    "lumpsum vs sip first cohort terminal value",
+  );
+  assertClose(
+    firstCohort.sipPath.at(-1).portfolioValue,
+    firstCohort.sipTerminalValue,
+    "lumpsum vs sip first cohort terminal SIP path value",
+  );
+  assertClose(
+    firstCohort.sipPath
+      .filter((row) => !row.terminalOnly)
+      .reduce((sum, row) => sum + row.contributionAmount, 0),
+    totalInvestment,
+    "lumpsum vs sip SIP deployed capital should equal total investment",
+  );
+  assert(
+    actual.summary.bestLumpsumAdvantage.advantageRate >=
+      actual.summary.bestSipAdvantage.advantageRate,
+    "lumpsum vs sip best/worst advantage ordering mismatch",
+  );
+
+  const payload = buildLumpsumVsSipPayload(
+    snapshot,
+    series,
+    actual,
+    totalInvestment,
+    horizonYears,
+  );
+  const csvRows = buildLumpsumVsSipCsvRows(payload);
+  const workbookXml = buildLumpsumVsSipWorkbookXml(payload);
+  assert(
+    csvRows.length === actual.cohorts.length + 1,
+    "lumpsum vs sip CSV row count mismatch",
+  );
+  const worksheetNames = extractWorksheetNames(workbookXml);
+  assert(
+    worksheetNames.join("|") ===
+      "Summary|Cohorts|Representative SIP Path|Warnings",
+    `lumpsum vs sip worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+
+  console.log("ok lumpsum vs sip");
+}
+
 async function runExportRegressionChecks() {
   const { snapshot, series: allSeries } = await loadSnapshot("nifty-50");
   const series = filterSeriesByDate(allSeries, FIVE_YEAR_START, FIXED_END);
@@ -1494,6 +1612,7 @@ async function main() {
   await runRelativeRegressionChecks();
   await runRollingRegressionChecks();
   await runSipRegressionChecks();
+  await runLumpsumVsSipRegressionChecks();
   await runExportRegressionChecks();
 
   console.log(`frontend regression checks passed (${assertionCount} assertions)`);

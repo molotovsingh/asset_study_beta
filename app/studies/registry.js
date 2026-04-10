@@ -1,3 +1,4 @@
+import { lumpsumVsSipStudy } from "./lumpsumVsSip.js";
 import { rollingReturnsStudy } from "./rollingReturns.js";
 import { riskAdjustedReturnStudy } from "./riskAdjustedReturn.js";
 import { seasonalityStudy } from "./seasonality.js";
@@ -8,6 +9,7 @@ const studyRegistry = [
   seasonalityStudy,
   rollingReturnsStudy,
   sipSimulatorStudy,
+  lumpsumVsSipStudy,
 ];
 
 function getStudyById(studyId) {
