@@ -135,6 +135,67 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
         CREATE UNIQUE INDEX IF NOT EXISTS idx_series_cache_cache_key
             ON series_cache (cache_key);
 
+        CREATE TABLE IF NOT EXISTS symbols (
+            symbol_id INTEGER PRIMARY KEY,
+            symbol TEXT NOT NULL UNIQUE,
+            provider TEXT NOT NULL DEFAULT 'yfinance',
+            currency TEXT,
+            source_series_type TEXT NOT NULL DEFAULT 'Price',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS daily_prices (
+            symbol_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            open_value REAL,
+            high_value REAL,
+            low_value REAL,
+            close_value REAL NOT NULL,
+            adj_close_value REAL,
+            volume REAL,
+            source TEXT NOT NULL DEFAULT 'yfinance',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (symbol_id, date),
+            FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_daily_prices_symbol_date
+            ON daily_prices (symbol_id, date);
+
+        CREATE TABLE IF NOT EXISTS corporate_actions (
+            symbol_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            value REAL NOT NULL,
+            source TEXT NOT NULL DEFAULT 'yfinance',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (symbol_id, date, action_type),
+            FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_corporate_actions_symbol_date
+            ON corporate_actions (symbol_id, date);
+
+        CREATE TABLE IF NOT EXISTS sync_state (
+            symbol_id INTEGER PRIMARY KEY,
+            price_basis TEXT NOT NULL DEFAULT 'close',
+            first_full_sync_at TEXT,
+            last_full_sync_at TEXT,
+            last_incremental_sync_at TEXT,
+            last_checked_at TEXT,
+            last_price_date TEXT,
+            history_start_date TEXT,
+            history_end_date TEXT,
+            observations INTEGER NOT NULL DEFAULT 0,
+            overlap_hash TEXT,
+            actions_hash TEXT,
+            last_sync_mode TEXT,
+            last_sync_status TEXT,
+            last_sync_message TEXT,
+            FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS remembered_datasets (
             dataset_id TEXT PRIMARY KEY,
             label TEXT NOT NULL,
@@ -413,6 +474,654 @@ def upsert_cached_snapshot(connection: sqlite3.Connection, snapshot: dict) -> No
     )
 
 
+def _normalize_price_row(raw: dict) -> dict | None:
+    date_value = str(raw.get("date") or "").strip()[:10]
+    close_value = _clean_number(raw.get("close"))
+    if not date_value or close_value is None:
+        return None
+
+    return {
+        "date": date_value,
+        "open": _clean_number(raw.get("open")),
+        "high": _clean_number(raw.get("high")),
+        "low": _clean_number(raw.get("low")),
+        "close": close_value,
+        "adjClose": _clean_number(raw.get("adjClose")),
+        "volume": _clean_number(raw.get("volume")),
+    }
+
+
+def _normalize_price_rows(price_rows: list[dict]) -> list[dict]:
+    by_date: dict[str, dict] = {}
+    for raw_row in price_rows:
+        if not isinstance(raw_row, dict):
+            continue
+
+        row = _normalize_price_row(raw_row)
+        if row is not None:
+            by_date[row["date"]] = row
+
+    return [by_date[date_value] for date_value in sorted(by_date)]
+
+
+def _normalize_action_row(raw: dict) -> dict | None:
+    date_value = str(raw.get("date") or "").strip()[:10]
+    action_type = str(raw.get("actionType") or raw.get("action_type") or "").strip().lower()
+    value = _clean_number(raw.get("value"))
+    if not date_value or action_type not in {"dividend", "split"} or value is None:
+        return None
+    if value == 0:
+        return None
+
+    return {
+        "date": date_value,
+        "actionType": action_type,
+        "value": value,
+    }
+
+
+def _normalize_action_rows(action_rows: list[dict]) -> list[dict]:
+    by_key: dict[tuple[str, str], dict] = {}
+    for raw_row in action_rows:
+        if not isinstance(raw_row, dict):
+            continue
+
+        row = _normalize_action_row(raw_row)
+        if row is not None:
+            by_key[(row["date"], row["actionType"])] = row
+
+    return [
+        by_key[key]
+        for key in sorted(by_key)
+    ]
+
+
+def _ensure_symbol_row(
+    connection: sqlite3.Connection,
+    symbol: str,
+    currency: str | None = None,
+    source_series_type: str | None = None,
+    timestamp: str | None = None,
+) -> int:
+    normalized_symbol = normalize_symbol(symbol)
+    if not normalized_symbol:
+        raise RuntimeError("symbol is required to cache price history.")
+
+    updated_at = timestamp or to_iso(now_utc())
+    normalized_currency = str(currency or "").strip().upper() or None
+    normalized_source_type = str(source_series_type or "Price").strip() or "Price"
+
+    connection.execute(
+        """
+        INSERT INTO symbols (
+            symbol,
+            provider,
+            currency,
+            source_series_type,
+            created_at,
+            updated_at
+        ) VALUES (?, 'yfinance', ?, ?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            currency = COALESCE(excluded.currency, symbols.currency),
+            source_series_type = COALESCE(excluded.source_series_type, symbols.source_series_type),
+            updated_at = excluded.updated_at
+        """,
+        (
+            normalized_symbol,
+            normalized_currency,
+            normalized_source_type,
+            updated_at,
+            updated_at,
+        ),
+    )
+    row = connection.execute(
+        "SELECT symbol_id FROM symbols WHERE symbol = ?",
+        (normalized_symbol,),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError(f"Could not create local cache row for {normalized_symbol}.")
+
+    return int(row["symbol_id"])
+
+
+def _price_points_from_rows(rows: list[sqlite3.Row]) -> list[list[str | float]]:
+    return [
+        [row["date"], round(float(row["close_value"]), 6)]
+        for row in rows
+        if row["close_value"] is not None
+    ]
+
+
+def _load_symbol_row(connection: sqlite3.Connection, symbol: str) -> sqlite3.Row | None:
+    return connection.execute(
+        """
+        SELECT
+            symbol_id,
+            symbol,
+            currency,
+            source_series_type
+        FROM symbols
+        WHERE symbol = ?
+        """,
+        (normalize_symbol(symbol),),
+    ).fetchone()
+
+
+def _build_price_history_snapshot(
+    connection: sqlite3.Connection,
+    symbol: str,
+    generated_at: str | None = None,
+) -> dict | None:
+    symbol_row = _load_symbol_row(connection, symbol)
+    if symbol_row is None:
+        return None
+
+    price_rows = connection.execute(
+        """
+        SELECT
+            date,
+            close_value
+        FROM daily_prices
+        WHERE symbol_id = ?
+        ORDER BY date
+        """,
+        (symbol_row["symbol_id"],),
+    ).fetchall()
+    points = _price_points_from_rows(price_rows)
+    if len(points) < 2:
+        return None
+
+    sync_row = connection.execute(
+        """
+        SELECT
+            price_basis,
+            first_full_sync_at,
+            last_full_sync_at,
+            last_incremental_sync_at,
+            last_checked_at,
+            last_price_date,
+            history_start_date,
+            history_end_date,
+            observations,
+            overlap_hash,
+            actions_hash,
+            last_sync_mode,
+            last_sync_status,
+            last_sync_message
+        FROM sync_state
+        WHERE symbol_id = ?
+        """,
+        (symbol_row["symbol_id"],),
+    ).fetchone()
+    snapshot_generated_at = (
+        generated_at
+        or (sync_row["last_checked_at"] if sync_row is not None else None)
+        or to_iso(now_utc())
+    )
+    cache_key = symbol_cache_key(symbol_row["symbol"])
+    snapshot = {
+        "provider": "yfinance",
+        "datasetType": "index",
+        "cacheKey": cache_key,
+        "symbol": symbol_row["symbol"],
+        "currency": symbol_row["currency"],
+        "generatedAt": snapshot_generated_at,
+        "sourceSeriesType": symbol_row["source_series_type"] or "Price",
+        "range": build_range(points),
+        "points": points,
+        "path": build_runtime_cache_path(cache_key),
+    }
+    if sync_row is not None:
+        snapshot["syncState"] = {
+            "priceBasis": sync_row["price_basis"],
+            "firstFullSyncAt": sync_row["first_full_sync_at"],
+            "lastFullSyncAt": sync_row["last_full_sync_at"],
+            "lastIncrementalSyncAt": sync_row["last_incremental_sync_at"],
+            "lastCheckedAt": sync_row["last_checked_at"],
+            "lastPriceDate": sync_row["last_price_date"],
+            "historyStartDate": sync_row["history_start_date"],
+            "historyEndDate": sync_row["history_end_date"],
+            "observations": sync_row["observations"],
+            "overlapHash": sync_row["overlap_hash"],
+            "actionsHash": sync_row["actions_hash"],
+            "lastSyncMode": sync_row["last_sync_mode"],
+            "lastSyncStatus": sync_row["last_sync_status"],
+            "lastSyncMessage": sync_row["last_sync_message"],
+        }
+
+    return snapshot
+
+
+def _write_price_history_to_connection(
+    connection: sqlite3.Connection,
+    symbol: str,
+    price_rows: list[dict],
+    action_rows: list[dict] | None = None,
+    *,
+    currency: str | None = None,
+    source_series_type: str | None = None,
+    sync_mode: str = "full",
+    sync_status: str = "ok",
+    sync_message: str | None = None,
+    replace: bool = False,
+    action_window: tuple[str, str] | None = None,
+    generated_at: str | None = None,
+    overlap_hash: str | None = None,
+    actions_hash: str | None = None,
+) -> dict:
+    normalized_symbol = normalize_symbol(symbol)
+    normalized_price_rows = _normalize_price_rows(price_rows)
+    normalized_action_rows = _normalize_action_rows(action_rows or [])
+    if not normalized_price_rows:
+        raise RuntimeError(f"No usable price rows were supplied for {normalized_symbol}.")
+
+    timestamp = generated_at or to_iso(now_utc())
+    symbol_id = _ensure_symbol_row(
+        connection,
+        normalized_symbol,
+        currency=currency,
+        source_series_type=source_series_type,
+        timestamp=timestamp,
+    )
+
+    if replace:
+        connection.execute("DELETE FROM corporate_actions WHERE symbol_id = ?", (symbol_id,))
+        connection.execute("DELETE FROM daily_prices WHERE symbol_id = ?", (symbol_id,))
+    elif action_window:
+        connection.execute(
+            """
+            DELETE FROM corporate_actions
+            WHERE symbol_id = ?
+              AND date >= ?
+              AND date <= ?
+            """,
+            (symbol_id, action_window[0], action_window[1]),
+        )
+
+    connection.executemany(
+        """
+        INSERT INTO daily_prices (
+            symbol_id,
+            date,
+            open_value,
+            high_value,
+            low_value,
+            close_value,
+            adj_close_value,
+            volume,
+            source,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'yfinance', ?)
+        ON CONFLICT(symbol_id, date) DO UPDATE SET
+            open_value = excluded.open_value,
+            high_value = excluded.high_value,
+            low_value = excluded.low_value,
+            close_value = excluded.close_value,
+            adj_close_value = excluded.adj_close_value,
+            volume = excluded.volume,
+            source = excluded.source,
+            updated_at = excluded.updated_at
+        """,
+        [
+            (
+                symbol_id,
+                row["date"],
+                row["open"],
+                row["high"],
+                row["low"],
+                row["close"],
+                row["adjClose"],
+                row["volume"],
+                timestamp,
+            )
+            for row in normalized_price_rows
+        ],
+    )
+
+    if normalized_action_rows:
+        connection.executemany(
+            """
+            INSERT INTO corporate_actions (
+                symbol_id,
+                date,
+                action_type,
+                value,
+                source,
+                updated_at
+            ) VALUES (?, ?, ?, ?, 'yfinance', ?)
+            ON CONFLICT(symbol_id, date, action_type) DO UPDATE SET
+                value = excluded.value,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            [
+                (
+                    symbol_id,
+                    row["date"],
+                    row["actionType"],
+                    row["value"],
+                    timestamp,
+                )
+                for row in normalized_action_rows
+            ],
+        )
+
+    aggregate_row = connection.execute(
+        """
+        SELECT
+            min(date) AS start_date,
+            max(date) AS end_date,
+            count(*) AS observations
+        FROM daily_prices
+        WHERE symbol_id = ?
+        """,
+        (symbol_id,),
+    ).fetchone()
+    if aggregate_row is None or not aggregate_row["observations"]:
+        raise RuntimeError(f"No cached price history remained for {normalized_symbol}.")
+
+    existing_sync = connection.execute(
+        """
+        SELECT
+            first_full_sync_at,
+            last_full_sync_at,
+            last_incremental_sync_at
+        FROM sync_state
+        WHERE symbol_id = ?
+        """,
+        (symbol_id,),
+    ).fetchone()
+    is_full_sync = sync_mode == "full"
+    first_full_sync_at = (
+        timestamp
+        if is_full_sync and (existing_sync is None or existing_sync["first_full_sync_at"] is None)
+        else (existing_sync["first_full_sync_at"] if existing_sync is not None else None)
+    )
+    last_full_sync_at = (
+        timestamp
+        if is_full_sync
+        else (existing_sync["last_full_sync_at"] if existing_sync is not None else None)
+    )
+    last_incremental_sync_at = (
+        timestamp
+        if sync_mode == "incremental"
+        else (existing_sync["last_incremental_sync_at"] if existing_sync is not None else None)
+    )
+
+    connection.execute(
+        """
+        INSERT INTO sync_state (
+            symbol_id,
+            price_basis,
+            first_full_sync_at,
+            last_full_sync_at,
+            last_incremental_sync_at,
+            last_checked_at,
+            last_price_date,
+            history_start_date,
+            history_end_date,
+            observations,
+            overlap_hash,
+            actions_hash,
+            last_sync_mode,
+            last_sync_status,
+            last_sync_message
+        ) VALUES (?, 'close', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol_id) DO UPDATE SET
+            first_full_sync_at = excluded.first_full_sync_at,
+            last_full_sync_at = excluded.last_full_sync_at,
+            last_incremental_sync_at = excluded.last_incremental_sync_at,
+            last_checked_at = excluded.last_checked_at,
+            last_price_date = excluded.last_price_date,
+            history_start_date = excluded.history_start_date,
+            history_end_date = excluded.history_end_date,
+            observations = excluded.observations,
+            overlap_hash = excluded.overlap_hash,
+            actions_hash = excluded.actions_hash,
+            last_sync_mode = excluded.last_sync_mode,
+            last_sync_status = excluded.last_sync_status,
+            last_sync_message = excluded.last_sync_message
+        """,
+        (
+            symbol_id,
+            first_full_sync_at,
+            last_full_sync_at,
+            last_incremental_sync_at,
+            timestamp,
+            aggregate_row["end_date"],
+            aggregate_row["start_date"],
+            aggregate_row["end_date"],
+            int(aggregate_row["observations"]),
+            overlap_hash,
+            actions_hash,
+            sync_mode,
+            sync_status,
+            sync_message,
+        ),
+    )
+
+    snapshot = _build_price_history_snapshot(connection, normalized_symbol, timestamp)
+    if snapshot is None:
+        raise RuntimeError(f"Cached price history for {normalized_symbol} is incomplete.")
+
+    upsert_cached_snapshot(connection, snapshot)
+    return snapshot
+
+
+def migrate_cached_series_to_price_history(connection: sqlite3.Connection) -> None:
+    rows = connection.execute(
+        """
+        SELECT
+            symbol,
+            generated_at,
+            currency,
+            source_series_type,
+            points_json
+        FROM series_cache
+        ORDER BY symbol
+        """
+    ).fetchall()
+
+    for row in rows:
+        symbol = normalize_symbol(row["symbol"])
+        if not symbol:
+            continue
+        existing = _load_symbol_row(connection, symbol)
+        if existing is not None:
+            price_count = connection.execute(
+                "SELECT count(*) FROM daily_prices WHERE symbol_id = ?",
+                (existing["symbol_id"],),
+            ).fetchone()[0]
+            if price_count:
+                continue
+
+        try:
+            points = points_from_json(row["points_json"])
+        except json.JSONDecodeError:
+            continue
+        price_rows = [
+            {
+                "date": point[0],
+                "close": point[1],
+            }
+            for point in points
+            if isinstance(point, list) and len(point) >= 2
+        ]
+        if len(price_rows) < 2:
+            continue
+
+        _write_price_history_to_connection(
+            connection,
+            symbol,
+            price_rows,
+            [],
+            currency=row["currency"],
+            source_series_type=row["source_series_type"] or "Price",
+            sync_mode="legacy",
+            sync_status="migrated",
+            sync_message="Migrated from the legacy JSON series cache.",
+            generated_at=row["generated_at"] or to_iso(now_utc()),
+        )
+
+
+def load_price_rows(
+    symbol: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict]:
+    normalized_symbol = normalize_symbol(symbol)
+    with open_runtime_store() as connection:
+        symbol_row = _load_symbol_row(connection, normalized_symbol)
+        if symbol_row is None:
+            return []
+
+        clauses = ["symbol_id = ?"]
+        params: list[str | int] = [int(symbol_row["symbol_id"])]
+        if start_date:
+            clauses.append("date >= ?")
+            params.append(str(start_date))
+        if end_date:
+            clauses.append("date <= ?")
+            params.append(str(end_date))
+
+        rows = connection.execute(
+            f"""
+            SELECT
+                date,
+                open_value,
+                high_value,
+                low_value,
+                close_value,
+                adj_close_value,
+                volume
+            FROM daily_prices
+            WHERE {' AND '.join(clauses)}
+            ORDER BY date
+            """,
+            tuple(params),
+        ).fetchall()
+
+    return [
+        {
+            "date": row["date"],
+            "open": row["open_value"],
+            "high": row["high_value"],
+            "low": row["low_value"],
+            "close": row["close_value"],
+            "adjClose": row["adj_close_value"],
+            "volume": row["volume"],
+        }
+        for row in rows
+    ]
+
+
+def load_corporate_actions(
+    symbol: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict]:
+    normalized_symbol = normalize_symbol(symbol)
+    with open_runtime_store() as connection:
+        symbol_row = _load_symbol_row(connection, normalized_symbol)
+        if symbol_row is None:
+            return []
+
+        clauses = ["symbol_id = ?"]
+        params: list[str | int] = [int(symbol_row["symbol_id"])]
+        if start_date:
+            clauses.append("date >= ?")
+            params.append(str(start_date))
+        if end_date:
+            clauses.append("date <= ?")
+            params.append(str(end_date))
+
+        rows = connection.execute(
+            f"""
+            SELECT
+                date,
+                action_type,
+                value
+            FROM corporate_actions
+            WHERE {' AND '.join(clauses)}
+            ORDER BY date, action_type
+            """,
+            tuple(params),
+        ).fetchall()
+
+    return [
+        {
+            "date": row["date"],
+            "actionType": row["action_type"],
+            "value": row["value"],
+        }
+        for row in rows
+    ]
+
+
+def write_price_history(
+    symbol: str,
+    price_rows: list[dict],
+    action_rows: list[dict] | None = None,
+    *,
+    currency: str | None = None,
+    source_series_type: str | None = None,
+    sync_mode: str = "full",
+    sync_status: str = "ok",
+    sync_message: str | None = None,
+    replace: bool = False,
+    action_window: tuple[str, str] | None = None,
+    overlap_hash: str | None = None,
+    actions_hash: str | None = None,
+) -> dict:
+    with open_runtime_store() as connection:
+        snapshot = _write_price_history_to_connection(
+            connection,
+            symbol,
+            price_rows,
+            action_rows,
+            currency=currency,
+            source_series_type=source_series_type,
+            sync_mode=sync_mode,
+            sync_status=sync_status,
+            sync_message=sync_message,
+            replace=replace,
+            action_window=action_window,
+            overlap_hash=overlap_hash,
+            actions_hash=actions_hash,
+        )
+        connection.commit()
+
+    return snapshot
+
+
+def update_cached_series_currency(symbol: str, currency: str | None) -> dict | None:
+    normalized_symbol = normalize_symbol(symbol)
+    normalized_currency = str(currency or "").strip().upper() or None
+    if not normalized_symbol or not normalized_currency:
+        return load_cached_series(normalized_symbol)
+
+    with open_runtime_store() as connection:
+        connection.execute(
+            """
+            UPDATE symbols
+            SET currency = ?, updated_at = ?
+            WHERE symbol = ?
+            """,
+            (normalized_currency, to_iso(now_utc()), normalized_symbol),
+        )
+        connection.execute(
+            """
+            UPDATE series_cache
+            SET currency = ?
+            WHERE symbol = ?
+            """,
+            (normalized_currency, normalized_symbol),
+        )
+        connection.commit()
+
+    return load_cached_series(normalized_symbol)
+
+
 def upsert_remembered_dataset(connection: sqlite3.Connection, entry: dict) -> None:
     range_data = entry.get("range") or {
         "startDate": "",
@@ -678,8 +1387,11 @@ def ensure_runtime_store() -> None:
 
         CACHE_ROOT.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(CACHE_DB_PATH) as connection:
+            connection.row_factory = sqlite3.Row
             initialize_runtime_store(connection)
             migrate_legacy_local_cache(connection)
+            migrate_cached_series_to_price_history(connection)
+            connection.commit()
 
         _RUNTIME_STORE_READY = True
 
@@ -687,6 +1399,10 @@ def ensure_runtime_store() -> None:
 def load_cached_series(symbol: str) -> dict | None:
     normalized_symbol = normalize_symbol(symbol)
     with open_runtime_store() as connection:
+        normalized_snapshot = _build_price_history_snapshot(connection, normalized_symbol)
+        if normalized_snapshot is not None:
+            return normalized_snapshot
+
         row = connection.execute(
             """
             SELECT
@@ -720,24 +1436,25 @@ def write_cached_series(
     currency: str | None = None,
 ) -> dict:
     normalized_symbol = normalize_symbol(symbol)
-    snapshot = {
-        "provider": "yfinance",
-        "datasetType": "index",
-        "cacheKey": symbol_cache_key(normalized_symbol),
-        "symbol": normalized_symbol,
-        "generatedAt": to_iso(now_utc()),
-        "currency": str(currency or "").strip().upper() or None,
-        "sourceSeriesType": "Price",
-        "range": build_range(points),
-        "points": points,
-        "path": build_runtime_cache_path(symbol_cache_key(normalized_symbol)),
-    }
-
-    with open_runtime_store() as connection:
-        upsert_cached_snapshot(connection, snapshot)
-        connection.commit()
-
-    return snapshot
+    price_rows = [
+        {
+            "date": point[0],
+            "close": point[1],
+        }
+        for point in points
+        if isinstance(point, list) and len(point) >= 2
+    ]
+    return write_price_history(
+        normalized_symbol,
+        price_rows,
+        [],
+        currency=currency,
+        source_series_type="Price",
+        sync_mode="manual",
+        sync_status="ok",
+        sync_message="Written through the compatibility cached-series API.",
+        replace=True,
+    )
 
 
 def find_remembered_entry(dataset_id: str | None, symbol: str | None) -> dict | None:

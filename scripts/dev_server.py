@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from functools import partial
@@ -23,13 +24,16 @@ try:
         find_remembered_entry,
         load_instrument_profile,
         load_cached_series,
+        load_corporate_actions,
+        load_price_rows,
         load_remembered_catalog,
         normalize_symbol,
         parse_iso_datetime,
         remember_symbol,
         symbol_cache_key,
+        update_cached_series_currency,
         write_instrument_profile,
-        write_cached_series,
+        write_price_history,
     )
 except ModuleNotFoundError:
     from scripts.runtime_store import (
@@ -39,19 +43,26 @@ except ModuleNotFoundError:
         find_remembered_entry,
         load_instrument_profile,
         load_cached_series,
+        load_corporate_actions,
+        load_price_rows,
         load_remembered_catalog,
         normalize_symbol,
         parse_iso_datetime,
         remember_symbol,
         symbol_cache_key,
+        update_cached_series_currency,
         write_instrument_profile,
-        write_cached_series,
+        write_price_history,
     )
 
 
 DEFAULT_HISTORY_PERIOD = "10y"
+FULL_HISTORY_FALLBACK_YEARS = 25
 CACHE_TTL = timedelta(hours=24)
 PROFILE_CACHE_TTL = timedelta(days=7)
+INCREMENTAL_OVERLAP_DAYS = 90
+PRICE_ABSOLUTE_TOLERANCE = 1e-6
+PRICE_RELATIVE_TOLERANCE = 1e-8
 
 
 def parse_args() -> argparse.Namespace:
@@ -72,18 +83,51 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def fetch_symbol_snapshot(
+def clean_history_number(value) -> float | None:
+    if value is None:
+        return None
+
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if numeric_value != numeric_value:
+        return None
+
+    return numeric_value
+
+
+def history_index_date(index_value) -> str:
+    if hasattr(index_value, "date"):
+        return index_value.date().isoformat()
+    return str(index_value)[:10]
+
+
+def fetch_symbol_history(
     symbol: str,
-    period: str = DEFAULT_HISTORY_PERIOD,
-) -> tuple[list[list[str | float]], str | None]:
+    *,
+    period: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> tuple[list[dict], list[dict], str | None]:
     yf = load_yfinance()
     ticker = yf.Ticker(symbol)
-    frame = ticker.history(
-        interval="1d",
-        auto_adjust=False,
-        actions=False,
-        period=period,
-    )
+    history_kwargs = {
+        "interval": "1d",
+        "auto_adjust": False,
+        "actions": True,
+    }
+    if start:
+        history_kwargs["start"] = start
+        if end:
+            history_kwargs["end"] = end
+    else:
+        history_kwargs["period"] = period or DEFAULT_HISTORY_PERIOD
+        if end:
+            history_kwargs["end"] = end
+
+    frame = ticker.history(**history_kwargs)
     if frame.empty:
         raise RuntimeError(f"yfinance returned no rows for symbol {symbol}.")
 
@@ -92,29 +136,178 @@ def fetch_symbol_snapshot(
             f"Expected a Close column in the yfinance response for {symbol}.",
         )
 
-    points: list[list[str | float]] = []
-    for index_value, raw_value in frame["Close"].items():
-        try:
-            numeric_value = float(raw_value)
-        except (TypeError, ValueError):
+    price_rows: list[dict] = []
+    action_rows: list[dict] = []
+    for index_value, row in frame.iterrows():
+        close_value = clean_history_number(row.get("Close"))
+        if close_value is None:
             continue
 
-        if numeric_value != numeric_value:
-            continue
+        date_value = history_index_date(index_value)
+        price_rows.append(
+            {
+                "date": date_value,
+                "open": clean_history_number(row.get("Open")),
+                "high": clean_history_number(row.get("High")),
+                "low": clean_history_number(row.get("Low")),
+                "close": close_value,
+                "adjClose": clean_history_number(row.get("Adj Close")),
+                "volume": clean_history_number(row.get("Volume")),
+            },
+        )
+        dividend_value = clean_history_number(row.get("Dividends"))
+        if dividend_value:
+            action_rows.append(
+                {
+                    "date": date_value,
+                    "actionType": "dividend",
+                    "value": dividend_value,
+                },
+            )
+        split_value = clean_history_number(row.get("Stock Splits"))
+        if split_value:
+            action_rows.append(
+                {
+                    "date": date_value,
+                    "actionType": "split",
+                    "value": split_value,
+                },
+            )
 
-        if hasattr(index_value, "date"):
-            date_value = index_value.date().isoformat()
-        else:
-            date_value = str(index_value)[:10]
-
-        points.append([date_value, round(numeric_value, 6)])
-
-    if len(points) < 2:
+    if len(price_rows) < 2:
         raise RuntimeError(
             f"yfinance returned fewer than two usable rows for symbol {symbol}.",
         )
 
-    return normalize_points(points), resolve_ticker_currency(ticker)
+    return price_rows, action_rows, resolve_ticker_currency(ticker)
+
+
+def fetch_symbol_snapshot(
+    symbol: str,
+    period: str = DEFAULT_HISTORY_PERIOD,
+) -> tuple[list[list[str | float]], str | None]:
+    price_rows, _action_rows, currency = fetch_symbol_history(symbol, period=period)
+    points = [
+        [row["date"], round(float(row["close"]), 6)]
+        for row in price_rows
+    ]
+    return normalize_points(points), currency
+
+
+def fetch_full_symbol_history(symbol: str) -> tuple[list[dict], list[dict], str | None, str]:
+    last_error: Exception | None = None
+    attempts = (
+        {"period": "max", "label": "period=max"},
+        {
+            "start": years_ago_start_date(FULL_HISTORY_FALLBACK_YEARS),
+            "label": f"start={years_ago_start_date(FULL_HISTORY_FALLBACK_YEARS)}",
+        },
+        {"period": DEFAULT_HISTORY_PERIOD, "label": f"period={DEFAULT_HISTORY_PERIOD}"},
+    )
+    for attempt in attempts:
+        try:
+            price_rows, action_rows, currency = fetch_symbol_history(
+                symbol,
+                period=attempt.get("period"),
+                start=attempt.get("start"),
+            )
+        except Exception as error:  # noqa: BLE001
+            last_error = error
+            continue
+
+        return price_rows, action_rows, currency, str(attempt["label"])
+
+    if last_error is not None:
+        raise RuntimeError(f"Could not fetch broad yfinance history for {symbol}: {last_error}") from last_error
+    raise RuntimeError(f"Could not fetch yfinance history for symbol {symbol}.")
+
+
+def shift_date(date_value: str, days: int) -> str:
+    parsed = datetime.fromisoformat(str(date_value)[:10])
+    return (parsed + timedelta(days=days)).date().isoformat()
+
+
+def years_ago_start_date(years: int, now: datetime | None = None) -> str:
+    reference_date = (now or datetime.now(timezone.utc)).date()
+    try:
+        shifted = reference_date.replace(year=reference_date.year - years)
+    except ValueError:
+        shifted = reference_date.replace(year=reference_date.year - years, day=28)
+    return shifted.isoformat()
+
+
+def stable_rows_hash(rows: list[dict], fields: list[str]) -> str:
+    normalized_rows = [
+        {
+            field: (
+                round(float(row[field]), 8)
+                if isinstance(row.get(field), (int, float))
+                else row.get(field)
+            )
+            for field in fields
+        }
+        for row in sorted(rows, key=lambda item: tuple(str(item.get(field) or "") for field in fields))
+    ]
+    payload = json.dumps(normalized_rows, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def price_values_match(left: float, right: float) -> bool:
+    absolute_delta = abs(left - right)
+    if absolute_delta <= PRICE_ABSOLUTE_TOLERANCE:
+        return True
+
+    denominator = max(abs(left), abs(right), 1)
+    return (absolute_delta / denominator) <= PRICE_RELATIVE_TOLERANCE
+
+
+def validate_price_overlap(cached_rows: list[dict], fetched_rows: list[dict]) -> tuple[bool, str]:
+    cached_by_date = {
+        row["date"]: row
+        for row in cached_rows
+        if row.get("date") and row.get("close") is not None
+    }
+    fetched_by_date = {
+        row["date"]: row
+        for row in fetched_rows
+        if row.get("date") and row.get("close") is not None
+    }
+    overlap_dates = sorted(set(cached_by_date) & set(fetched_by_date))
+    if not overlap_dates:
+        return False, "No overlapping dates were available for incremental validation."
+
+    missing_fetched_dates = sorted(set(cached_by_date) - set(fetched_by_date))
+    if missing_fetched_dates:
+        sample = ", ".join(missing_fetched_dates[:3])
+        return False, f"Fetched overlap omitted cached dates: {sample}."
+
+    for date_value in overlap_dates:
+        cached_close = float(cached_by_date[date_value]["close"])
+        fetched_close = float(fetched_by_date[date_value]["close"])
+        if not price_values_match(cached_close, fetched_close):
+            return (
+                False,
+                f"Cached close changed on {date_value}: {cached_close} vs {fetched_close}.",
+            )
+
+    return True, f"Validated {len(overlap_dates)} overlapping closes."
+
+
+def validate_action_overlap(cached_actions: list[dict], fetched_actions: list[dict]) -> tuple[bool, str]:
+    cached_hash = stable_rows_hash(cached_actions, ["date", "actionType", "value"])
+    fetched_hash = stable_rows_hash(fetched_actions, ["date", "actionType", "value"])
+    if cached_hash != fetched_hash:
+        return False, "Corporate actions changed in the overlap window."
+
+    return True, "Corporate actions matched in the overlap window."
+
+
+def snapshot_requires_full_sync(snapshot: dict | None) -> bool:
+    if snapshot is None:
+        return True
+
+    sync_mode = (snapshot.get("syncState") or {}).get("lastSyncMode")
+    return sync_mode in {None, "legacy", "manual"}
 
 
 def fetch_symbol_profile(symbol: str) -> dict:
@@ -155,7 +348,7 @@ def ensure_snapshot_currency(snapshot: dict) -> dict:
     if not currency:
         return snapshot
 
-    return write_cached_series(symbol, snapshot["points"], currency)
+    return update_cached_series_currency(symbol, currency) or snapshot
 
 
 def cache_is_fresh(snapshot: dict, now: datetime | None = None) -> bool:
@@ -179,12 +372,70 @@ def profile_cache_is_fresh(profile: dict, now: datetime | None = None) -> bool:
 def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
     normalized_symbol = normalize_symbol(symbol)
     cached = load_cached_series(normalized_symbol)
-    if cached and cache_is_fresh(cached):
+    if cached and cache_is_fresh(cached) and not snapshot_requires_full_sync(cached):
         return ensure_snapshot_currency(cached), "hit"
 
-    points, currency = fetch_symbol_snapshot(normalized_symbol)
-    refreshed = write_cached_series(normalized_symbol, points, currency)
-    return refreshed, "refreshed"
+    if snapshot_requires_full_sync(cached):
+        price_rows, action_rows, currency, period = fetch_full_symbol_history(normalized_symbol)
+        refreshed = write_price_history(
+            normalized_symbol,
+            price_rows,
+            action_rows,
+            currency=currency,
+            source_series_type="Price",
+            sync_mode="full",
+            sync_status="ok",
+            sync_message=f"Full yfinance sync using {period}.",
+            replace=True,
+            overlap_hash=stable_rows_hash(price_rows[-INCREMENTAL_OVERLAP_DAYS:], ["date", "close"]),
+            actions_hash=stable_rows_hash(action_rows, ["date", "actionType", "value"]),
+        )
+        return refreshed, "refreshed"
+
+    last_price_date = (cached.get("syncState") or {}).get("lastPriceDate") or cached["range"]["endDate"]
+    overlap_start = shift_date(last_price_date, -INCREMENTAL_OVERLAP_DAYS)
+    fetched_rows, fetched_actions, currency = fetch_symbol_history(
+        normalized_symbol,
+        start=overlap_start,
+    )
+    fetched_end = fetched_rows[-1]["date"]
+    cached_overlap = load_price_rows(normalized_symbol, overlap_start, fetched_end)
+    cached_actions = load_corporate_actions(normalized_symbol, overlap_start, fetched_end)
+
+    prices_valid, price_message = validate_price_overlap(cached_overlap, fetched_rows)
+    actions_valid, action_message = validate_action_overlap(cached_actions, fetched_actions)
+    if not prices_valid or not actions_valid:
+        price_rows, action_rows, full_currency, period = fetch_full_symbol_history(normalized_symbol)
+        refreshed = write_price_history(
+            normalized_symbol,
+            price_rows,
+            action_rows,
+            currency=full_currency or currency,
+            source_series_type="Price",
+            sync_mode="full",
+            sync_status="rebuilt",
+            sync_message=f"{price_message} {action_message} Rebuilt using {period}.",
+            replace=True,
+            overlap_hash=stable_rows_hash(price_rows[-INCREMENTAL_OVERLAP_DAYS:], ["date", "close"]),
+            actions_hash=stable_rows_hash(action_rows, ["date", "actionType", "value"]),
+        )
+        return refreshed, "rebuilt"
+
+    refreshed = write_price_history(
+        normalized_symbol,
+        fetched_rows,
+        fetched_actions,
+        currency=currency or cached.get("currency"),
+        source_series_type="Price",
+        sync_mode="incremental",
+        sync_status="ok",
+        sync_message=f"{price_message} {action_message}",
+        replace=False,
+        action_window=(overlap_start, fetched_end),
+        overlap_hash=stable_rows_hash(fetched_rows, ["date", "close"]),
+        actions_hash=stable_rows_hash(fetched_actions, ["date", "actionType", "value"]),
+    )
+    return refreshed, "incremental"
 
 
 def get_or_refresh_instrument_profile(symbol: str) -> tuple[dict, str]:
@@ -217,6 +468,7 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
         or symbol_cache_key(symbol)
     ).strip()
     cache_key = raw_snapshot.get("cacheKey") or symbol_cache_key(symbol)
+    sync_state = raw_snapshot.get("syncState") or {}
 
     return {
         "provider": "yfinance",
@@ -238,6 +490,9 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
             "status": cache_status,
             "path": raw_snapshot.get("path"),
             "key": cache_key,
+            "syncMode": sync_state.get("lastSyncMode"),
+            "syncStatus": sync_state.get("lastSyncStatus"),
+            "lastCheckedAt": sync_state.get("lastCheckedAt"),
         },
     }
 
