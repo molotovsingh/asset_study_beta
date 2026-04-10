@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import { buildLumpsumVsSipStudy } from "../app/lib/lumpsumVsSip.js";
 import {
+  buildStudyViewHash,
+  parseStudyViewHash,
+} from "../app/studies/studyShell.js";
+import {
   DEFAULT_ACTIVE_SUBJECT_QUERY,
   adoptActiveSubjectQuery,
   getActiveSubjectQuery,
@@ -17,6 +21,10 @@ import {
   recordStudyRun,
   subscribeRunHistory,
 } from "../app/studies/shared/runHistory.js";
+import {
+  buildCommonIndexParams,
+  readCommonIndexParams,
+} from "../app/studies/shared/shareableInputs.js";
 import {
   buildCsvRows as buildLumpsumVsSipCsvRows,
   buildWorkbookXml as buildLumpsumVsSipWorkbookXml,
@@ -196,6 +204,49 @@ function testRunHistoryStore() {
   unsubscribe();
   clearRunHistory();
   console.log("ok run history");
+}
+
+function testShareableInputUrls() {
+  const hash = buildStudyViewHash("sip-simulator", "overview", {
+    subject: "AAPL",
+    start: "2021-01-01",
+    end: "2026-01-01",
+    contribution: "25000",
+  });
+  const route = parseStudyViewHash(hash);
+  assert(route.studyId === "sip-simulator", "share URL study id mismatch");
+  assert(route.viewId === "overview", "share URL view id mismatch");
+  assert(
+    route.params.get("subject") === "AAPL",
+    "share URL subject param mismatch",
+  );
+  assert(
+    route.params.get("contribution") === "25000",
+    "share URL contribution param mismatch",
+  );
+
+  const session = {
+    indexQuery: "Nifty 50",
+    startDateValue: "2020-01-01",
+    endDateValue: "2025-01-01",
+  };
+  const applied = readCommonIndexParams(session, route.params);
+  assert(applied.changed === true, "share URL params should change session");
+  assert(applied.subject === true, "share URL should mark subject as present");
+  assert(session.indexQuery === "AAPL", "share URL should restore subject");
+  assert(session.startDateValue === "2021-01-01", "share URL should restore start");
+  assert(session.endDateValue === "2026-01-01", "share URL should restore end");
+
+  const unchanged = readCommonIndexParams(session, route.params);
+  assert(
+    unchanged.changed === false && unchanged.subject === true,
+    "share URL should preserve subject presence even when unchanged",
+  );
+  assert(
+    buildCommonIndexParams(session).subject === "AAPL",
+    "share URL common params should serialize subject",
+  );
+  console.log("ok shareable inputs");
 }
 
 function mean(values) {
@@ -1709,6 +1760,7 @@ async function runExportRegressionChecks() {
 async function main() {
   testActiveSubjectStore();
   testRunHistoryStore();
+  testShareableInputUrls();
   await runRiskRegressionChecks();
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();

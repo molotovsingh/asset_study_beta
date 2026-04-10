@@ -16,6 +16,13 @@ import {
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
+  buildCommonIndexParams,
+  getCurrentRouteParams,
+  readCommonIndexParams,
+  readTextParam,
+  replaceRouteInputParams,
+} from "./shared/shareableInputs.js";
+import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
   buildDefaultStudyWindow,
@@ -83,8 +90,48 @@ function renderStudyRunResults(resultsRoot, studyRun) {
   resultsRoot.innerHTML = renderLumpsumVsSipResults(studyRun);
 }
 
+function applyLumpsumVsSipRouteParams() {
+  const params = getCurrentRouteParams();
+  const applied = readCommonIndexParams(lumpsumVsSipSession, params);
+  const total = readTextParam(params, "total");
+  const horizon = readTextParam(params, "horizon");
+
+  if (
+    total &&
+    Number.isFinite(Number(total)) &&
+    lumpsumVsSipSession.totalInvestmentValue !== total
+  ) {
+    lumpsumVsSipSession.totalInvestmentValue = total;
+    applied.changed = true;
+  }
+  if (
+    horizon &&
+    Number.isFinite(Number(horizon)) &&
+    lumpsumVsSipSession.horizonYearsValue !== horizon
+  ) {
+    lumpsumVsSipSession.horizonYearsValue = horizon;
+    applied.changed = true;
+  }
+
+  return applied;
+}
+
+function replaceLumpsumVsSipRouteParams() {
+  replaceRouteInputParams(lumpsumVsSipStudy.id, "overview", {
+    ...buildCommonIndexParams(lumpsumVsSipSession),
+    total: lumpsumVsSipSession.totalInvestmentValue,
+    horizon: lumpsumVsSipSession.horizonYearsValue,
+  });
+}
+
 function mountLumpsumVsSipOverview(root) {
-  if (adoptActiveSubjectQuery(lumpsumVsSipSession)) {
+  const routeParamsApplied = applyLumpsumVsSipRouteParams();
+  if (routeParamsApplied.changed) {
+    lumpsumVsSipSession.lastStudyRun = null;
+  }
+  if (routeParamsApplied.subject) {
+    setActiveSubjectQuery(lumpsumVsSipSession.indexQuery);
+  } else if (adoptActiveSubjectQuery(lumpsumVsSipSession)) {
     lumpsumVsSipSession.lastStudyRun = null;
   }
 
@@ -157,6 +204,7 @@ function mountLumpsumVsSipOverview(root) {
     if (subjectChanged) {
       state.lastStudyRun = null;
     }
+    replaceLumpsumVsSipRouteParams();
   }
 
   function handleResultsClick(event) {

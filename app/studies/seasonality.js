@@ -18,6 +18,13 @@ import {
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
+  buildCommonIndexParams,
+  getCurrentRouteParams,
+  readBooleanParam,
+  readCommonIndexParams,
+  replaceRouteInputParams,
+} from "./shared/shareableInputs.js";
+import {
   renderSeasonalityResults,
   seasonalityTemplate,
 } from "./seasonalityView.js";
@@ -62,8 +69,35 @@ function renderStudyRunResults(resultsRoot, studyRun) {
   resultsRoot.innerHTML = renderSeasonalityResults(studyRun);
 }
 
+function applySeasonalityRouteParams() {
+  const params = getCurrentRouteParams();
+  const applied = readCommonIndexParams(seasonalitySession, params);
+  if (params.has("partial")) {
+    const includePartial = readBooleanParam(params, "partial");
+    if (seasonalitySession.includePartialBoundaryMonths !== includePartial) {
+      seasonalitySession.includePartialBoundaryMonths = includePartial;
+      applied.changed = true;
+    }
+  }
+
+  return applied;
+}
+
+function replaceSeasonalityRouteParams() {
+  replaceRouteInputParams(seasonalityStudy.id, "overview", {
+    ...buildCommonIndexParams(seasonalitySession),
+    partial: seasonalitySession.includePartialBoundaryMonths ? "1" : "",
+  });
+}
+
 function mountSeasonalityOverview(root) {
-  if (adoptActiveSubjectQuery(seasonalitySession)) {
+  const routeParamsApplied = applySeasonalityRouteParams();
+  if (routeParamsApplied.changed) {
+    seasonalitySession.lastStudyRun = null;
+  }
+  if (routeParamsApplied.subject) {
+    setActiveSubjectQuery(seasonalitySession.indexQuery);
+  } else if (adoptActiveSubjectQuery(seasonalitySession)) {
     seasonalitySession.lastStudyRun = null;
   }
 
@@ -131,6 +165,7 @@ function mountSeasonalityOverview(root) {
     if (subjectChanged) {
       state.lastStudyRun = null;
     }
+    replaceSeasonalityRouteParams();
   }
 
   function handleResultsClick(event) {

@@ -16,6 +16,13 @@ import {
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
+  buildCommonIndexParams,
+  getCurrentRouteParams,
+  readCommonIndexParams,
+  readTextParam,
+  replaceRouteInputParams,
+} from "./shared/shareableInputs.js";
+import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
   buildDefaultStudyWindow,
@@ -71,8 +78,37 @@ function renderStudyRunResults(resultsRoot, studyRun) {
   resultsRoot.innerHTML = renderSipSimulatorResults(studyRun);
 }
 
+function applySipRouteParams() {
+  const params = getCurrentRouteParams();
+  const applied = readCommonIndexParams(sipSimulatorSession, params);
+  const contribution = readTextParam(params, "contribution");
+  if (
+    contribution &&
+    Number.isFinite(Number(contribution)) &&
+    sipSimulatorSession.monthlyContributionValue !== contribution
+  ) {
+    sipSimulatorSession.monthlyContributionValue = contribution;
+    applied.changed = true;
+  }
+
+  return applied;
+}
+
+function replaceSipRouteParams() {
+  replaceRouteInputParams(sipSimulatorStudy.id, "overview", {
+    ...buildCommonIndexParams(sipSimulatorSession),
+    contribution: sipSimulatorSession.monthlyContributionValue,
+  });
+}
+
 function mountSipSimulatorOverview(root) {
-  if (adoptActiveSubjectQuery(sipSimulatorSession)) {
+  const routeParamsApplied = applySipRouteParams();
+  if (routeParamsApplied.changed) {
+    sipSimulatorSession.lastStudyRun = null;
+  }
+  if (routeParamsApplied.subject) {
+    setActiveSubjectQuery(sipSimulatorSession.indexQuery);
+  } else if (adoptActiveSubjectQuery(sipSimulatorSession)) {
     sipSimulatorSession.lastStudyRun = null;
   }
 
@@ -139,6 +175,7 @@ function mountSipSimulatorOverview(root) {
     if (subjectChanged) {
       state.lastStudyRun = null;
     }
+    replaceSipRouteParams();
   }
 
   function handleResultsClick(event) {

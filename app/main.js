@@ -13,6 +13,7 @@ import {
   getDefaultStudyViewId,
   getStudyViews,
   getStudyViewById,
+  parseStudyViewHash,
   renderStudyShell,
 } from "./studies/studyShell.js";
 
@@ -108,10 +109,7 @@ function renderStudyMeta(study, activeView) {
 }
 
 function parseRouteHash() {
-  const [studyId = "", viewId = ""] = window.location.hash
-    .replace(/^#/, "")
-    .split("/");
-  return { studyId, viewId };
+  return parseStudyViewHash();
 }
 
 function formatHistoryTimestamp(value) {
@@ -170,7 +168,11 @@ function handleRunHistoryClick(event) {
   }
 
   setActiveSubjectQuery(run.subjectQuery);
-  const targetHash = buildStudyViewHash(run.studyId, "overview");
+  const targetHash = buildStudyViewHash(run.studyId, "overview", {
+    subject: run.subjectQuery,
+    start: run.requestedStartDate,
+    end: run.requestedEndDate,
+  });
   if (window.location.hash !== targetHash) {
     window.location.hash = targetHash;
     return;
@@ -192,9 +194,9 @@ function mountStudyRoute() {
     study,
     route.viewId || getDefaultStudyViewId(study),
   );
-  const targetHash = buildStudyViewHash(study.id, activeView.id);
+  const targetHash = buildStudyViewHash(study.id, activeView.id, route.params);
 
-  if (window.location.hash !== targetHash) {
+  if (route.studyId !== study.id || route.viewId !== activeView.id) {
     window.history.replaceState(null, "", targetHash);
   }
 

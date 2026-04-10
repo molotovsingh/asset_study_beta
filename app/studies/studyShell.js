@@ -46,8 +46,40 @@ function getStudyViewById(study, viewId) {
   );
 }
 
-function buildStudyViewHash(studyId, viewId) {
-  return `#${studyId}/${viewId}`;
+function toRouteSearchParams(params) {
+  if (!params) {
+    return new URLSearchParams();
+  }
+
+  if (params instanceof URLSearchParams) {
+    return new URLSearchParams(params);
+  }
+
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      searchParams.set(key, String(value));
+    }
+  });
+  return searchParams;
+}
+
+function buildStudyViewHash(studyId, viewId, params = null) {
+  const searchParams = toRouteSearchParams(params);
+  const queryString = searchParams.toString();
+  return `#${studyId}/${viewId}${queryString ? `?${queryString}` : ""}`;
+}
+
+function parseStudyViewHash(hashValue = window.location.hash) {
+  const [path = "", queryString = ""] = String(hashValue)
+    .replace(/^#/, "")
+    .split("?");
+  const [studyId = "", viewId = ""] = path.split("/");
+  return {
+    studyId,
+    viewId,
+    params: new URLSearchParams(queryString),
+  };
 }
 
 function renderStudyShell(study, activeViewId) {
@@ -134,5 +166,6 @@ export {
   getDefaultStudyViewId,
   getStudyViews,
   getStudyViewById,
+  parseStudyViewHash,
   renderStudyShell,
 };

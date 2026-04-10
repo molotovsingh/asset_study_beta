@@ -12,6 +12,11 @@ import {
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
+  buildCommonIndexParams,
+  readCommonIndexParams,
+  replaceRouteInputParams,
+} from "./shared/shareableInputs.js";
+import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
   buildDefaultStudyWindow,
@@ -61,8 +66,20 @@ function renderStudyRunResults(resultsRoot, studyRun) {
   resultsRoot.innerHTML = renderRollingReturnsResults(studyRun);
 }
 
+function replaceRollingReturnsRouteParams() {
+  replaceRouteInputParams(rollingReturnsStudy.id, "overview", {
+    ...buildCommonIndexParams(rollingReturnsSession),
+  });
+}
+
 function mountRollingReturnsOverview(root) {
-  if (adoptActiveSubjectQuery(rollingReturnsSession)) {
+  const routeParamsApplied = readCommonIndexParams(rollingReturnsSession);
+  if (routeParamsApplied.changed) {
+    rollingReturnsSession.lastStudyRun = null;
+  }
+  if (routeParamsApplied.subject) {
+    setActiveSubjectQuery(rollingReturnsSession.indexQuery);
+  } else if (adoptActiveSubjectQuery(rollingReturnsSession)) {
     rollingReturnsSession.lastStudyRun = null;
   }
 
@@ -125,6 +142,7 @@ function mountRollingReturnsOverview(root) {
     if (subjectChanged) {
       state.lastStudyRun = null;
     }
+    replaceRollingReturnsRouteParams();
   }
 
   function handleResultsClick(event) {

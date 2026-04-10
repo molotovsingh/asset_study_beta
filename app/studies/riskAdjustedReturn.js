@@ -23,6 +23,14 @@ import {
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
+import {
+  buildCommonIndexParams,
+  getCurrentRouteParams,
+  readBooleanParam,
+  readCommonIndexParams,
+  readTextParam,
+  replaceRouteInputParams,
+} from "./shared/shareableInputs.js";
 import { mountRiskAdjustedReturnRelative } from "./riskAdjustedReturnRelative.js";
 import { mountRiskAdjustedReturnVisuals } from "./riskAdjustedReturnVisuals.js";
 
@@ -100,6 +108,38 @@ function clearRiskAdjustedRuns() {
   riskAdjustedReturnSession.lastRelativeRun = null;
 }
 
+function applyRiskAdjustedRouteParams() {
+  const params = getCurrentRouteParams();
+  const applied = readCommonIndexParams(riskAdjustedReturnSession, params);
+  const riskFreeRate = readTextParam(params, "rf");
+  if (
+    riskFreeRate &&
+    Number.isFinite(Number(riskFreeRate)) &&
+    riskAdjustedReturnSession.riskFreeRateValue !== riskFreeRate
+  ) {
+    riskAdjustedReturnSession.riskFreeRateValue = riskFreeRate;
+    applied.changed = true;
+  }
+
+  if (params.has("demo")) {
+    const useDemoData = readBooleanParam(params, "demo");
+    if (riskAdjustedReturnSession.useDemoData !== useDemoData) {
+      riskAdjustedReturnSession.useDemoData = useDemoData;
+      applied.changed = true;
+    }
+  }
+
+  return applied;
+}
+
+function replaceRiskAdjustedRouteParams() {
+  replaceRouteInputParams(riskAdjustedReturnStudy.id, "overview", {
+    ...buildCommonIndexParams(riskAdjustedReturnSession),
+    rf: riskAdjustedReturnSession.riskFreeRateValue,
+    demo: riskAdjustedReturnSession.useDemoData ? "1" : "",
+  });
+}
+
 function renderStudyRunResults(resultsRoot, studyRun) {
   resultsRoot.innerHTML = renderResults({
     metrics: studyRun.metrics,
@@ -111,7 +151,13 @@ function renderStudyRunResults(resultsRoot, studyRun) {
 }
 
 function mountRiskAdjustedReturnOverview(root) {
-    if (adoptActiveSubjectQuery(riskAdjustedReturnSession)) {
+    const routeParamsApplied = applyRiskAdjustedRouteParams();
+    if (routeParamsApplied.changed) {
+      clearRiskAdjustedRuns();
+    }
+    if (routeParamsApplied.subject) {
+      setActiveSubjectQuery(riskAdjustedReturnSession.indexQuery);
+    } else if (adoptActiveSubjectQuery(riskAdjustedReturnSession)) {
       clearRiskAdjustedRuns();
     }
 
@@ -181,6 +227,7 @@ function mountRiskAdjustedReturnOverview(root) {
       if (subjectChanged) {
         clearRiskAdjustedRuns();
       }
+      replaceRiskAdjustedRouteParams();
     }
 
     function activateResultsTab(tabId) {
