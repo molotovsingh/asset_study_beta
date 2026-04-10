@@ -1,5 +1,9 @@
 import { studyRegistry, getStudyById } from "./studies/registry.js";
 import {
+  getActiveSubjectQuery,
+  subscribeActiveSubject,
+} from "./studies/shared/activeSubject.js";
+import {
   buildStudyViewHash,
   getDefaultStudyViewId,
   getStudyViews,
@@ -12,6 +16,18 @@ const studyMeta = document.querySelector("#study-meta");
 const studyRoot = document.querySelector("#study-root");
 
 let unmountCurrentStudy = null;
+
+const HTML_ESCAPE_MAP = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (match) => HTML_ESCAPE_MAP[match]);
+}
 
 function buildCapabilityPills(study) {
   const studyViews = getStudyViews(study);
@@ -51,6 +67,7 @@ function buildCapabilityPills(study) {
 
 function renderStudyMeta(study, activeView) {
   const capabilityPills = buildCapabilityPills(study);
+  const activeSubjectQuery = getActiveSubjectQuery();
 
   studyMeta.innerHTML = `
     <div class="meta-row">
@@ -60,6 +77,10 @@ function renderStudyMeta(study, activeView) {
     <div class="meta-row">
       <p class="meta-label">Inputs</p>
       <p>${study.inputSummary}</p>
+    </div>
+    <div class="meta-row">
+      <p class="meta-label">Active Subject</p>
+      <p><span class="mono">${escapeHtml(activeSubjectQuery)}</span></p>
     </div>
     <div class="meta-row">
       <p class="meta-label">Current View</p>
@@ -143,6 +164,19 @@ studySelect.addEventListener("change", (event) => {
 });
 
 window.addEventListener("hashchange", mountStudyRoute);
+subscribeActiveSubject(() => {
+  const route = parseRouteHash();
+  const study = getStudyById(route.studyId) || studyRegistry[0] || null;
+  if (!study) {
+    return;
+  }
+
+  const activeView = getStudyViewById(
+    study,
+    route.viewId || getDefaultStudyViewId(study),
+  );
+  renderStudyMeta(study, activeView);
+});
 
 populateStudySelect();
 mountStudyRoute();

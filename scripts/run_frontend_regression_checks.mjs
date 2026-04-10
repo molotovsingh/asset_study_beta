@@ -8,6 +8,7 @@ import {
   adoptActiveSubjectQuery,
   getActiveSubjectQuery,
   setActiveSubjectQuery,
+  subscribeActiveSubject,
 } from "../app/studies/shared/activeSubject.js";
 import {
   buildCsvRows as buildLumpsumVsSipCsvRows,
@@ -131,6 +132,16 @@ function testActiveSubjectStore() {
     session.indexQuery === "AAPL",
     "study session should receive the active subject query",
   );
+  let observedSubject = "";
+  const unsubscribe = subscribeActiveSubject((query) => {
+    observedSubject = query;
+  });
+  setActiveSubjectQuery("Sensex");
+  assert(
+    observedSubject === "Sensex",
+    "active subject listeners should observe changes",
+  );
+  unsubscribe();
 
   setActiveSubjectQuery(DEFAULT_ACTIVE_SUBJECT_QUERY);
   console.log("ok active subject");

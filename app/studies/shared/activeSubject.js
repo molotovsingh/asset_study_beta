@@ -48,9 +48,16 @@ function writeStoredSubjectQuery(query) {
 
 let activeSubjectQuery =
   readStoredSubjectQuery() || DEFAULT_ACTIVE_SUBJECT_QUERY;
+const activeSubjectListeners = new Set();
 
 function getActiveSubjectQuery() {
   return activeSubjectQuery;
+}
+
+function notifyActiveSubjectListeners() {
+  activeSubjectListeners.forEach((listener) => {
+    listener(activeSubjectQuery);
+  });
 }
 
 function setActiveSubjectQuery(value) {
@@ -61,6 +68,7 @@ function setActiveSubjectQuery(value) {
 
   activeSubjectQuery = query;
   writeStoredSubjectQuery(query);
+  notifyActiveSubjectListeners();
   return true;
 }
 
@@ -74,9 +82,15 @@ function adoptActiveSubjectQuery(session, queryKey = "indexQuery") {
   return true;
 }
 
+function subscribeActiveSubject(listener) {
+  activeSubjectListeners.add(listener);
+  return () => activeSubjectListeners.delete(listener);
+}
+
 export {
   DEFAULT_ACTIVE_SUBJECT_QUERY,
   adoptActiveSubjectQuery,
   getActiveSubjectQuery,
   setActiveSubjectQuery,
+  subscribeActiveSubject,
 };
