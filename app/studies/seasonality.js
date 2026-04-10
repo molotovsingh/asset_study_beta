@@ -16,6 +16,7 @@ import {
   setActiveSubjectQuery,
 } from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
+import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
   renderSeasonalityResults,
   seasonalityTemplate,
@@ -239,6 +240,7 @@ function mountSeasonalityOverview(root) {
         confidenceLevel: seasonalityModel.confidenceLevel,
         exportedAt: new Date(),
       };
+      recordIndexStudyRun(seasonalityStudy, state);
       renderStudyRunResults(resultsRoot, state.lastStudyRun);
       setStatus("Seasonality study completed.", "success");
     } catch (error) {

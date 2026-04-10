@@ -14,6 +14,7 @@ import {
   setActiveSubjectQuery,
 } from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
+import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
@@ -246,6 +247,7 @@ function mountLumpsumVsSipOverview(root) {
         actualEndDate: filteredSeries[filteredSeries.length - 1].date,
         exportedAt: new Date(),
       };
+      recordIndexStudyRun(lumpsumVsSipStudy, state);
       renderStudyRunResults(resultsRoot, state.lastStudyRun);
       setStatus("Lumpsum vs SIP comparison completed.", "success");
     } catch (error) {

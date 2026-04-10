@@ -11,6 +11,13 @@ import {
   subscribeActiveSubject,
 } from "../app/studies/shared/activeSubject.js";
 import {
+  MAX_RUN_HISTORY_ITEMS,
+  clearRunHistory,
+  getRecentRuns,
+  recordStudyRun,
+  subscribeRunHistory,
+} from "../app/studies/shared/runHistory.js";
+import {
   buildCsvRows as buildLumpsumVsSipCsvRows,
   buildWorkbookXml as buildLumpsumVsSipWorkbookXml,
 } from "../app/lib/lumpsumVsSipExport.js";
@@ -145,6 +152,50 @@ function testActiveSubjectStore() {
 
   setActiveSubjectQuery(DEFAULT_ACTIVE_SUBJECT_QUERY);
   console.log("ok active subject");
+}
+
+function testRunHistoryStore() {
+  clearRunHistory();
+  let observedRunCount = null;
+  const unsubscribe = subscribeRunHistory((runs) => {
+    observedRunCount = runs.length;
+  });
+
+  assert(
+    recordStudyRun({
+      studyId: "risk-adjusted-return",
+      studyTitle: "Risk-Adjusted Return",
+      subjectQuery: "AAPL",
+      selectionLabel: "Apple Inc.",
+      symbol: "AAPL",
+      requestedStartDate: new Date("2021-01-01T00:00:00"),
+      requestedEndDate: "2026-01-01",
+      completedAt: "2026-04-10T07:30:00.000Z",
+    }) === true,
+    "run history should accept a valid run",
+  );
+  assert(observedRunCount === 1, "run history listener should observe writes");
+  assert(
+    getRecentRuns()[0].requestedStartDate === "2021-01-01",
+    "run history should normalize start dates",
+  );
+
+  for (let index = 0; index < MAX_RUN_HISTORY_ITEMS + 2; index += 1) {
+    recordStudyRun({
+      studyId: "rolling-returns",
+      studyTitle: "Rolling Returns",
+      subjectQuery: `SYM${index}`,
+      completedAt: `2026-04-10T07:${String(index).padStart(2, "0")}:00.000Z`,
+    });
+  }
+  assert(
+    getRecentRuns().length === MAX_RUN_HISTORY_ITEMS,
+    "run history should cap retained runs",
+  );
+
+  unsubscribe();
+  clearRunHistory();
+  console.log("ok run history");
 }
 
 function mean(values) {
@@ -1657,6 +1708,7 @@ async function runExportRegressionChecks() {
 
 async function main() {
   testActiveSubjectStore();
+  testRunHistoryStore();
   await runRiskRegressionChecks();
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();

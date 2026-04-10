@@ -22,6 +22,7 @@ import {
 } from "./shared/activeSubject.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
+import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import { mountRiskAdjustedReturnRelative } from "./riskAdjustedReturnRelative.js";
 import { mountRiskAdjustedReturnVisuals } from "./riskAdjustedReturnVisuals.js";
 
@@ -306,6 +307,7 @@ function mountRiskAdjustedReturnOverview(root) {
           useDemoData: useDemoDataInput.checked,
           exportedAt: new Date(),
         };
+        recordIndexStudyRun(riskAdjustedReturnStudy, state);
         renderStudyRunResults(resultsRoot, state.lastStudyRun);
 
         setStatus("Study completed.", "success");

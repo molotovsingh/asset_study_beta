@@ -1,8 +1,13 @@
 import { studyRegistry, getStudyById } from "./studies/registry.js";
 import {
   getActiveSubjectQuery,
+  setActiveSubjectQuery,
   subscribeActiveSubject,
 } from "./studies/shared/activeSubject.js";
+import {
+  getRecentRuns,
+  subscribeRunHistory,
+} from "./studies/shared/runHistory.js";
 import {
   buildStudyViewHash,
   getDefaultStudyViewId,
@@ -14,6 +19,7 @@ import {
 const studySelect = document.querySelector("#study-select");
 const studyMeta = document.querySelector("#study-meta");
 const studyRoot = document.querySelector("#study-root");
+const runHistoryRoot = document.querySelector("#run-history");
 
 let unmountCurrentStudy = null;
 
@@ -108,6 +114,71 @@ function parseRouteHash() {
   return { studyId, viewId };
 }
 
+function formatHistoryTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "recently";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function renderRunHistory() {
+  const runs = getRecentRuns();
+  if (!runs.length) {
+    runHistoryRoot.innerHTML = `
+      <p class="summary-meta">Completed studies will appear here.</p>
+    `;
+    return;
+  }
+
+  runHistoryRoot.innerHTML = `
+    <div class="run-history-list">
+      ${runs
+        .map(
+          (run) => `
+            <button class="run-history-item" type="button" data-run-id="${escapeHtml(run.id)}">
+              <span class="run-history-main">${escapeHtml(run.selectionLabel)}</span>
+              <span class="run-history-meta">${escapeHtml(run.studyTitle)} · ${escapeHtml(formatHistoryTimestamp(run.completedAt))}</span>
+              ${
+                run.requestedStartDate && run.requestedEndDate
+                  ? `<span class="run-history-meta">${escapeHtml(run.requestedStartDate)} to ${escapeHtml(run.requestedEndDate)}</span>`
+                  : ""
+              }
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function handleRunHistoryClick(event) {
+  const trigger = event.target.closest("[data-run-id]");
+  if (!trigger) {
+    return;
+  }
+
+  const run = getRecentRuns().find((entry) => entry.id === trigger.dataset.runId);
+  if (!run) {
+    return;
+  }
+
+  setActiveSubjectQuery(run.subjectQuery);
+  const targetHash = buildStudyViewHash(run.studyId, "overview");
+  if (window.location.hash !== targetHash) {
+    window.location.hash = targetHash;
+    return;
+  }
+
+  mountStudyRoute();
+}
+
 function mountStudyRoute() {
   const route = parseRouteHash();
   const study = getStudyById(route.studyId) || studyRegistry[0] || null;
@@ -162,6 +233,7 @@ studySelect.addEventListener("change", (event) => {
 
   mountStudyRoute();
 });
+runHistoryRoot.addEventListener("click", handleRunHistoryClick);
 
 window.addEventListener("hashchange", mountStudyRoute);
 subscribeActiveSubject(() => {
@@ -177,6 +249,8 @@ subscribeActiveSubject(() => {
   );
   renderStudyMeta(study, activeView);
 });
+subscribeRunHistory(renderRunHistory);
 
 populateStudySelect();
+renderRunHistory();
 mountStudyRoute();

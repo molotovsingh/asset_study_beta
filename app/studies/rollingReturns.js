@@ -10,6 +10,7 @@ import {
   setActiveSubjectQuery,
 } from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
+import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
@@ -205,6 +206,7 @@ function mountRollingReturnsOverview(root) {
         exportedAt: new Date(),
         ...rollingModel,
       };
+      recordIndexStudyRun(rollingReturnsStudy, state);
       renderStudyRunResults(resultsRoot, state.lastStudyRun);
       setStatus("Rolling returns study completed.", "success");
     } catch (error) {

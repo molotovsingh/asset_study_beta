@@ -48,6 +48,7 @@ Shared support across studies includes:
 
 - built-in or bundled index datasets
 - a shared active subject that follows the user across primary study inputs
+- recent completed runs in local browser storage for quick study/subject return
 - raw yfinance symbols through the optional local backend
 - lightweight yfinance instrument profiles for selected symbols
 - date window selection

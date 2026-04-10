@@ -14,6 +14,7 @@ import {
   setActiveSubjectQuery,
 } from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
+import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
 import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
@@ -235,6 +236,7 @@ function mountSipSimulatorOverview(root) {
           null,
         exportedAt: new Date(),
       };
+      recordIndexStudyRun(sipSimulatorStudy, state);
       renderStudyRunResults(resultsRoot, state.lastStudyRun);
       setStatus("SIP simulator completed.", "success");
     } catch (error) {
