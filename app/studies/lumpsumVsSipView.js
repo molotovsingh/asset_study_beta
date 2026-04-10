@@ -337,7 +337,15 @@ function lumpsumVsSipTemplate(
 
       <section id="lumpsum-sip-results-root" class="card results-card">
         <div class="empty-state">
-          Run the study to compare historical lumpsum and SIP cohorts.
+          <p>Run the study to compare historical lumpsum and SIP cohorts.</p>
+          <div class="empty-state-actions">
+            <a class="empty-state-link" href="#lumpsum-vs-sip/overview?subject=Nifty+50&start=${defaultStartDate}&end=${defaultEndDate}&total=${defaultTotalInvestmentValue}&horizon=${defaultHorizonYears}">
+              Try Nifty 50, 3Y horizon
+            </a>
+            <a class="empty-state-link" href="#lumpsum-vs-sip/overview?subject=Sensex&start=${defaultStartDate}&end=${defaultEndDate}&total=${defaultTotalInvestmentValue}&horizon=${defaultHorizonYears}">
+              Try Sensex, 3Y horizon
+            </a>
+          </div>
         </div>
       </section>
 

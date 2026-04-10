@@ -379,7 +379,15 @@ function studyTemplate(defaultStartDate, defaultEndDate) {
 
       <section id="results-root" class="card results-card">
         <div class="empty-state">
-          Run the study to see return, risk, and drawdown metrics.
+          <p>Run the study to see return, risk, and drawdown metrics.</p>
+          <div class="empty-state-actions">
+            <a class="empty-state-link" href="#risk-adjusted-return/overview?subject=Nifty+50&start=${defaultStartDate}&end=${defaultEndDate}&rf=5.50">
+              Try Nifty 50 risk metrics
+            </a>
+            <a class="empty-state-link" href="#risk-adjusted-return/overview?subject=Sensex&start=${defaultStartDate}&end=${defaultEndDate}&rf=5.50">
+              Try Sensex comparison base
+            </a>
+          </div>
         </div>
       </section>
 

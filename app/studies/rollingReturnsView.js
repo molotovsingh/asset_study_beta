@@ -313,7 +313,15 @@ function rollingReturnsTemplate(defaultStartDate, defaultEndDate) {
 
       <section id="rolling-returns-results-root" class="card results-card">
         <div class="empty-state">
-          Run the study to see rolling CAGR ranges by horizon.
+          <p>Run the study to see rolling CAGR ranges by horizon.</p>
+          <div class="empty-state-actions">
+            <a class="empty-state-link" href="#rolling-returns/overview?subject=Nifty+50&start=${defaultStartDate}&end=${defaultEndDate}">
+              Try Nifty 50 rolling returns
+            </a>
+            <a class="empty-state-link" href="#rolling-returns/overview?subject=Sensex&start=${defaultStartDate}&end=${defaultEndDate}">
+              Try Sensex rolling returns
+            </a>
+          </div>
         </div>
       </section>
 

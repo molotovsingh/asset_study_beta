@@ -1295,11 +1295,39 @@ textarea {
 }
 
 .empty-state {
+  display: grid;
+  gap: 12px;
   padding: 32px 24px;
   border-radius: var(--radius-md);
   background: white;
   border: 1px dashed var(--line-strong);
   color: var(--muted);
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.empty-state-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 8px 11px;
+  background: rgba(13, 95, 77, 0.08);
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.empty-state-link:hover {
+  background: rgba(13, 95, 77, 0.14);
 }
 
 .selection-panel {

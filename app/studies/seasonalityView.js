@@ -364,7 +364,15 @@ function seasonalityTemplate(defaultStartDate, defaultEndDate, includePartialMon
 
       <section id="seasonality-results-root" class="card results-card">
         <div class="empty-state">
-          Run the study to see month-by-month seasonality buckets.
+          <p>Run the study to see month-by-month seasonality buckets.</p>
+          <div class="empty-state-actions">
+            <a class="empty-state-link" href="#seasonality/overview?subject=Nifty+50&start=${defaultStartDate}&end=${defaultEndDate}">
+              Try Nifty 50 monthly seasonality
+            </a>
+            <a class="empty-state-link" href="#seasonality/overview?subject=Nifty+50&start=${defaultStartDate}&end=${defaultEndDate}&partial=1">
+              Include boundary months
+            </a>
+          </div>
         </div>
       </section>
 

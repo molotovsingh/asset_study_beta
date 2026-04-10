@@ -318,7 +318,15 @@ function sipSimulatorTemplate(defaultStartDate, defaultEndDate, defaultContribut
 
       <section id="sip-simulator-results-root" class="card results-card">
         <div class="empty-state">
-          Run the study to compare SIP outcomes across historical start months.
+          <p>Run the study to compare SIP outcomes across historical start months.</p>
+          <div class="empty-state-actions">
+            <a class="empty-state-link" href="#sip-simulator/overview?subject=Nifty+50&start=${defaultStartDate}&end=${defaultEndDate}&contribution=${defaultContributionValue}">
+              Try Nifty 50 monthly SIP
+            </a>
+            <a class="empty-state-link" href="#sip-simulator/overview?subject=Sensex&start=${defaultStartDate}&end=${defaultEndDate}&contribution=${defaultContributionValue}">
+              Try Sensex monthly SIP
+            </a>
+          </div>
         </div>
       </section>
 
