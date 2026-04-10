@@ -283,13 +283,10 @@ function rollingReturnsTemplate(defaultStartDate, defaultEndDate) {
 
       <section class="card study-primary">
         <form id="rolling-returns-study-form" class="card-grid">
-          <div class="card-wide">
-            <label class="field-label" for="rolling-returns-query">Dataset Or Symbol</label>
-            <input id="rolling-returns-query" class="input" type="text" list="rolling-returns-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
+          <div class="card-wide study-subject-context">
+            <p class="meta-label">Active Asset</p>
+            <input id="rolling-returns-query" type="hidden" value="Nifty 50">
             <datalist id="rolling-returns-suggestions"></datalist>
-            <p class="helper">
-              Examples: <span class="mono">Nifty 50</span>, <span class="mono">Sensex</span>, <span class="mono">^GSPC</span>, <span class="mono">AAPL</span>.
-            </p>
             <div id="rolling-returns-summary"></div>
           </div>
 

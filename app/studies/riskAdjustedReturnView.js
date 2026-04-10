@@ -320,7 +320,7 @@ function studyTemplate(defaultStartDate, defaultEndDate) {
           <p class="study-kicker">Study 01</p>
           <h2>Risk-Adjusted Return</h2>
           <p>
-            Compare return, risk, and drawdown for a bundled dataset or live symbol.
+            Compare return, risk, and drawdown for the active asset.
           </p>
         </div>
         <div class="note-box">
@@ -335,13 +335,10 @@ function studyTemplate(defaultStartDate, defaultEndDate) {
 
       <section class="card study-primary">
           <form id="risk-study-form" class="card-grid">
-            <div class="card-wide">
-              <label class="field-label" for="index-query">Index Or Symbol</label>
-              <input id="index-query" class="input" type="text" list="index-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
+            <div class="card-wide study-subject-context">
+              <p class="meta-label">Active Asset</p>
+              <input id="index-query" type="hidden" value="Nifty 50">
               <datalist id="index-suggestions"></datalist>
-              <p class="helper">
-                Examples: <span class="mono">Nifty 50</span>, <span class="mono">Sensex</span>, <span class="mono">AAPL</span>, <span class="mono">^NSEI</span>, <span class="mono">ETH-USD</span>.
-              </p>
               <div id="index-summary"></div>
             </div>
 

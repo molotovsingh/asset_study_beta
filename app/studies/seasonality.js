@@ -49,9 +49,7 @@ function validateStudyInputs(selection, startValue, endValue) {
   const end = new Date(`${endValue}T00:00:00`);
 
   if (!selection) {
-    throw new Error(
-      "Enter a dataset name or a yfinance symbol before running the study.",
-    );
+    throw new Error("Set an active asset in the sidebar before running the study.");
   }
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -299,17 +297,10 @@ function mountSeasonalityOverview(root) {
     setStatus("Loaded a trailing 5-year window.", "info");
   }
 
-  function handleSelectionInput() {
-    persistFormState();
-    updateIndexSummary();
-  }
-
   function handleFormFieldChange() {
     persistFormState();
   }
 
-  indexQueryInput.addEventListener("input", handleSelectionInput);
-  indexQueryInput.addEventListener("change", handleSelectionInput);
   startDateInput.addEventListener("input", handleFormFieldChange);
   endDateInput.addEventListener("input", handleFormFieldChange);
   includePartialInput.addEventListener("change", handleFormFieldChange);
@@ -326,8 +317,6 @@ function mountSeasonalityOverview(root) {
   }
 
   return () => {
-    indexQueryInput.removeEventListener("input", handleSelectionInput);
-    indexQueryInput.removeEventListener("change", handleSelectionInput);
     startDateInput.removeEventListener("input", handleFormFieldChange);
     endDateInput.removeEventListener("input", handleFormFieldChange);
     includePartialInput.removeEventListener("change", handleFormFieldChange);
@@ -345,9 +334,9 @@ const seasonalityStudy = {
   id: "seasonality",
   title: "Seasonality",
   description:
-    "Inspect month-of-year tendencies for one bundled dataset or yfinance symbol.",
+    "Inspect month-of-year tendencies for the active asset.",
   inputSummary:
-    "Dataset or symbol, date range, and whether to include partial boundary months.",
+    "Active asset from the sidebar, date range, and partial-month handling.",
   capabilities: {
     visuals: "ready",
     exports: ["csv", "xls"],

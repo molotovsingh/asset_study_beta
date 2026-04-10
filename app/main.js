@@ -21,6 +21,8 @@ const studySelect = document.querySelector("#study-select");
 const studyMeta = document.querySelector("#study-meta");
 const studyRoot = document.querySelector("#study-root");
 const runHistoryRoot = document.querySelector("#run-history");
+const activeSubjectForm = document.querySelector("#active-subject-form");
+const activeSubjectInput = document.querySelector("#active-subject-input");
 
 let unmountCurrentStudy = null;
 
@@ -74,7 +76,6 @@ function buildCapabilityPills(study) {
 
 function renderStudyMeta(study, activeView) {
   const capabilityPills = buildCapabilityPills(study);
-  const activeSubjectQuery = getActiveSubjectQuery();
 
   studyMeta.innerHTML = `
     <div class="meta-row">
@@ -84,10 +85,6 @@ function renderStudyMeta(study, activeView) {
     <div class="meta-row">
       <p class="meta-label">Inputs</p>
       <p>${study.inputSummary}</p>
-    </div>
-    <div class="meta-row">
-      <p class="meta-label">Active Subject</p>
-      <p><span class="mono">${escapeHtml(activeSubjectQuery)}</span></p>
     </div>
     <div class="meta-row">
       <p class="meta-label">Current View</p>
@@ -106,6 +103,41 @@ function renderStudyMeta(study, activeView) {
       </div>
     </div>
   `;
+}
+
+function renderActiveSubjectControl() {
+  activeSubjectInput.value = getActiveSubjectQuery();
+}
+
+function applyActiveSubjectFromSidebar() {
+  const nextSubject = activeSubjectInput.value.trim();
+  if (!nextSubject) {
+    activeSubjectInput.value = getActiveSubjectQuery();
+    return;
+  }
+
+  setActiveSubjectQuery(nextSubject);
+
+  const route = parseRouteHash();
+  const study = getStudyById(route.studyId) || studyRegistry[0] || null;
+  if (!study) {
+    return;
+  }
+
+  const activeView = getStudyViewById(
+    study,
+    route.viewId || getDefaultStudyViewId(study),
+  );
+  const nextParams = new URLSearchParams(route.params);
+  nextParams.set("subject", nextSubject);
+  const targetHash = buildStudyViewHash(study.id, activeView.id, nextParams);
+
+  if (window.location.hash !== targetHash) {
+    window.location.hash = targetHash;
+    return;
+  }
+
+  mountStudyRoute();
 }
 
 function parseRouteHash() {
@@ -248,7 +280,7 @@ function mountStudyRoute() {
 
   studySelect.value = study.id;
   renderStudyMeta(study, activeView);
-  studyRoot.innerHTML = renderStudyShell(study, activeView.id);
+  studyRoot.innerHTML = renderStudyShell(study, activeView.id, route.params);
 
   const viewRoot = studyRoot.querySelector("#study-view-root");
   unmountCurrentStudy = activeView.mount(viewRoot);
@@ -269,7 +301,9 @@ studySelect.addEventListener("change", (event) => {
     return;
   }
 
-  const targetHash = buildStudyViewHash(study.id, getDefaultStudyViewId(study));
+  const targetHash = buildStudyViewHash(study.id, getDefaultStudyViewId(study), {
+    subject: getActiveSubjectQuery(),
+  });
   if (window.location.hash !== targetHash) {
     window.location.hash = targetHash;
     return;
@@ -279,9 +313,17 @@ studySelect.addEventListener("change", (event) => {
 });
 runHistoryRoot.addEventListener("click", handleRunHistoryClick);
 studyRoot.addEventListener("click", handleStudyRootClick);
+activeSubjectForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  applyActiveSubjectFromSidebar();
+});
+activeSubjectInput.addEventListener("change", () => {
+  applyActiveSubjectFromSidebar();
+});
 
 window.addEventListener("hashchange", mountStudyRoute);
 subscribeActiveSubject(() => {
+  renderActiveSubjectControl();
   const route = parseRouteHash();
   const study = getStudyById(route.studyId) || studyRegistry[0] || null;
   if (!study) {
@@ -297,5 +339,6 @@ subscribeActiveSubject(() => {
 subscribeRunHistory(renderRunHistory);
 
 populateStudySelect();
+renderActiveSubjectControl();
 renderRunHistory();
 mountStudyRoute();

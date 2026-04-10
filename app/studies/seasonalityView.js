@@ -329,13 +329,10 @@ function seasonalityTemplate(defaultStartDate, defaultEndDate, includePartialMon
 
       <section class="card study-primary">
         <form id="seasonality-study-form" class="card-grid">
-          <div class="card-wide">
-            <label class="field-label" for="seasonality-query">Dataset Or Symbol</label>
-            <input id="seasonality-query" class="input" type="text" list="seasonality-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
+          <div class="card-wide study-subject-context">
+            <p class="meta-label">Active Asset</p>
+            <input id="seasonality-query" type="hidden" value="Nifty 50">
             <datalist id="seasonality-suggestions"></datalist>
-            <p class="helper">
-              Examples: <span class="mono">Nifty 50</span>, <span class="mono">Sensex</span>, <span class="mono">^GSPC</span>, <span class="mono">AAPL</span>.
-            </p>
             <div id="seasonality-summary"></div>
           </div>
 

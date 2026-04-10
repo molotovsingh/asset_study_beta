@@ -62,9 +62,7 @@ function validateStudyInputs(
   const horizonYears = Number(horizonYearsValue);
 
   if (!selection) {
-    throw new Error(
-      "Enter a dataset name or a yfinance symbol before running the study.",
-    );
+    throw new Error("Set an active asset in the sidebar before running the study.");
   }
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -319,18 +317,11 @@ function mountLumpsumVsSipOverview(root) {
     setStatus("Loaded a trailing 5-year window.", "info");
   }
 
-  function handleSelectionInput() {
-    persistFormState();
-    updateIndexSummary();
-  }
-
   function handleFormFieldChange() {
     persistFormState();
   }
 
   form.addEventListener("submit", handleSubmit);
-  indexQueryInput.addEventListener("input", handleSelectionInput);
-  indexQueryInput.addEventListener("change", handleSelectionInput);
   totalInvestmentInput.addEventListener("input", handleFormFieldChange);
   totalInvestmentInput.addEventListener("change", handleFormFieldChange);
   horizonYearsInput.addEventListener("change", handleFormFieldChange);
@@ -352,8 +343,6 @@ function mountLumpsumVsSipOverview(root) {
 
   return () => {
     form.removeEventListener("submit", handleSubmit);
-    indexQueryInput.removeEventListener("input", handleSelectionInput);
-    indexQueryInput.removeEventListener("change", handleSelectionInput);
     totalInvestmentInput.removeEventListener("input", handleFormFieldChange);
     totalInvestmentInput.removeEventListener("change", handleFormFieldChange);
     horizonYearsInput.removeEventListener("change", handleFormFieldChange);
@@ -374,7 +363,7 @@ const lumpsumVsSipStudy = {
   description:
     "Compare the same total capital invested upfront versus spread monthly across historical start cohorts.",
   inputSummary:
-    "Dataset or symbol, date range, total investment amount, and fixed horizon.",
+    "Active asset from the sidebar, date range, total investment amount, and fixed horizon.",
   capabilities: {
     visuals: "ready",
     exports: ["csv", "xls"],

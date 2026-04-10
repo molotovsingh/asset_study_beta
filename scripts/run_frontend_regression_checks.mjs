@@ -7,6 +7,7 @@ import { buildDrawdownStudy } from "../app/lib/drawdownStudy.js";
 import {
   buildStudyViewHash,
   parseStudyViewHash,
+  renderStudyShell,
 } from "../app/studies/studyShell.js";
 import {
   DEFAULT_ACTIVE_SUBJECT_QUERY,
@@ -261,6 +262,32 @@ function testShareableInputUrls() {
   assert(
     buildCommonIndexParams(session).subject === "AAPL",
     "share URL common params should serialize subject",
+  );
+
+  const shellHtml = renderStudyShell(
+    {
+      id: "risk-adjusted-return",
+      views: [
+        {
+          id: "overview",
+          label: "Overview",
+          summary: "Overview",
+          status: "ready",
+        },
+        {
+          id: "visuals",
+          label: "Visuals",
+          summary: "Visuals",
+          status: "ready",
+        },
+      ],
+    },
+    "overview",
+    route.params,
+  );
+  assert(
+    shellHtml.includes("#risk-adjusted-return/visuals?subject=AAPL"),
+    "study view links should preserve active subject params",
   );
   console.log("ok shareable inputs");
 }

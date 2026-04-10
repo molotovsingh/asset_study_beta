@@ -283,19 +283,16 @@ function sipSimulatorTemplate(defaultStartDate, defaultEndDate, defaultContribut
 
       <section class="card study-primary">
         <form id="sip-simulator-study-form" class="card-grid">
-          <div class="card-wide">
-            <label class="field-label" for="sip-simulator-query">Dataset Or Symbol</label>
-            <input id="sip-simulator-query" class="input" type="text" list="sip-simulator-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
+          <div class="card-wide study-subject-context">
+            <p class="meta-label">Active Asset</p>
+            <input id="sip-simulator-query" type="hidden" value="Nifty 50">
             <datalist id="sip-simulator-suggestions"></datalist>
-            <p class="helper">
-              Examples: <span class="mono">Nifty 50</span>, <span class="mono">Sensex</span>, <span class="mono">^GSPC</span>, <span class="mono">AAPL</span>.
-            </p>
             <div id="sip-simulator-summary"></div>
           </div>
 
           <div>
             <label class="field-label" for="sip-simulator-contribution">Monthly Contribution</label>
-            <input id="sip-simulator-contribution" class="input" type="number" min="1" step="100" value="${defaultContributionValue}">
+            <input id="sip-simulator-contribution" class="input" type="number" min="0" step="100" value="${defaultContributionValue}">
           </div>
 
           <div>

@@ -46,9 +46,7 @@ function validateStudyInputs(selection, startValue, endValue) {
   const end = new Date(`${endValue}T00:00:00`);
 
   if (!selection) {
-    throw new Error(
-      "Enter a dataset name or a yfinance symbol before running the study.",
-    );
+    throw new Error("Set an active asset in the sidebar before running the study.");
   }
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -248,18 +246,11 @@ function mountRollingReturnsOverview(root) {
     setStatus("Loaded a trailing 5-year window.", "info");
   }
 
-  function handleSelectionInput() {
-    persistFormState();
-    updateIndexSummary();
-  }
-
   function handleFormFieldChange() {
     persistFormState();
   }
 
   form.addEventListener("submit", handleSubmit);
-  indexQueryInput.addEventListener("input", handleSelectionInput);
-  indexQueryInput.addEventListener("change", handleSelectionInput);
   startDateInput.addEventListener("change", handleFormFieldChange);
   endDateInput.addEventListener("change", handleFormFieldChange);
   lastFiveYearsButton.addEventListener("click", applyLastFiveYears);
@@ -278,8 +269,6 @@ function mountRollingReturnsOverview(root) {
 
   return () => {
     form.removeEventListener("submit", handleSubmit);
-    indexQueryInput.removeEventListener("input", handleSelectionInput);
-    indexQueryInput.removeEventListener("change", handleSelectionInput);
     startDateInput.removeEventListener("change", handleFormFieldChange);
     endDateInput.removeEventListener("change", handleFormFieldChange);
     lastFiveYearsButton.removeEventListener("click", applyLastFiveYears);
@@ -297,7 +286,7 @@ const rollingReturnsStudy = {
   description:
     "Track how rolling 1Y, 3Y, 5Y, and 10Y CAGR changed across historical market dates.",
   inputSummary:
-    "Dataset or symbol plus the active date range that defines which rolling windows can form.",
+    "Active asset from the sidebar plus the date range that defines which rolling windows can form.",
   capabilities: {
     visuals: "ready",
     exports: ["csv", "xls"],

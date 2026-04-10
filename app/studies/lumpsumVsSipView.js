@@ -295,19 +295,16 @@ function lumpsumVsSipTemplate(
 
       <section class="card study-primary">
         <form id="lumpsum-sip-study-form" class="card-grid">
-          <div class="card-wide">
-            <label class="field-label" for="lumpsum-sip-query">Dataset Or Symbol</label>
-            <input id="lumpsum-sip-query" class="input" type="text" list="lumpsum-sip-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
+          <div class="card-wide study-subject-context">
+            <p class="meta-label">Active Asset</p>
+            <input id="lumpsum-sip-query" type="hidden" value="Nifty 50">
             <datalist id="lumpsum-sip-suggestions"></datalist>
-            <p class="helper">
-              Examples: <span class="mono">Nifty 50</span>, <span class="mono">Sensex</span>, <span class="mono">^GSPC</span>, <span class="mono">AAPL</span>.
-            </p>
             <div id="lumpsum-sip-summary"></div>
           </div>
 
           <div>
             <label class="field-label" for="lumpsum-sip-total-investment">Total Investment</label>
-            <input id="lumpsum-sip-total-investment" class="input" type="number" min="1" step="1000" value="${defaultTotalInvestmentValue}">
+            <input id="lumpsum-sip-total-investment" class="input" type="number" min="0" step="1000" value="${defaultTotalInvestmentValue}">
           </div>
 
           <div>

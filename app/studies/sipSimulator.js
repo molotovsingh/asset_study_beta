@@ -54,9 +54,7 @@ function validateStudyInputs(selection, startValue, endValue, monthlyContributio
   const monthlyContribution = Number(monthlyContributionValue);
 
   if (!selection) {
-    throw new Error(
-      "Enter a dataset name or a yfinance symbol before running the study.",
-    );
+    throw new Error("Set an active asset in the sidebar before running the study.");
   }
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -297,18 +295,11 @@ function mountSipSimulatorOverview(root) {
     setStatus("Loaded a trailing 5-year window.", "info");
   }
 
-  function handleSelectionInput() {
-    persistFormState();
-    updateIndexSummary();
-  }
-
   function handleFormFieldChange() {
     persistFormState();
   }
 
   form.addEventListener("submit", handleSubmit);
-  indexQueryInput.addEventListener("input", handleSelectionInput);
-  indexQueryInput.addEventListener("change", handleSelectionInput);
   contributionInput.addEventListener("input", handleFormFieldChange);
   contributionInput.addEventListener("change", handleFormFieldChange);
   startDateInput.addEventListener("change", handleFormFieldChange);
@@ -329,8 +320,6 @@ function mountSipSimulatorOverview(root) {
 
   return () => {
     form.removeEventListener("submit", handleSubmit);
-    indexQueryInput.removeEventListener("input", handleSelectionInput);
-    indexQueryInput.removeEventListener("change", handleSelectionInput);
     contributionInput.removeEventListener("input", handleFormFieldChange);
     contributionInput.removeEventListener("change", handleFormFieldChange);
     startDateInput.removeEventListener("change", handleFormFieldChange);
@@ -350,7 +339,7 @@ const sipSimulatorStudy = {
   description:
     "Simulate a fixed monthly SIP across every eligible start month and compare XIRR, terminal value, and cohort spread.",
   inputSummary:
-    "Dataset or symbol, date range, and fixed monthly contribution amount.",
+    "Active asset from the sidebar, date range, and fixed monthly contribution amount.",
   capabilities: {
     visuals: "ready",
     exports: ["csv", "xls"],

@@ -303,13 +303,10 @@ function drawdownStudyTemplate(defaultStartDate, defaultEndDate) {
 
       <section class="card study-primary">
         <form id="drawdown-study-form" class="card-grid">
-          <div class="card-wide">
-            <label class="field-label" for="drawdown-query">Dataset Or Symbol</label>
-            <input id="drawdown-query" class="input" type="text" list="drawdown-suggestions" value="Nifty 50" autocomplete="off" spellcheck="false">
+          <div class="card-wide study-subject-context">
+            <p class="meta-label">Active Asset</p>
+            <input id="drawdown-query" type="hidden" value="Nifty 50">
             <datalist id="drawdown-suggestions"></datalist>
-            <p class="helper">
-              Examples: <span class="mono">Nifty 50</span>, <span class="mono">Sensex</span>, <span class="mono">^GSPC</span>, <span class="mono">AAPL</span>.
-            </p>
             <div id="drawdown-summary"></div>
           </div>
 

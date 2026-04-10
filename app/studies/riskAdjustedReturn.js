@@ -86,9 +86,7 @@ function validateStudyInputs(selection, startValue, endValue, riskFreeValue) {
   const riskFreeRate = Number(riskFreeValue);
 
   if (!selection) {
-    throw new Error(
-      "Enter an index name or a yfinance symbol before running the study.",
-    );
+    throw new Error("Set an active asset in the sidebar before running the study.");
   }
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     throw new Error("Pick a valid start date and end date.");
@@ -379,17 +377,10 @@ function mountRiskAdjustedReturnOverview(root) {
       setStatus("Loaded a trailing 5-year window.", "info");
     }
 
-    function handleSelectionInput() {
-      persistFormState();
-      updateIndexSummary();
-    }
-
     function handleFormFieldChange() {
       persistFormState();
     }
 
-    indexQueryInput.addEventListener("input", handleSelectionInput);
-    indexQueryInput.addEventListener("change", handleSelectionInput);
     useDemoDataInput.addEventListener("change", updateIndexSummary);
     useDemoDataInput.addEventListener("change", handleFormFieldChange);
     startDateInput.addEventListener("input", handleFormFieldChange);
@@ -409,8 +400,6 @@ function mountRiskAdjustedReturnOverview(root) {
 
     return () => {
       form.removeEventListener("submit", handleSubmit);
-      indexQueryInput.removeEventListener("input", handleSelectionInput);
-      indexQueryInput.removeEventListener("change", handleSelectionInput);
       useDemoDataInput.removeEventListener("change", updateIndexSummary);
       useDemoDataInput.removeEventListener("change", handleFormFieldChange);
       startDateInput.removeEventListener("input", handleFormFieldChange);
@@ -433,9 +422,9 @@ const riskAdjustedReturnStudy = {
   id: "risk-adjusted-return",
   title: "Risk-Adjusted Return",
   description:
-    "Measure return, risk, and drawdown for a bundled dataset or yfinance symbol.",
+    "Measure return, risk, and drawdown for the active asset.",
   inputSummary:
-    "Dataset or symbol, date range, and annual risk-free rate.",
+    "Active asset from the sidebar, date range, and annual risk-free rate.",
   capabilities: {
     visuals: "ready",
     relative: "ready",

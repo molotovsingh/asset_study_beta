@@ -82,8 +82,9 @@ function parseStudyViewHash(hashValue = window.location.hash) {
   };
 }
 
-function renderStudyShell(study, activeViewId) {
+function renderStudyShell(study, activeViewId, routeParams = null) {
   const views = getStudyViews(study);
+  const viewParams = toRouteSearchParams(routeParams);
 
   return `
     <div class="study-view-shell">
@@ -100,7 +101,7 @@ function renderStudyShell(study, activeViewId) {
               return `
                 <a
                   class="study-view-link${isActive ? " is-active" : ""}"
-                  href="${buildStudyViewHash(study.id, view.id)}"
+                  href="${buildStudyViewHash(study.id, view.id, viewParams)}"
                   ${isActive ? 'aria-current="page"' : ""}
                 >
                   <span>${view.label}</span>

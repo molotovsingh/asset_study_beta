@@ -19,6 +19,24 @@
           </p>
         </div>
 
+        <section class="panel active-asset-panel">
+          <p class="meta-label">Active Asset</p>
+          <form id="active-subject-form" class="active-asset-form">
+            <label class="sr-only" for="active-subject-input">Active asset symbol or name</label>
+            <input
+              id="active-subject-input"
+              class="input active-asset-input"
+              type="text"
+              autocomplete="off"
+              placeholder="Nifty 50, AAPL, ^NSEI"
+            >
+            <button class="button ghost active-asset-button" type="submit">Set</button>
+          </form>
+          <p class="active-asset-copy">
+            This asset carries across studies. Lookback, rates, windows, and benchmarks stay inside each study.
+          </p>
+        </section>
+
         <section class="panel">
           <label class="field-label" for="study-select">Study</label>
           <select id="study-select" class="input"></select>
