@@ -319,6 +319,76 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_derived_daily_metrics_symbol_date
             ON derived_daily_metrics (symbol_id, metric_date);
+
+        CREATE TABLE IF NOT EXISTS options_screener_runs (
+            run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            universe_id TEXT NOT NULL,
+            universe_label TEXT NOT NULL,
+            minimum_dte INTEGER NOT NULL,
+            max_contracts INTEGER NOT NULL,
+            requested_symbols_json TEXT NOT NULL,
+            failure_json TEXT NOT NULL DEFAULT '[]',
+            row_count INTEGER NOT NULL DEFAULT 0,
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            as_of_date TEXT,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_options_screener_runs_created_at
+            ON options_screener_runs (created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS options_screener_rows (
+            run_id INTEGER NOT NULL,
+            symbol_id INTEGER NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'yfinance',
+            as_of_date TEXT NOT NULL,
+            expiry TEXT,
+            spot_price REAL,
+            strike REAL,
+            days_to_expiry INTEGER,
+            straddle_mid_price REAL,
+            implied_move_percent REAL,
+            straddle_implied_volatility REAL,
+            chain_implied_volatility REAL,
+            historical_volatility_20 REAL,
+            historical_volatility_60 REAL,
+            iv_hv20_ratio REAL,
+            iv_hv60_ratio REAL,
+            iv_percentile REAL,
+            iv_hv20_percentile REAL,
+            combined_open_interest INTEGER,
+            combined_volume INTEGER,
+            spread_share REAL,
+            pricing_label TEXT,
+            pricing_bucket TEXT,
+            direction_score REAL,
+            direction_label TEXT,
+            trend_score REAL,
+            trend_label TEXT,
+            trend_return_63 REAL,
+            trend_return_252 REAL,
+            seasonality_score REAL,
+            seasonality_label TEXT,
+            seasonality_month_label TEXT,
+            seasonality_mean_return REAL,
+            seasonality_median_return REAL,
+            seasonality_win_rate REAL,
+            seasonality_average_absolute_return REAL,
+            seasonality_observations INTEGER,
+            vol_pricing_score REAL,
+            execution_score REAL,
+            confidence_score REAL,
+            candidate_advisory TEXT,
+            candidate_bucket TEXT,
+            warnings_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (run_id, symbol_id),
+            FOREIGN KEY (run_id) REFERENCES options_screener_runs(run_id) ON DELETE CASCADE,
+            FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_options_screener_rows_symbol_date
+            ON options_screener_rows (symbol_id, as_of_date);
         """
     )
     existing_series_columns = {
@@ -2048,6 +2118,374 @@ def load_derived_daily_metrics(
         }
         for row in rows
     ]
+
+
+def load_recent_options_screener_runs(limit: int = 20) -> list[dict]:
+    normalized_limit = max(1, int(limit or 20))
+    with open_runtime_store() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                run_id,
+                universe_id,
+                universe_label,
+                minimum_dte,
+                max_contracts,
+                requested_symbols_json,
+                failure_json,
+                row_count,
+                failure_count,
+                as_of_date,
+                created_at
+            FROM options_screener_runs
+            ORDER BY created_at DESC, run_id DESC
+            LIMIT ?
+            """,
+            (normalized_limit,),
+        ).fetchall()
+
+    return [
+        {
+            "runId": row["run_id"],
+            "universeId": row["universe_id"],
+            "universeLabel": row["universe_label"],
+            "minimumDte": row["minimum_dte"],
+            "maxContracts": row["max_contracts"],
+            "requestedSymbols": json.loads(row["requested_symbols_json"] or "[]"),
+            "failures": json.loads(row["failure_json"] or "[]"),
+            "rowCount": row["row_count"],
+            "failureCount": row["failure_count"],
+            "asOfDate": row["as_of_date"],
+            "createdAt": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def load_options_screener_rows(
+    *,
+    symbol: str | None = None,
+    universe_id: str | None = None,
+    run_id: int | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    normalized_limit = max(1, int(limit or 100))
+    with open_runtime_store() as connection:
+        clauses = []
+        params: list[str | int] = []
+        if symbol:
+            symbol_row = _load_symbol_row(connection, symbol)
+            if symbol_row is None:
+                return []
+            clauses.append("rows.symbol_id = ?")
+            params.append(int(symbol_row["symbol_id"]))
+        if universe_id:
+            clauses.append("runs.universe_id = ?")
+            params.append(str(universe_id).strip())
+        if run_id is not None:
+            clauses.append("rows.run_id = ?")
+            params.append(int(run_id))
+
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = connection.execute(
+            f"""
+            SELECT
+                runs.run_id,
+                runs.universe_id,
+                runs.universe_label,
+                runs.created_at,
+                runs.as_of_date AS run_as_of_date,
+                symbols.symbol,
+                rows.provider,
+                rows.as_of_date,
+                rows.expiry,
+                rows.spot_price,
+                rows.strike,
+                rows.days_to_expiry,
+                rows.straddle_mid_price,
+                rows.implied_move_percent,
+                rows.straddle_implied_volatility,
+                rows.chain_implied_volatility,
+                rows.historical_volatility_20,
+                rows.historical_volatility_60,
+                rows.iv_hv20_ratio,
+                rows.iv_hv60_ratio,
+                rows.iv_percentile,
+                rows.iv_hv20_percentile,
+                rows.combined_open_interest,
+                rows.combined_volume,
+                rows.spread_share,
+                rows.pricing_label,
+                rows.pricing_bucket,
+                rows.direction_score,
+                rows.direction_label,
+                rows.trend_score,
+                rows.trend_label,
+                rows.trend_return_63,
+                rows.trend_return_252,
+                rows.seasonality_score,
+                rows.seasonality_label,
+                rows.seasonality_month_label,
+                rows.seasonality_mean_return,
+                rows.seasonality_median_return,
+                rows.seasonality_win_rate,
+                rows.seasonality_average_absolute_return,
+                rows.seasonality_observations,
+                rows.vol_pricing_score,
+                rows.execution_score,
+                rows.confidence_score,
+                rows.candidate_advisory,
+                rows.candidate_bucket,
+                rows.warnings_json
+            FROM options_screener_rows AS rows
+            INNER JOIN options_screener_runs AS runs
+                ON runs.run_id = rows.run_id
+            INNER JOIN symbols
+                ON symbols.symbol_id = rows.symbol_id
+            {where_clause}
+            ORDER BY runs.created_at DESC, rows.symbol_id ASC
+            LIMIT ?
+            """,
+            tuple([*params, normalized_limit]),
+        ).fetchall()
+
+    return [
+        {
+            "runId": row["run_id"],
+            "universeId": row["universe_id"],
+            "universeLabel": row["universe_label"],
+            "createdAt": row["created_at"],
+            "runAsOfDate": row["run_as_of_date"],
+            "symbol": row["symbol"],
+            "provider": row["provider"],
+            "asOfDate": row["as_of_date"],
+            "expiry": row["expiry"],
+            "spotPrice": row["spot_price"],
+            "strike": row["strike"],
+            "daysToExpiry": row["days_to_expiry"],
+            "straddleMidPrice": row["straddle_mid_price"],
+            "impliedMovePercent": row["implied_move_percent"],
+            "straddleImpliedVolatility": row["straddle_implied_volatility"],
+            "chainImpliedVolatility": row["chain_implied_volatility"],
+            "historicalVolatility20": row["historical_volatility_20"],
+            "historicalVolatility60": row["historical_volatility_60"],
+            "ivHv20Ratio": row["iv_hv20_ratio"],
+            "ivHv60Ratio": row["iv_hv60_ratio"],
+            "ivPercentile": row["iv_percentile"],
+            "ivHv20Percentile": row["iv_hv20_percentile"],
+            "combinedOpenInterest": row["combined_open_interest"],
+            "combinedVolume": row["combined_volume"],
+            "spreadShare": row["spread_share"],
+            "pricingLabel": row["pricing_label"],
+            "pricingBucket": row["pricing_bucket"],
+            "directionScore": row["direction_score"],
+            "directionLabel": row["direction_label"],
+            "trendScore": row["trend_score"],
+            "trendLabel": row["trend_label"],
+            "trendReturn63": row["trend_return_63"],
+            "trendReturn252": row["trend_return_252"],
+            "seasonalityScore": row["seasonality_score"],
+            "seasonalityLabel": row["seasonality_label"],
+            "seasonalityMonthLabel": row["seasonality_month_label"],
+            "seasonalityMeanReturn": row["seasonality_mean_return"],
+            "seasonalityMedianReturn": row["seasonality_median_return"],
+            "seasonalityWinRate": row["seasonality_win_rate"],
+            "seasonalityAverageAbsoluteReturn": row["seasonality_average_absolute_return"],
+            "seasonalityObservations": row["seasonality_observations"],
+            "volPricingScore": row["vol_pricing_score"],
+            "executionScore": row["execution_score"],
+            "confidenceScore": row["confidence_score"],
+            "candidateAdvisory": row["candidate_advisory"],
+            "candidateBucket": row["candidate_bucket"],
+            "warnings": json.loads(row["warnings_json"] or "[]"),
+        }
+        for row in rows
+    ]
+
+
+def record_options_screener_run(
+    *,
+    universe_id: str,
+    universe_label: str,
+    minimum_dte: int,
+    max_contracts: int,
+    requested_symbols: list[str],
+    failures: list[dict],
+    rows: list[dict],
+    created_at: str | None = None,
+) -> dict:
+    if not rows:
+        raise RuntimeError("At least one screener row is required to record a run.")
+
+    timestamp = str(created_at or to_iso(now_utc())).strip()
+    normalized_requested_symbols = [
+        normalize_symbol(symbol)
+        for symbol in requested_symbols
+        if normalize_symbol(symbol)
+    ]
+    as_of_date = max(
+        (str(row.get("asOfDate") or "").strip() for row in rows if row.get("asOfDate")),
+        default=None,
+    )
+
+    with open_runtime_store() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO options_screener_runs (
+                universe_id,
+                universe_label,
+                minimum_dte,
+                max_contracts,
+                requested_symbols_json,
+                failure_json,
+                row_count,
+                failure_count,
+                as_of_date,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(universe_id or "custom").strip() or "custom",
+                str(universe_label or "Custom Universe").strip() or "Custom Universe",
+                int(minimum_dte or 25),
+                int(max_contracts or 1),
+                json.dumps(normalized_requested_symbols, separators=(",", ":")),
+                json.dumps(failures or [], separators=(",", ":")),
+                len(rows),
+                len(failures or []),
+                as_of_date,
+                timestamp,
+            ),
+        )
+        run_id = int(cursor.lastrowid)
+
+        row_payloads = []
+        for row in rows:
+            normalized_symbol = normalize_symbol(row.get("symbol"))
+            if not normalized_symbol:
+                continue
+            symbol_id = _ensure_symbol_row(
+                connection,
+                normalized_symbol,
+                currency=row.get("currency"),
+                provider=row.get("provider"),
+                source_series_type="Price",
+                timestamp=timestamp,
+            )
+            row_payloads.append(
+                (
+                    run_id,
+                    symbol_id,
+                    str(row.get("provider") or "yfinance").strip().lower() or "yfinance",
+                    str(row.get("asOfDate") or "").strip(),
+                    str(row.get("expiry") or "").strip() or None,
+                    _clean_number(row.get("spotPrice")),
+                    _clean_number(row.get("strike")),
+                    _clean_int(row.get("daysToExpiry")),
+                    _clean_number(row.get("straddleMidPrice")),
+                    _clean_number(row.get("impliedMovePercent")),
+                    _clean_number(row.get("straddleImpliedVolatility")),
+                    _clean_number(row.get("chainImpliedVolatility")),
+                    _clean_number(row.get("historicalVolatility20")),
+                    _clean_number(row.get("historicalVolatility60")),
+                    _clean_number(row.get("ivHv20Ratio")),
+                    _clean_number(row.get("ivHv60Ratio")),
+                    _clean_number(row.get("ivPercentile")),
+                    _clean_number(row.get("ivHv20Percentile")),
+                    _clean_int(row.get("combinedOpenInterest")),
+                    _clean_int(row.get("combinedVolume")),
+                    _clean_number(row.get("spreadShare")),
+                    _clean_text(row.get("pricingLabel")),
+                    _clean_text(row.get("pricingBucket")),
+                    _clean_number(row.get("directionScore")),
+                    _clean_text(row.get("directionLabel")),
+                    _clean_number(row.get("trendScore")),
+                    _clean_text(row.get("trendLabel")),
+                    _clean_number(row.get("trendReturn63")),
+                    _clean_number(row.get("trendReturn252")),
+                    _clean_number(row.get("seasonalityScore")),
+                    _clean_text(row.get("seasonalityLabel")),
+                    _clean_text(row.get("seasonalityMonthLabel")),
+                    _clean_number(row.get("seasonalityMeanReturn")),
+                    _clean_number(row.get("seasonalityMedianReturn")),
+                    _clean_number(row.get("seasonalityWinRate")),
+                    _clean_number(row.get("seasonalityAverageAbsoluteReturn")),
+                    _clean_int(row.get("seasonalityObservations")),
+                    _clean_number(row.get("volPricingScore")),
+                    _clean_number(row.get("executionScore")),
+                    _clean_number(row.get("confidenceScore")),
+                    _clean_text(row.get("candidateAdvisory")),
+                    _clean_text(row.get("candidateBucket")),
+                    json.dumps(row.get("warnings") or [], separators=(",", ":")),
+                    timestamp,
+                )
+            )
+
+        if not row_payloads:
+            raise RuntimeError("No valid screener rows were available to record.")
+
+        connection.executemany(
+            """
+            INSERT INTO options_screener_rows (
+                run_id,
+                symbol_id,
+                provider,
+                as_of_date,
+                expiry,
+                spot_price,
+                strike,
+                days_to_expiry,
+                straddle_mid_price,
+                implied_move_percent,
+                straddle_implied_volatility,
+                chain_implied_volatility,
+                historical_volatility_20,
+                historical_volatility_60,
+                iv_hv20_ratio,
+                iv_hv60_ratio,
+                iv_percentile,
+                iv_hv20_percentile,
+                combined_open_interest,
+                combined_volume,
+                spread_share,
+                pricing_label,
+                pricing_bucket,
+                direction_score,
+                direction_label,
+                trend_score,
+                trend_label,
+                trend_return_63,
+                trend_return_252,
+                seasonality_score,
+                seasonality_label,
+                seasonality_month_label,
+                seasonality_mean_return,
+                seasonality_median_return,
+                seasonality_win_rate,
+                seasonality_average_absolute_return,
+                seasonality_observations,
+                vol_pricing_score,
+                execution_score,
+                confidence_score,
+                candidate_advisory,
+                candidate_bucket,
+                warnings_json,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            row_payloads,
+        )
+        connection.commit()
+
+    return {
+        "runId": run_id,
+        "universeId": str(universe_id or "custom").strip() or "custom",
+        "universeLabel": str(universe_label or "Custom Universe").strip() or "Custom Universe",
+        "asOfDate": as_of_date,
+        "rowCount": len(row_payloads),
+        "failureCount": len(failures or []),
+        "createdAt": timestamp,
+    }
 
 
 def write_option_monthly_snapshot(symbol: str, snapshot: dict) -> list[dict]:

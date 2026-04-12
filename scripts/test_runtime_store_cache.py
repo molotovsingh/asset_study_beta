@@ -435,6 +435,86 @@ def test_option_snapshot_and_realized_metrics_persist():
         assert_equal(front_history[1]["daysToExpiry"], 32, "front-history should keep front-contract DTE")
 
 
+def test_options_screener_runs_persist():
+    with isolated_runtime_store():
+        summary = runtime_store.record_options_screener_run(
+            universe_id="us-liquid-10",
+            universe_label="US Liquid 10",
+            minimum_dte=25,
+            max_contracts=1,
+            requested_symbols=["AAPL", "TSLA"],
+            failures=[{"symbol": "TSLA", "error": "Timeout"}],
+            rows=[
+                {
+                    "symbol": "AAPL",
+                    "provider": "yfinance",
+                    "currency": "USD",
+                    "asOfDate": "2026-04-12",
+                    "expiry": "2026-05-15",
+                    "spotPrice": 260.48,
+                    "strike": 260,
+                    "daysToExpiry": 33,
+                    "straddleMidPrice": 17.675,
+                    "impliedMovePercent": 0.0679,
+                    "straddleImpliedVolatility": 0.2828,
+                    "chainImpliedVolatility": 0.2817,
+                    "historicalVolatility20": 0.244,
+                    "historicalVolatility60": 0.231,
+                    "ivHv20Ratio": 1.159,
+                    "ivHv60Ratio": 1.224,
+                    "ivPercentile": 0.65,
+                    "ivHv20Percentile": 0.72,
+                    "combinedOpenInterest": 22827,
+                    "combinedVolume": 3220,
+                    "spreadShare": 0.02,
+                    "pricingLabel": "Mildly Rich",
+                    "pricingBucket": "rich",
+                    "directionScore": 66.09,
+                    "directionLabel": "Long Bias",
+                    "trendScore": 68.2,
+                    "trendLabel": "Long Bias",
+                    "trendReturn63": 0.055,
+                    "trendReturn252": 0.124,
+                    "seasonalityScore": 63.98,
+                    "seasonalityLabel": "Long Bias",
+                    "seasonalityMonthLabel": "April",
+                    "seasonalityMeanReturn": 0.0356,
+                    "seasonalityMedianReturn": 0.0221,
+                    "seasonalityWinRate": 0.587,
+                    "seasonalityAverageAbsoluteReturn": 0.061,
+                    "seasonalityObservations": 23,
+                    "volPricingScore": 65.2,
+                    "executionScore": 91.7,
+                    "confidenceScore": 94.4,
+                    "candidateAdvisory": "Short Premium Candidate",
+                    "candidateBucket": "short-premium",
+                    "warnings": [],
+                }
+            ],
+            created_at="2026-04-12T08:30:00+00:00",
+        )
+
+        assert_equal(summary["universeId"], "us-liquid-10", "screener run universe should persist")
+        assert_equal(summary["rowCount"], 1, "screener run row count should persist")
+        assert_equal(summary["failureCount"], 1, "screener run failure count should persist")
+
+        recent_runs = runtime_store.load_recent_options_screener_runs(limit=5)
+        assert_equal(len(recent_runs), 1, "recent screener runs should load")
+        assert_equal(recent_runs[0]["requestedSymbols"], ["AAPL", "TSLA"], "requested symbols should round-trip")
+        assert_equal(recent_runs[0]["failures"][0]["symbol"], "TSLA", "failures should round-trip")
+
+        rows = runtime_store.load_options_screener_rows(symbol="AAPL", universe_id="us-liquid-10", limit=5)
+        assert_equal(len(rows), 1, "stored screener rows should load")
+        assert_equal(rows[0]["pricingBucket"], "rich", "pricing bucket should round-trip")
+        assert_equal(rows[0]["directionLabel"], "Long Bias", "direction label should round-trip")
+        assert_equal(rows[0]["candidateAdvisory"], "Short Premium Candidate", "candidate advisory should round-trip")
+        assert_equal(
+            runtime_store.load_options_screener_rows(run_id=summary["runId"], limit=5)[0]["symbol"],
+            "AAPL",
+            "run-id filtering should load the recorded row",
+        )
+
+
 def mark_cached_series_stale(symbol: str) -> None:
     with runtime_store.open_runtime_store() as connection:
         symbol_row = connection.execute(
@@ -568,6 +648,7 @@ def main() -> int:
     test_legacy_series_cache_migrates_to_normalized_rows()
     test_overlap_validation_detects_price_and_action_changes()
     test_option_snapshot_and_realized_metrics_persist()
+    test_options_screener_runs_persist()
     test_get_or_refresh_uses_full_then_incremental_then_rebuild()
     print("ok runtime store cache")
     return 0

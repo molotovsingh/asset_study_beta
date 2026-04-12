@@ -313,12 +313,56 @@ async function fetchMonthlyStraddleSnapshot(request) {
   return payload.snapshot;
 }
 
+async function fetchOptionsScreenerSnapshot(request) {
+  const payload = await requestJson(buildApiUrl("/options/screener-snapshot"), {
+    requestInit: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load that screener snapshot.",
+  });
+
+  if (!Array.isArray(payload?.snapshots) || !Array.isArray(payload?.failures)) {
+    throw new Error("The local data API returned an invalid options screener payload.");
+  }
+
+  return payload;
+}
+
+async function fetchOptionsScreenerHistory(request) {
+  const payload = await requestJson(buildApiUrl("/options/screener-history"), {
+    requestInit: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load screener history.",
+  });
+
+  if (!Array.isArray(payload?.runs)) {
+    throw new Error("The local data API returned an invalid options screener history payload.");
+  }
+
+  return payload;
+}
+
 export {
   LOCAL_API_COMMAND,
   buildLocalApiUnavailableMessage,
   describeFreshness,
   fetchInstrumentProfile,
   fetchIndexSeries,
+  fetchOptionsScreenerHistory,
+  fetchOptionsScreenerSnapshot,
   fetchMonthlyStraddleSnapshot,
   getManifestDataset,
   getSnapshotFreshness,
