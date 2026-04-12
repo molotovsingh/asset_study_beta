@@ -240,6 +240,85 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             website TEXT,
             raw_info_json TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS option_monthly_snapshots (
+            symbol_id INTEGER NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'yfinance',
+            as_of_date TEXT NOT NULL,
+            fetched_at TEXT NOT NULL,
+            expiry TEXT NOT NULL,
+            currency TEXT,
+            spot_date TEXT,
+            spot_price REAL,
+            minimum_dte INTEGER NOT NULL DEFAULT 25,
+            max_contracts INTEGER NOT NULL DEFAULT 4,
+            days_to_expiry INTEGER NOT NULL,
+            strike REAL,
+            call_bid REAL,
+            call_ask REAL,
+            call_last_price REAL,
+            call_mid_price REAL,
+            call_price_source TEXT,
+            call_open_interest INTEGER,
+            call_volume INTEGER,
+            call_implied_volatility REAL,
+            put_bid REAL,
+            put_ask REAL,
+            put_last_price REAL,
+            put_mid_price REAL,
+            put_price_source TEXT,
+            put_open_interest INTEGER,
+            put_volume INTEGER,
+            put_implied_volatility REAL,
+            straddle_mid_price REAL,
+            implied_move_price REAL,
+            implied_move_percent REAL,
+            straddle_implied_volatility REAL,
+            chain_implied_volatility REAL,
+            implied_volatility_gap REAL,
+            historical_volatility_20 REAL,
+            historical_volatility_60 REAL,
+            historical_volatility_120 REAL,
+            iv_hv20_ratio REAL,
+            iv_hv60_ratio REAL,
+            iv_hv120_ratio REAL,
+            iv_hv20_spread REAL,
+            iv_hv60_spread REAL,
+            iv_hv120_spread REAL,
+            combined_open_interest INTEGER,
+            combined_volume INTEGER,
+            pricing_mode TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (symbol_id, provider, as_of_date, expiry),
+            FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_option_monthly_snapshots_symbol_date
+            ON option_monthly_snapshots (symbol_id, as_of_date, expiry);
+
+        CREATE TABLE IF NOT EXISTS derived_daily_metrics (
+            symbol_id INTEGER NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'yfinance',
+            metric_date TEXT NOT NULL,
+            metric_family TEXT NOT NULL,
+            metric_key TEXT NOT NULL,
+            window_days INTEGER NOT NULL DEFAULT 0,
+            metric_value REAL,
+            source TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (
+                symbol_id,
+                provider,
+                metric_date,
+                metric_family,
+                metric_key,
+                window_days
+            ),
+            FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_derived_daily_metrics_symbol_date
+            ON derived_daily_metrics (symbol_id, metric_date);
         """
     )
     existing_series_columns = {
@@ -1662,3 +1741,509 @@ def write_instrument_profile(
         connection.commit()
 
     return load_instrument_profile(profile["symbol"]) or profile
+
+
+def load_option_monthly_snapshots(
+    symbol: str,
+    *,
+    as_of_date: str | None = None,
+    provider: str | None = None,
+) -> list[dict]:
+    normalized_symbol = normalize_symbol(symbol)
+    if not normalized_symbol:
+        return []
+
+    with open_runtime_store() as connection:
+        symbol_row = _load_symbol_row(connection, normalized_symbol)
+        if symbol_row is None:
+            return []
+
+        clauses = ["symbol_id = ?"]
+        params: list[str | int] = [int(symbol_row["symbol_id"])]
+        if as_of_date:
+            clauses.append("as_of_date = ?")
+            params.append(str(as_of_date))
+        if provider:
+            clauses.append("provider = ?")
+            params.append(str(provider).strip().lower())
+
+        rows = connection.execute(
+            f"""
+            SELECT
+                provider,
+                as_of_date,
+                fetched_at,
+                expiry,
+                currency,
+                spot_date,
+                spot_price,
+                minimum_dte,
+                max_contracts,
+                days_to_expiry,
+                strike,
+                call_bid,
+                call_ask,
+                call_last_price,
+                call_mid_price,
+                call_price_source,
+                call_open_interest,
+                call_volume,
+                call_implied_volatility,
+                put_bid,
+                put_ask,
+                put_last_price,
+                put_mid_price,
+                put_price_source,
+                put_open_interest,
+                put_volume,
+                put_implied_volatility,
+                straddle_mid_price,
+                implied_move_price,
+                implied_move_percent,
+                straddle_implied_volatility,
+                chain_implied_volatility,
+                implied_volatility_gap,
+                historical_volatility_20,
+                historical_volatility_60,
+                historical_volatility_120,
+                iv_hv20_ratio,
+                iv_hv60_ratio,
+                iv_hv120_ratio,
+                iv_hv20_spread,
+                iv_hv60_spread,
+                iv_hv120_spread,
+                combined_open_interest,
+                combined_volume,
+                pricing_mode
+            FROM option_monthly_snapshots
+            WHERE {' AND '.join(clauses)}
+            ORDER BY as_of_date DESC, expiry ASC
+            """,
+            tuple(params),
+        ).fetchall()
+
+    return [
+        {
+            "provider": row["provider"],
+            "asOfDate": row["as_of_date"],
+            "fetchedAt": row["fetched_at"],
+            "expiry": row["expiry"],
+            "currency": row["currency"],
+            "spotDate": row["spot_date"],
+            "spotPrice": row["spot_price"],
+            "minimumDte": row["minimum_dte"],
+            "maxContracts": row["max_contracts"],
+            "daysToExpiry": row["days_to_expiry"],
+            "strike": row["strike"],
+            "callBid": row["call_bid"],
+            "callAsk": row["call_ask"],
+            "callLastPrice": row["call_last_price"],
+            "callMidPrice": row["call_mid_price"],
+            "callPriceSource": row["call_price_source"],
+            "callOpenInterest": row["call_open_interest"],
+            "callVolume": row["call_volume"],
+            "callImpliedVolatility": row["call_implied_volatility"],
+            "putBid": row["put_bid"],
+            "putAsk": row["put_ask"],
+            "putLastPrice": row["put_last_price"],
+            "putMidPrice": row["put_mid_price"],
+            "putPriceSource": row["put_price_source"],
+            "putOpenInterest": row["put_open_interest"],
+            "putVolume": row["put_volume"],
+            "putImpliedVolatility": row["put_implied_volatility"],
+            "straddleMidPrice": row["straddle_mid_price"],
+            "impliedMovePrice": row["implied_move_price"],
+            "impliedMovePercent": row["implied_move_percent"],
+            "straddleImpliedVolatility": row["straddle_implied_volatility"],
+            "chainImpliedVolatility": row["chain_implied_volatility"],
+            "impliedVolatilityGap": row["implied_volatility_gap"],
+            "historicalVolatility20": row["historical_volatility_20"],
+            "historicalVolatility60": row["historical_volatility_60"],
+            "historicalVolatility120": row["historical_volatility_120"],
+            "ivHv20Ratio": row["iv_hv20_ratio"],
+            "ivHv60Ratio": row["iv_hv60_ratio"],
+            "ivHv120Ratio": row["iv_hv120_ratio"],
+            "ivHv20Spread": row["iv_hv20_spread"],
+            "ivHv60Spread": row["iv_hv60_spread"],
+            "ivHv120Spread": row["iv_hv120_spread"],
+            "combinedOpenInterest": row["combined_open_interest"],
+            "combinedVolume": row["combined_volume"],
+            "pricingMode": row["pricing_mode"],
+        }
+        for row in rows
+    ]
+
+
+def load_option_front_history(
+    symbol: str,
+    *,
+    provider: str | None = None,
+    limit: int = 252,
+) -> list[dict]:
+    normalized_symbol = normalize_symbol(symbol)
+    if not normalized_symbol:
+        return []
+
+    normalized_limit = max(1, int(limit or 252))
+    with open_runtime_store() as connection:
+        symbol_row = _load_symbol_row(connection, normalized_symbol)
+        if symbol_row is None:
+            return []
+
+        clauses = ["symbol_id = ?"]
+        params: list[str | int] = [int(symbol_row["symbol_id"])]
+        if provider:
+            clauses.append("provider = ?")
+            params.append(str(provider).strip().lower())
+
+        rows = connection.execute(
+            f"""
+            WITH ranked_rows AS (
+                SELECT
+                    provider,
+                    as_of_date,
+                    fetched_at,
+                    expiry,
+                    days_to_expiry,
+                    strike,
+                    spot_price,
+                    implied_move_percent,
+                    straddle_implied_volatility,
+                    chain_implied_volatility,
+                    implied_volatility_gap,
+                    historical_volatility_20,
+                    historical_volatility_60,
+                    historical_volatility_120,
+                    iv_hv20_ratio,
+                    iv_hv60_ratio,
+                    iv_hv120_ratio,
+                    iv_hv20_spread,
+                    iv_hv60_spread,
+                    iv_hv120_spread,
+                    combined_open_interest,
+                    combined_volume,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY symbol_id, provider, as_of_date
+                        ORDER BY days_to_expiry ASC, expiry ASC
+                    ) AS row_rank
+                FROM option_monthly_snapshots
+                WHERE {' AND '.join(clauses)}
+            )
+            SELECT
+                provider,
+                as_of_date,
+                fetched_at,
+                expiry,
+                days_to_expiry,
+                strike,
+                spot_price,
+                implied_move_percent,
+                straddle_implied_volatility,
+                chain_implied_volatility,
+                implied_volatility_gap,
+                historical_volatility_20,
+                historical_volatility_60,
+                historical_volatility_120,
+                iv_hv20_ratio,
+                iv_hv60_ratio,
+                iv_hv120_ratio,
+                iv_hv20_spread,
+                iv_hv60_spread,
+                iv_hv120_spread,
+                combined_open_interest,
+                combined_volume
+            FROM ranked_rows
+            WHERE row_rank = 1
+            ORDER BY as_of_date DESC
+            LIMIT ?
+            """,
+            tuple([*params, normalized_limit]),
+        ).fetchall()
+
+    return [
+        {
+            "provider": row["provider"],
+            "asOfDate": row["as_of_date"],
+            "fetchedAt": row["fetched_at"],
+            "expiry": row["expiry"],
+            "daysToExpiry": row["days_to_expiry"],
+            "strike": row["strike"],
+            "spotPrice": row["spot_price"],
+            "impliedMovePercent": row["implied_move_percent"],
+            "straddleImpliedVolatility": row["straddle_implied_volatility"],
+            "chainImpliedVolatility": row["chain_implied_volatility"],
+            "impliedVolatilityGap": row["implied_volatility_gap"],
+            "historicalVolatility20": row["historical_volatility_20"],
+            "historicalVolatility60": row["historical_volatility_60"],
+            "historicalVolatility120": row["historical_volatility_120"],
+            "ivHv20Ratio": row["iv_hv20_ratio"],
+            "ivHv60Ratio": row["iv_hv60_ratio"],
+            "ivHv120Ratio": row["iv_hv120_ratio"],
+            "ivHv20Spread": row["iv_hv20_spread"],
+            "ivHv60Spread": row["iv_hv60_spread"],
+            "ivHv120Spread": row["iv_hv120_spread"],
+            "combinedOpenInterest": row["combined_open_interest"],
+            "combinedVolume": row["combined_volume"],
+        }
+        for row in reversed(rows)
+    ]
+
+
+def load_derived_daily_metrics(
+    symbol: str,
+    *,
+    metric_date: str | None = None,
+    provider: str | None = None,
+    metric_family: str | None = None,
+) -> list[dict]:
+    normalized_symbol = normalize_symbol(symbol)
+    if not normalized_symbol:
+        return []
+
+    with open_runtime_store() as connection:
+        symbol_row = _load_symbol_row(connection, normalized_symbol)
+        if symbol_row is None:
+            return []
+
+        clauses = ["symbol_id = ?"]
+        params: list[str | int] = [int(symbol_row["symbol_id"])]
+        if metric_date:
+            clauses.append("metric_date = ?")
+            params.append(str(metric_date))
+        if provider:
+            clauses.append("provider = ?")
+            params.append(str(provider).strip().lower())
+        if metric_family:
+            clauses.append("metric_family = ?")
+            params.append(str(metric_family).strip())
+
+        rows = connection.execute(
+            f"""
+            SELECT
+                provider,
+                metric_date,
+                metric_family,
+                metric_key,
+                window_days,
+                metric_value,
+                source,
+                updated_at
+            FROM derived_daily_metrics
+            WHERE {' AND '.join(clauses)}
+            ORDER BY metric_date DESC, metric_family ASC, window_days ASC, metric_key ASC
+            """,
+            tuple(params),
+        ).fetchall()
+
+    return [
+        {
+            "provider": row["provider"],
+            "metricDate": row["metric_date"],
+            "metricFamily": row["metric_family"],
+            "metricKey": row["metric_key"],
+            "windowDays": row["window_days"],
+            "metricValue": row["metric_value"],
+            "source": row["source"],
+            "updatedAt": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
+def write_option_monthly_snapshot(symbol: str, snapshot: dict) -> list[dict]:
+    normalized_symbol = normalize_symbol(symbol or snapshot.get("symbol"))
+    if not normalized_symbol:
+        raise RuntimeError("symbol is required to cache option snapshots.")
+
+    as_of_date = str(snapshot.get("asOfDate") or "").strip()
+    contracts = snapshot.get("monthlyContracts") or []
+    if not as_of_date:
+        raise RuntimeError("monthly straddle snapshot is missing an as-of date.")
+    if not isinstance(contracts, list) or not contracts:
+        raise RuntimeError("monthly straddle snapshot is missing contract rows.")
+
+    provider = str(snapshot.get("provider") or "yfinance").strip().lower() or "yfinance"
+    currency = str(snapshot.get("currency") or "").strip().upper() or None
+    timestamp = str(snapshot.get("fetchedAt") or to_iso(now_utc())).strip()
+    realized_volatility = snapshot.get("realizedVolatility") or {}
+
+    with open_runtime_store() as connection:
+        symbol_id = _ensure_symbol_row(
+            connection,
+            normalized_symbol,
+            currency=currency,
+            provider=provider,
+            source_series_type="Price",
+            timestamp=timestamp,
+        )
+        connection.execute(
+            """
+            DELETE FROM option_monthly_snapshots
+            WHERE symbol_id = ?
+              AND provider = ?
+              AND as_of_date = ?
+            """,
+            (symbol_id, provider, as_of_date),
+        )
+        connection.executemany(
+            """
+            INSERT INTO option_monthly_snapshots (
+                symbol_id,
+                provider,
+                as_of_date,
+                fetched_at,
+                expiry,
+                currency,
+                spot_date,
+                spot_price,
+                minimum_dte,
+                max_contracts,
+                days_to_expiry,
+                strike,
+                call_bid,
+                call_ask,
+                call_last_price,
+                call_mid_price,
+                call_price_source,
+                call_open_interest,
+                call_volume,
+                call_implied_volatility,
+                put_bid,
+                put_ask,
+                put_last_price,
+                put_mid_price,
+                put_price_source,
+                put_open_interest,
+                put_volume,
+                put_implied_volatility,
+                straddle_mid_price,
+                implied_move_price,
+                implied_move_percent,
+                straddle_implied_volatility,
+                chain_implied_volatility,
+                implied_volatility_gap,
+                historical_volatility_20,
+                historical_volatility_60,
+                historical_volatility_120,
+                iv_hv20_ratio,
+                iv_hv60_ratio,
+                iv_hv120_ratio,
+                iv_hv20_spread,
+                iv_hv60_spread,
+                iv_hv120_spread,
+                combined_open_interest,
+                combined_volume,
+                pricing_mode,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    symbol_id,
+                    provider,
+                    as_of_date,
+                    timestamp,
+                    str(contract.get("expiry") or "").strip(),
+                    currency,
+                    snapshot.get("spotDate"),
+                    snapshot.get("spotPrice"),
+                    int(snapshot.get("minimumDte") or 25),
+                    int(snapshot.get("maxContracts") or 4),
+                    int(contract.get("daysToExpiry") or 0),
+                    contract.get("strike"),
+                    contract.get("callBid"),
+                    contract.get("callAsk"),
+                    contract.get("callLastPrice"),
+                    contract.get("callMidPrice"),
+                    contract.get("callPriceSource"),
+                    int(contract.get("callOpenInterest") or 0),
+                    int(contract.get("callVolume") or 0),
+                    contract.get("callImpliedVolatility"),
+                    contract.get("putBid"),
+                    contract.get("putAsk"),
+                    contract.get("putLastPrice"),
+                    contract.get("putMidPrice"),
+                    contract.get("putPriceSource"),
+                    int(contract.get("putOpenInterest") or 0),
+                    int(contract.get("putVolume") or 0),
+                    contract.get("putImpliedVolatility"),
+                    contract.get("straddleMidPrice"),
+                    contract.get("impliedMovePrice"),
+                    contract.get("impliedMovePercent"),
+                    contract.get("straddleImpliedVolatility"),
+                    contract.get("chainImpliedVolatility"),
+                    contract.get("impliedVolatilityGap"),
+                    contract.get("historicalVolatility20"),
+                    contract.get("historicalVolatility60"),
+                    contract.get("historicalVolatility120"),
+                    contract.get("ivHv20Ratio"),
+                    contract.get("ivHv60Ratio"),
+                    contract.get("ivHv120Ratio"),
+                    contract.get("ivHv20Spread"),
+                    contract.get("ivHv60Spread"),
+                    contract.get("ivHv120Spread"),
+                    int(contract.get("combinedOpenInterest") or 0),
+                    int(contract.get("combinedVolume") or 0),
+                    str(contract.get("pricingMode") or "unknown"),
+                    timestamp,
+                )
+                for contract in contracts
+                if str(contract.get("expiry") or "").strip()
+            ],
+        )
+
+        metrics = []
+        for metric_key, window_days in (("hv20", 20), ("hv60", 60), ("hv120", 120)):
+            metric_value = realized_volatility.get(metric_key)
+            if metric_value is None:
+                continue
+            metrics.append(
+                {
+                    "metricFamily": "realized_volatility",
+                    "metricKey": metric_key,
+                    "windowDays": window_days,
+                    "metricValue": metric_value,
+                }
+            )
+        if metrics:
+            connection.executemany(
+                """
+                INSERT INTO derived_daily_metrics (
+                    symbol_id,
+                    provider,
+                    metric_date,
+                    metric_family,
+                    metric_key,
+                    window_days,
+                    metric_value,
+                    source,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(symbol_id, provider, metric_date, metric_family, metric_key, window_days)
+                DO UPDATE SET
+                    metric_value = excluded.metric_value,
+                    source = excluded.source,
+                    updated_at = excluded.updated_at
+                """,
+                [
+                    (
+                        symbol_id,
+                        provider,
+                        as_of_date,
+                        metric["metricFamily"],
+                        metric["metricKey"],
+                        int(metric["windowDays"] or 0),
+                        metric["metricValue"],
+                        "monthly_straddle",
+                        timestamp,
+                    )
+                    for metric in metrics
+                ],
+            )
+        connection.commit()
+
+    return load_option_monthly_snapshots(
+        normalized_symbol,
+        as_of_date=as_of_date,
+        provider=provider,
+    )

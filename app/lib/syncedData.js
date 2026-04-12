@@ -292,12 +292,34 @@ async function fetchInstrumentProfile(symbol) {
   };
 }
 
+async function fetchMonthlyStraddleSnapshot(request) {
+  const payload = await requestJson(buildApiUrl("/yfinance/monthly-straddle"), {
+    requestInit: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load that options snapshot.",
+  });
+
+  if (!payload?.snapshot?.symbol || !Array.isArray(payload?.snapshot?.monthlyContracts)) {
+    throw new Error("The local data API returned an invalid monthly straddle payload.");
+  }
+
+  return payload.snapshot;
+}
+
 export {
   LOCAL_API_COMMAND,
   buildLocalApiUnavailableMessage,
   describeFreshness,
   fetchInstrumentProfile,
   fetchIndexSeries,
+  fetchMonthlyStraddleSnapshot,
   getManifestDataset,
   getSnapshotFreshness,
   loadRememberedIndexCatalog,

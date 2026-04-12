@@ -194,6 +194,247 @@ def test_overlap_validation_detects_price_and_action_changes():
     assert_equal(valid, False, "changed corporate actions should fail")
 
 
+def test_option_snapshot_and_realized_metrics_persist():
+    with isolated_runtime_store():
+        runtime_store.write_option_monthly_snapshot(
+            "aapl",
+            {
+                "symbol": "AAPL",
+                "provider": "yfinance",
+                "currency": "USD",
+                "fetchedAt": "2026-04-12T08:15:00+00:00",
+                "asOfDate": "2026-04-12",
+                "spotDate": "2026-04-10",
+                "spotPrice": 260.48,
+                "minimumDte": 25,
+                "maxContracts": 2,
+                "realizedVolatility": {
+                    "seriesType": "adj_close",
+                    "observations": 252,
+                    "hv20": 0.244,
+                    "hv60": 0.231,
+                    "hv120": 0.226,
+                },
+                "monthlyContracts": [
+                    {
+                        "expiry": "2026-05-15",
+                        "daysToExpiry": 33,
+                        "strike": 260,
+                        "callBid": 9.3,
+                        "callAsk": 9.5,
+                        "callLastPrice": 9.4,
+                        "callMidPrice": 9.4,
+                        "callPriceSource": "mid",
+                        "callOpenInterest": 9597,
+                        "callVolume": 2009,
+                        "callImpliedVolatility": 0.2922,
+                        "putBid": 8.2,
+                        "putAsk": 8.35,
+                        "putLastPrice": 8.26,
+                        "putMidPrice": 8.275,
+                        "putPriceSource": "mid",
+                        "putOpenInterest": 13230,
+                        "putVolume": 1211,
+                        "putImpliedVolatility": 0.2711,
+                        "straddleMidPrice": 17.675,
+                        "impliedMovePrice": 17.675,
+                        "impliedMovePercent": 0.0679,
+                        "straddleImpliedVolatility": 0.2828,
+                        "chainImpliedVolatility": 0.2817,
+                        "impliedVolatilityGap": 0.0011,
+                        "historicalVolatility20": 0.244,
+                        "historicalVolatility60": 0.231,
+                        "historicalVolatility120": 0.226,
+                        "ivHv20Ratio": 1.159,
+                        "ivHv60Ratio": 1.224,
+                        "ivHv120Ratio": 1.251,
+                        "ivHv20Spread": 0.0388,
+                        "ivHv60Spread": 0.0518,
+                        "ivHv120Spread": 0.0568,
+                        "combinedOpenInterest": 22827,
+                        "combinedVolume": 3220,
+                        "pricingMode": "bid-ask-mid",
+                    },
+                    {
+                        "expiry": "2026-06-18",
+                        "daysToExpiry": 67,
+                        "strike": 260,
+                        "callBid": 12.8,
+                        "callAsk": 13.1,
+                        "callLastPrice": 13.0,
+                        "callMidPrice": 12.95,
+                        "callPriceSource": "mid",
+                        "callOpenInterest": 14500,
+                        "callVolume": 1200,
+                        "callImpliedVolatility": 0.273,
+                        "putBid": 10.95,
+                        "putAsk": 11.15,
+                        "putLastPrice": 11.0,
+                        "putMidPrice": 11.05,
+                        "putPriceSource": "mid",
+                        "putOpenInterest": 17166,
+                        "putVolume": 998,
+                        "putImpliedVolatility": 0.2706,
+                        "straddleMidPrice": 24.0,
+                        "impliedMovePrice": 24.0,
+                        "impliedMovePercent": 0.0921,
+                        "straddleImpliedVolatility": 0.2704,
+                        "chainImpliedVolatility": 0.2718,
+                        "impliedVolatilityGap": -0.0014,
+                        "historicalVolatility20": 0.244,
+                        "historicalVolatility60": 0.231,
+                        "historicalVolatility120": 0.226,
+                        "ivHv20Ratio": 1.108,
+                        "ivHv60Ratio": 1.17,
+                        "ivHv120Ratio": 1.196,
+                        "ivHv20Spread": 0.0264,
+                        "ivHv60Spread": 0.0394,
+                        "ivHv120Spread": 0.0444,
+                        "combinedOpenInterest": 31666,
+                        "combinedVolume": 2198,
+                        "pricingMode": "bid-ask-mid",
+                    },
+                ],
+            },
+        )
+        runtime_store.write_option_monthly_snapshot(
+            "AAPL",
+            {
+                "symbol": "AAPL",
+                "provider": "yfinance",
+                "currency": "USD",
+                "fetchedAt": "2026-04-13T08:15:00+00:00",
+                "asOfDate": "2026-04-13",
+                "spotDate": "2026-04-11",
+                "spotPrice": 261.1,
+                "minimumDte": 25,
+                "maxContracts": 2,
+                "realizedVolatility": {
+                    "seriesType": "adj_close",
+                    "observations": 252,
+                    "hv20": 0.241,
+                    "hv60": 0.229,
+                    "hv120": 0.225,
+                },
+                "monthlyContracts": [
+                    {
+                        "expiry": "2026-05-15",
+                        "daysToExpiry": 32,
+                        "strike": 260,
+                        "callBid": 9.6,
+                        "callAsk": 9.8,
+                        "callLastPrice": 9.7,
+                        "callMidPrice": 9.7,
+                        "callPriceSource": "mid",
+                        "callOpenInterest": 9700,
+                        "callVolume": 1800,
+                        "callImpliedVolatility": 0.296,
+                        "putBid": 8.45,
+                        "putAsk": 8.6,
+                        "putLastPrice": 8.5,
+                        "putMidPrice": 8.525,
+                        "putPriceSource": "mid",
+                        "putOpenInterest": 13300,
+                        "putVolume": 1100,
+                        "putImpliedVolatility": 0.275,
+                        "straddleMidPrice": 18.225,
+                        "impliedMovePrice": 18.225,
+                        "impliedMovePercent": 0.0698,
+                        "straddleImpliedVolatility": 0.289,
+                        "chainImpliedVolatility": 0.2855,
+                        "impliedVolatilityGap": 0.0035,
+                        "historicalVolatility20": 0.241,
+                        "historicalVolatility60": 0.229,
+                        "historicalVolatility120": 0.225,
+                        "ivHv20Ratio": 1.199,
+                        "ivHv60Ratio": 1.262,
+                        "ivHv120Ratio": 1.284,
+                        "ivHv20Spread": 0.048,
+                        "ivHv60Spread": 0.06,
+                        "ivHv120Spread": 0.064,
+                        "combinedOpenInterest": 23000,
+                        "combinedVolume": 2900,
+                        "pricingMode": "bid-ask-mid",
+                    },
+                    {
+                        "expiry": "2026-06-18",
+                        "daysToExpiry": 66,
+                        "strike": 260,
+                        "callBid": 13.0,
+                        "callAsk": 13.3,
+                        "callLastPrice": 13.1,
+                        "callMidPrice": 13.15,
+                        "callPriceSource": "mid",
+                        "callOpenInterest": 14600,
+                        "callVolume": 1150,
+                        "callImpliedVolatility": 0.274,
+                        "putBid": 11.1,
+                        "putAsk": 11.3,
+                        "putLastPrice": 11.2,
+                        "putMidPrice": 11.2,
+                        "putPriceSource": "mid",
+                        "putOpenInterest": 17200,
+                        "putVolume": 970,
+                        "putImpliedVolatility": 0.271,
+                        "straddleMidPrice": 24.35,
+                        "impliedMovePrice": 24.35,
+                        "impliedMovePercent": 0.0933,
+                        "straddleImpliedVolatility": 0.271,
+                        "chainImpliedVolatility": 0.2725,
+                        "impliedVolatilityGap": -0.0015,
+                        "historicalVolatility20": 0.241,
+                        "historicalVolatility60": 0.229,
+                        "historicalVolatility120": 0.225,
+                        "ivHv20Ratio": 1.124,
+                        "ivHv60Ratio": 1.183,
+                        "ivHv120Ratio": 1.204,
+                        "ivHv20Spread": 0.03,
+                        "ivHv60Spread": 0.042,
+                        "ivHv120Spread": 0.046,
+                        "combinedOpenInterest": 31800,
+                        "combinedVolume": 2120,
+                        "pricingMode": "bid-ask-mid",
+                    },
+                ],
+            },
+        )
+
+        contracts = runtime_store.load_option_monthly_snapshots(
+            "AAPL",
+            as_of_date="2026-04-12",
+            provider="yfinance",
+        )
+        assert_equal(len(contracts), 2, "two monthly contracts should persist")
+        assert_equal(contracts[0]["expiry"], "2026-05-15", "front expiry should load back")
+        assert_equal(
+            round(contracts[0]["ivHv20Ratio"], 3),
+            1.159,
+            "stored IV/HV20 ratio should round-trip",
+        )
+
+        metrics = runtime_store.load_derived_daily_metrics(
+            "AAPL",
+            metric_date="2026-04-12",
+            provider="yfinance",
+            metric_family="realized_volatility",
+        )
+        assert_equal(len(metrics), 3, "HV20/HV60/HV120 should persist as derived metrics")
+        assert_equal(metrics[0]["metricKey"], "hv20", "derived metrics should sort by window")
+        assert_equal(metrics[1]["metricKey"], "hv60", "derived metrics should include hv60")
+        assert_equal(metrics[2]["metricKey"], "hv120", "derived metrics should include hv120")
+
+        front_history = runtime_store.load_option_front_history(
+            "AAPL",
+            provider="yfinance",
+            limit=10,
+        )
+        assert_equal(len(front_history), 2, "front-history query should return one row per date")
+        assert_equal(front_history[0]["asOfDate"], "2026-04-12", "front-history should sort oldest to newest")
+        assert_equal(front_history[1]["asOfDate"], "2026-04-13", "front-history should include the later snapshot")
+        assert_equal(front_history[0]["expiry"], "2026-05-15", "front-history should pick the nearest expiry")
+        assert_equal(front_history[1]["daysToExpiry"], 32, "front-history should keep front-contract DTE")
+
+
 def mark_cached_series_stale(symbol: str) -> None:
     with runtime_store.open_runtime_store() as connection:
         symbol_row = connection.execute(
@@ -326,6 +567,7 @@ def main() -> int:
     test_normalized_store_full_and_incremental_merge()
     test_legacy_series_cache_migrates_to_normalized_rows()
     test_overlap_validation_detects_price_and_action_changes()
+    test_option_snapshot_and_realized_metrics_persist()
     test_get_or_refresh_uses_full_then_incremental_then_rebuild()
     print("ok runtime store cache")
     return 0

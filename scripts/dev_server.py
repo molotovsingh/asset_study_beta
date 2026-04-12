@@ -28,14 +28,18 @@ try:
     from providers.router import (
         fetch_history_with_fallback,
         fetch_profile_with_fallback,
+        normalize_provider_id,
         provider_display_name,
     )
+    from providers.yfinance_provider import fetch_monthly_straddle_snapshot
 except ModuleNotFoundError:
     from scripts.providers.router import (
         fetch_history_with_fallback,
         fetch_profile_with_fallback,
+        normalize_provider_id,
         provider_display_name,
     )
+    from scripts.providers.yfinance_provider import fetch_monthly_straddle_snapshot
 
 try:
     from runtime_store import (
@@ -46,6 +50,7 @@ try:
         load_instrument_profile,
         load_cached_series,
         load_corporate_actions,
+        load_option_front_history,
         load_price_rows,
         load_remembered_catalog,
         normalize_symbol,
@@ -54,6 +59,7 @@ try:
         symbol_cache_key,
         update_cached_series_currency,
         write_instrument_profile,
+        write_option_monthly_snapshot,
         write_price_history,
     )
 except ModuleNotFoundError:
@@ -65,6 +71,7 @@ except ModuleNotFoundError:
         load_instrument_profile,
         load_cached_series,
         load_corporate_actions,
+        load_option_front_history,
         load_price_rows,
         load_remembered_catalog,
         normalize_symbol,
@@ -73,6 +80,7 @@ except ModuleNotFoundError:
         symbol_cache_key,
         update_cached_series_currency,
         write_instrument_profile,
+        write_option_monthly_snapshot,
         write_price_history,
     )
 
@@ -343,17 +351,60 @@ def profile_cache_is_fresh(profile: dict, now: datetime | None = None) -> bool:
     return (reference - fetched_at) <= PROFILE_CACHE_TTL
 
 
-def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
+def get_or_refresh_cached_series(
+    symbol: str,
+    *,
+    preferred_provider: str | None = None,
+) -> tuple[dict, str]:
     normalized_symbol = normalize_symbol(symbol)
     cached = load_cached_series(normalized_symbol)
-    preferred_provider = cached.get("provider") if cached else None
-    if cached and cache_is_fresh(cached) and not snapshot_requires_full_sync(cached):
+    explicit_provider = normalize_provider_id(preferred_provider)
+    cached_provider = normalize_provider_id(cached.get("provider")) if cached else None
+    provider_preference_changed = (
+        explicit_provider is not None and explicit_provider != cached_provider
+    )
+    effective_provider = explicit_provider or cached_provider
+
+    if cached and not provider_preference_changed and cache_is_fresh(cached) and not snapshot_requires_full_sync(cached):
         return ensure_snapshot_currency(cached), "hit"
+
+    if provider_preference_changed:
+        history_result, period = fetch_full_symbol_history_result(
+            normalized_symbol,
+            preferred_provider=effective_provider,
+        )
+        sync_message = (
+            f"Preferred provider switched from {provider_display_name(cached_provider)} "
+            f"to {history_result.provider_name}. Full sync using {period}."
+        )
+        if history_result.coverage_note:
+            sync_message = f"{sync_message} {history_result.coverage_note}"
+        refreshed = write_price_history(
+            normalized_symbol,
+            history_result.price_rows,
+            history_result.action_rows,
+            currency=history_result.currency,
+            source_series_type="Price",
+            provider=history_result.provider,
+            sync_mode="full",
+            sync_status="ok",
+            sync_message=sync_message,
+            replace=True,
+            overlap_hash=stable_rows_hash(
+                history_result.price_rows[-INCREMENTAL_OVERLAP_DAYS:],
+                ["date", "close"],
+            ),
+            actions_hash=stable_rows_hash(
+                history_result.action_rows,
+                ["date", "actionType", "value"],
+            ),
+        )
+        return refreshed, "provider-switch"
 
     if snapshot_requires_full_sync(cached):
         history_result, period = fetch_full_symbol_history_result(
             normalized_symbol,
-            preferred_provider=preferred_provider,
+            preferred_provider=effective_provider,
         )
         sync_message = f"Full {history_result.provider_name} sync using {period}."
         if history_result.coverage_note:
@@ -385,7 +436,7 @@ def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
     history_result = fetch_symbol_history_result(
         normalized_symbol,
         start=overlap_start,
-        preferred_provider=preferred_provider,
+        preferred_provider=effective_provider,
     )
     fetched_rows = history_result.price_rows
     fetched_actions = history_result.action_rows
@@ -398,7 +449,7 @@ def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
     if not prices_valid or not actions_valid:
         full_result, period = fetch_full_symbol_history_result(
             normalized_symbol,
-            preferred_provider=preferred_provider,
+            preferred_provider=effective_provider,
         )
         rebuild_message = f"{price_message} {action_message} Rebuilt using {full_result.provider_name} {period}."
         if full_result.coverage_note:
@@ -595,6 +646,68 @@ class DevServerHandler(SimpleHTTPRequestHandler):
                 )
             return
 
+        if parsed.path == "/api/yfinance/monthly-straddle":
+            try:
+                request = self._read_json_body()
+                symbol = normalize_symbol(request.get("symbol"))
+                if not symbol:
+                    raise ValueError("A symbol is required.")
+
+                minimum_dte = int(request.get("minimumDte") or 25)
+                max_contracts = int(request.get("maxContracts") or 4)
+                if minimum_dte < 7 or minimum_dte > 365:
+                    raise ValueError("Minimum DTE must be between 7 and 365 days.")
+                if max_contracts < 1 or max_contracts > 8:
+                    raise ValueError("Contract count must be between 1 and 8.")
+
+                snapshot = fetch_monthly_straddle_snapshot(
+                    symbol,
+                    minimum_dte=minimum_dte,
+                    max_contracts=max_contracts,
+                )
+                try:
+                    write_option_monthly_snapshot(symbol, snapshot)
+                    snapshot["history"] = {
+                        "frontContracts": load_option_front_history(
+                            symbol,
+                            provider=snapshot.get("provider"),
+                            limit=252,
+                        ),
+                    }
+                except Exception as storage_error:  # noqa: BLE001
+                    snapshot["storageWarning"] = (
+                        f"Local snapshot persistence failed: {storage_error}"
+                    )
+                self._write_json(
+                    HTTPStatus.OK,
+                    {
+                        "snapshot": snapshot,
+                    },
+                )
+            except json.JSONDecodeError:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": "Request body must be valid JSON."},
+                )
+            except ValueError as error:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": str(error)},
+                )
+            except RuntimeError as error:
+                self._write_json(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"error": str(error)},
+                )
+            except SystemExit:
+                self._write_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {
+                        "error": "A required local market-data provider is unavailable.",
+                    },
+                )
+            return
+
         if parsed.path != "/api/yfinance/index-series":
             self._write_json(
                 HTTPStatus.NOT_FOUND,
@@ -630,7 +743,10 @@ class DevServerHandler(SimpleHTTPRequestHandler):
             if not request.get("family") and remembered_entry:
                 request["family"] = remembered_entry.get("family") or "Remembered"
 
-            raw_snapshot, cache_status = get_or_refresh_cached_series(symbol)
+            raw_snapshot, cache_status = get_or_refresh_cached_series(
+                symbol,
+                preferred_provider=request.get("preferredProvider"),
+            )
             snapshot = build_response_snapshot(raw_snapshot, request, cache_status)
 
             remembered = remember_symbol(snapshot) if remember else None
