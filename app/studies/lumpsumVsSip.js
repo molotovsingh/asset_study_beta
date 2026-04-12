@@ -237,7 +237,7 @@ function mountLumpsumVsSipOverview(root) {
       }
 
       const methodLabel = snapshot.cache
-        ? `Local yfinance fetch using ${snapshot.symbol}`
+        ? `Local ${snapshot.providerName || "market-data"} fetch using ${snapshot.symbol}`
         : `Bundled snapshot using ${snapshot.symbol}`;
 
       appendCoverageWarnings(filteredSeries, start, end, warnings);

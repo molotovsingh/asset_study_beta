@@ -735,7 +735,7 @@ function mountRiskAdjustedReturnRelative(root, session) {
         benchmarkSelection: resolvedBenchmarkSelection,
         benchmarkLabel: resolvedBenchmarkSelection.label,
         benchmarkMethodLabel: snapshot.cache
-          ? `Local yfinance fetch using ${snapshot.symbol}`
+          ? `Local ${snapshot.providerName || "market-data"} fetch using ${snapshot.symbol}`
           : `Bundled snapshot using ${snapshot.symbol}`,
         benchmarkComparisonCurrency:
           comparisonBasis === "common"

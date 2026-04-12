@@ -50,7 +50,7 @@ function renderSelectionDetails(
   if (!selection) {
     return `
       <div class="note-box">
-        <p>Choose a bundled dataset like Nifty 50 or enter a yfinance symbol like AAPL.</p>
+        <p>Choose a bundled dataset like Nifty 50 or enter a market symbol like AAPL.</p>
       </div>
     `;
   }

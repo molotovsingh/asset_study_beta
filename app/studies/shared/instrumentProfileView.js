@@ -115,7 +115,7 @@ function renderInstrumentProfile(instrumentProfileState) {
   if (instrumentProfileState.status === "loading") {
     return `
       <div class="profile-enrichment is-loading">
-        <p class="summary-meta">Loading symbol profile from the local yfinance cache...</p>
+        <p class="summary-meta">Loading symbol profile from the local market-data cache...</p>
       </div>
     `;
   }
@@ -166,7 +166,7 @@ function renderInstrumentProfile(instrumentProfileState) {
       ? `<a href="${escapeHtml(websiteUrl)}" target="_blank" rel="noreferrer">Website</a>`
       : "",
     sourceUrl
-      ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">Yahoo Finance</a>`
+      ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">Source</a>`
       : "",
   ]
     .filter(Boolean)
@@ -186,7 +186,7 @@ function renderInstrumentProfile(instrumentProfileState) {
           ? `<div class="profile-classification">${classification
               .map((item) => `<span>${escapeHtml(item)}</span>`)
               .join("")}</div>`
-          : `<p class="summary-meta">yfinance returned limited classification metadata for this symbol.</p>`
+          : `<p class="summary-meta">The current data provider returned limited classification metadata for this symbol.</p>`
       }
       ${metrics ? `<div class="profile-metric-row">${metrics}</div>` : ""}
       ${sourceMeta ? `<p class="summary-meta">${sourceMeta}</p>` : ""}

@@ -294,7 +294,7 @@ function mountRiskAdjustedReturnOverview(root) {
 
           indexSeries = filterSeriesByDate(series, start, end);
           methodLabel = snapshot.cache
-            ? `Local yfinance fetch using ${snapshot.symbol}`
+            ? `Local ${snapshot.providerName || "market-data"} fetch using ${snapshot.symbol}`
             : `Bundled snapshot using ${snapshot.symbol}`;
           appendCoverageWarnings(indexSeries, start, end, warnings);
           appendSnapshotWarnings(snapshot, warnings);
