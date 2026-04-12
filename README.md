@@ -86,6 +86,15 @@ python3 -m venv .venv
 ./.venv/bin/pip install -r requirements-sync.txt
 ```
 
+Optional local secrets can live in `.env` at the repo root. Python backend
+scripts now load that file automatically when present.
+
+Example:
+
+```bash
+cp .env.example .env
+```
+
 3. Either serve the static app for bundled datasets:
 
 ```bash
@@ -125,6 +134,16 @@ What happens:
 
 The browser never talks to Yahoo directly. Bundled snapshots come from this
 repo, and ad hoc backend fetches are mediated through Python.
+
+To smoke-test a Databento key from the same environment:
+
+```bash
+./.venv/bin/python scripts/test_databento_connection.py
+```
+
+That script verifies the key, prints whether `XCBF.PITCH` is visible to the
+current Databento account, and fetches a tiny historical control sample by
+default.
 
 ## Snapshot Tooling
 
