@@ -6,6 +6,7 @@ import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -68,12 +69,14 @@ def test_normalized_store_full_and_incremental_merge():
             ],
             [{"date": "2024-01-02", "actionType": "split", "value": 2}],
             currency="usd",
+            provider="yahoo_finance15",
             sync_mode="full",
             replace=True,
         )
 
         assert_equal(full_snapshot["symbol"], "ABC", "symbols should normalize")
         assert_equal(full_snapshot["currency"], "USD", "currency should normalize")
+        assert_equal(full_snapshot["provider"], "yahoo_finance15", "provider should persist")
         assert_equal(full_snapshot["range"]["observations"], 2, "full observation count")
         assert_equal(
             full_snapshot["syncState"]["lastSyncMode"],
@@ -105,6 +108,7 @@ def test_normalized_store_full_and_incremental_merge():
             ],
             [{"date": "2024-01-02", "actionType": "split", "value": 2}],
             currency="USD",
+            provider="yahoo_finance15",
             sync_mode="incremental",
             replace=False,
             action_window=("2024-01-02", "2024-01-03"),
@@ -219,68 +223,85 @@ def mark_cached_series_stale(symbol: str) -> None:
 
 
 def test_get_or_refresh_uses_full_then_incremental_then_rebuild():
-    original_full_fetch = dev_server.fetch_full_symbol_history
-    original_incremental_fetch = dev_server.fetch_symbol_history
+    original_full_fetch = dev_server.fetch_full_symbol_history_result
+    original_incremental_fetch = dev_server.fetch_symbol_history_result
 
     full_payloads = [
         (
-            [
-                {"date": "2020-01-01", "close": 10},
-                {"date": "2020-01-02", "close": 11},
-                {"date": "2020-01-03", "close": 12},
-            ],
-            [],
-            "USD",
+            SimpleNamespace(
+                provider="yfinance",
+                provider_name="Yahoo Finance (yfinance)",
+                price_rows=[
+                    {"date": "2020-01-01", "close": 10},
+                    {"date": "2020-01-02", "close": 11},
+                    {"date": "2020-01-03", "close": 12},
+                ],
+                action_rows=[],
+                currency="USD",
+                coverage_note=None,
+            ),
             "max",
         ),
         (
-            [
-                {"date": "2020-01-01", "close": 10},
-                {"date": "2020-01-02", "close": 11},
-                {"date": "2020-01-03", "close": 12},
-                {"date": "2020-01-04", "close": 13},
-                {"date": "2020-01-05", "close": 14},
-            ],
-            [],
-            "USD",
+            SimpleNamespace(
+                provider="yahoo_finance15",
+                provider_name="Yahoo Finance 15 (RapidAPI)",
+                price_rows=[
+                    {"date": "2020-01-01", "close": 10},
+                    {"date": "2020-01-02", "close": 11},
+                    {"date": "2020-01-03", "close": 12},
+                    {"date": "2020-01-04", "close": 13},
+                    {"date": "2020-01-05", "close": 14},
+                ],
+                action_rows=[],
+                currency="USD",
+                coverage_note="Fallback provider returned its default daily history window.",
+            ),
             "max",
         ),
     ]
     incremental_payloads = [
-        (
-            [
+        SimpleNamespace(
+            provider="yfinance",
+            provider_name="Yahoo Finance (yfinance)",
+            price_rows=[
                 {"date": "2020-01-01", "close": 10},
                 {"date": "2020-01-02", "close": 11},
                 {"date": "2020-01-03", "close": 12},
                 {"date": "2020-01-04", "close": 13},
             ],
-            [],
-            "USD",
+            action_rows=[],
+            currency="USD",
+            coverage_note=None,
         ),
-        (
-            [
+        SimpleNamespace(
+            provider="yfinance",
+            provider_name="Yahoo Finance (yfinance)",
+            price_rows=[
                 {"date": "2020-01-02", "close": 99},
                 {"date": "2020-01-03", "close": 12},
                 {"date": "2020-01-04", "close": 13},
             ],
-            [],
-            "USD",
+            action_rows=[],
+            currency="USD",
+            coverage_note=None,
         ),
     ]
 
-    def fake_full_fetch(_symbol):
+    def fake_full_fetch(_symbol, **_kwargs):
         return full_payloads.pop(0)
 
     def fake_incremental_fetch(_symbol, **_kwargs):
         return incremental_payloads.pop(0)
 
-    dev_server.fetch_full_symbol_history = fake_full_fetch
-    dev_server.fetch_symbol_history = fake_incremental_fetch
+    dev_server.fetch_full_symbol_history_result = fake_full_fetch
+    dev_server.fetch_symbol_history_result = fake_incremental_fetch
     try:
         with isolated_runtime_store():
             snapshot, status = dev_server.get_or_refresh_cached_series("XYZ")
             assert_equal(status, "refreshed", "first run should full-refresh")
             assert_equal(snapshot["points"][0], ["2020-01-01", 10.0], "first full point")
+            assert_equal(snapshot["provider"], "yfinance", "first provider should be stored")
 
             snapshot, status = dev_server.get_or_refresh_cached_series("XYZ")
             assert_equal(status, "hit", "fresh broad cache should be reused")
@@ -295,9 +316,10 @@ def test_get_or_refresh_uses_full_then_incremental_then_rebuild():
             snapshot, status = dev_server.get_or_refresh_cached_series("XYZ")
             assert_equal(status, "rebuilt", "overlap mismatch should rebuild")
             assert_equal(snapshot["range"]["observations"], 5, "rebuilt range")
+            assert_equal(snapshot["provider"], "yahoo_finance15", "rebuilt provider should replace pin")
     finally:
-        dev_server.fetch_full_symbol_history = original_full_fetch
-        dev_server.fetch_symbol_history = original_incremental_fetch
+        dev_server.fetch_full_symbol_history_result = original_full_fetch
+        dev_server.fetch_symbol_history_result = original_incremental_fetch
 
 
 def main() -> int:

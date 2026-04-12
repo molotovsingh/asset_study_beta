@@ -12,9 +12,30 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 try:
+    from env_utils import load_local_env
+except ModuleNotFoundError:
+    from scripts.env_utils import load_local_env
+
+
+load_local_env()
+
+try:
     from sync_yfinance import load_yfinance, normalize_points, resolve_ticker_currency
 except ModuleNotFoundError:
     from scripts.sync_yfinance import load_yfinance, normalize_points, resolve_ticker_currency
+
+try:
+    from providers.router import (
+        fetch_history_with_fallback,
+        fetch_profile_with_fallback,
+        provider_display_name,
+    )
+except ModuleNotFoundError:
+    from scripts.providers.router import (
+        fetch_history_with_fallback,
+        fetch_profile_with_fallback,
+        provider_display_name,
+    )
 
 try:
     from runtime_store import (
@@ -104,6 +125,23 @@ def history_index_date(index_value) -> str:
     return str(index_value)[:10]
 
 
+def fetch_symbol_history_result(
+    symbol: str,
+    *,
+    period: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    preferred_provider: str | None = None,
+):
+    return fetch_history_with_fallback(
+        symbol,
+        period=period,
+        start=start,
+        end=end,
+        preferred_provider=preferred_provider,
+    )
+
+
 def fetch_symbol_history(
     symbol: str,
     *,
@@ -111,75 +149,13 @@ def fetch_symbol_history(
     start: str | None = None,
     end: str | None = None,
 ) -> tuple[list[dict], list[dict], str | None]:
-    yf = load_yfinance()
-    ticker = yf.Ticker(symbol)
-    history_kwargs = {
-        "interval": "1d",
-        "auto_adjust": False,
-        "actions": True,
-    }
-    if start:
-        history_kwargs["start"] = start
-        if end:
-            history_kwargs["end"] = end
-    else:
-        history_kwargs["period"] = period or DEFAULT_HISTORY_PERIOD
-        if end:
-            history_kwargs["end"] = end
-
-    frame = ticker.history(**history_kwargs)
-    if frame.empty:
-        raise RuntimeError(f"yfinance returned no rows for symbol {symbol}.")
-
-    if "Close" not in frame.columns:
-        raise RuntimeError(
-            f"Expected a Close column in the yfinance response for {symbol}.",
-        )
-
-    price_rows: list[dict] = []
-    action_rows: list[dict] = []
-    for index_value, row in frame.iterrows():
-        close_value = clean_history_number(row.get("Close"))
-        if close_value is None:
-            continue
-
-        date_value = history_index_date(index_value)
-        price_rows.append(
-            {
-                "date": date_value,
-                "open": clean_history_number(row.get("Open")),
-                "high": clean_history_number(row.get("High")),
-                "low": clean_history_number(row.get("Low")),
-                "close": close_value,
-                "adjClose": clean_history_number(row.get("Adj Close")),
-                "volume": clean_history_number(row.get("Volume")),
-            },
-        )
-        dividend_value = clean_history_number(row.get("Dividends"))
-        if dividend_value:
-            action_rows.append(
-                {
-                    "date": date_value,
-                    "actionType": "dividend",
-                    "value": dividend_value,
-                },
-            )
-        split_value = clean_history_number(row.get("Stock Splits"))
-        if split_value:
-            action_rows.append(
-                {
-                    "date": date_value,
-                    "actionType": "split",
-                    "value": split_value,
-                },
-            )
-
-    if len(price_rows) < 2:
-        raise RuntimeError(
-            f"yfinance returned fewer than two usable rows for symbol {symbol}.",
-        )
-
-    return price_rows, action_rows, resolve_ticker_currency(ticker)
+    result = fetch_symbol_history_result(
+        symbol,
+        period=period,
+        start=start,
+        end=end,
+    )
+    return result.price_rows, result.action_rows, result.currency
 
 
 def fetch_symbol_snapshot(
@@ -194,7 +170,7 @@ def fetch_symbol_snapshot(
     return normalize_points(points), currency
 
 
-def fetch_full_symbol_history(symbol: str) -> tuple[list[dict], list[dict], str | None, str]:
+def fetch_full_symbol_history_result(symbol: str, *, preferred_provider: str | None = None):
     last_error: Exception | None = None
     attempts = (
         {"period": "max", "label": "period=max"},
@@ -206,20 +182,26 @@ def fetch_full_symbol_history(symbol: str) -> tuple[list[dict], list[dict], str 
     )
     for attempt in attempts:
         try:
-            price_rows, action_rows, currency = fetch_symbol_history(
+            result = fetch_symbol_history_result(
                 symbol,
                 period=attempt.get("period"),
                 start=attempt.get("start"),
+                preferred_provider=preferred_provider,
             )
         except Exception as error:  # noqa: BLE001
             last_error = error
             continue
 
-        return price_rows, action_rows, currency, str(attempt["label"])
+        return result, str(attempt["label"])
 
     if last_error is not None:
-        raise RuntimeError(f"Could not fetch broad yfinance history for {symbol}: {last_error}") from last_error
-    raise RuntimeError(f"Could not fetch yfinance history for symbol {symbol}.")
+        raise RuntimeError(f"Could not fetch broad history for {symbol}: {last_error}") from last_error
+    raise RuntimeError(f"Could not fetch history for symbol {symbol}.")
+
+
+def fetch_full_symbol_history(symbol: str) -> tuple[list[dict], list[dict], str | None, str]:
+    result, attempt_label = fetch_full_symbol_history_result(symbol)
+    return result.price_rows, result.action_rows, result.currency, attempt_label
 
 
 def shift_date(date_value: str, days: int) -> str:
@@ -310,24 +292,16 @@ def snapshot_requires_full_sync(snapshot: dict | None) -> bool:
     return sync_mode in {None, "legacy", "manual"}
 
 
-def fetch_symbol_profile(symbol: str) -> dict:
-    yf = load_yfinance()
-    ticker = yf.Ticker(symbol)
-
-    try:
-        try:
-            info = ticker.get_info()
-        except AttributeError:
-            info = ticker.info
-    except Exception as error:  # noqa: BLE001
-        raise RuntimeError(
-            f"Could not load yfinance profile for symbol {symbol}: {error}",
-        ) from error
-
-    if not isinstance(info, dict) or not info:
-        raise RuntimeError(f"yfinance returned no profile data for symbol {symbol}.")
-
-    return write_instrument_profile(symbol, info)
+def fetch_symbol_profile(symbol: str, *, preferred_provider: str | None = None) -> dict:
+    result = fetch_profile_with_fallback(
+        symbol,
+        preferred_provider=preferred_provider,
+    )
+    return write_instrument_profile(
+        symbol,
+        result.info,
+        provider_name=result.provider_name,
+    )
 
 
 def ensure_snapshot_currency(snapshot: dict) -> dict:
@@ -372,32 +346,49 @@ def profile_cache_is_fresh(profile: dict, now: datetime | None = None) -> bool:
 def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
     normalized_symbol = normalize_symbol(symbol)
     cached = load_cached_series(normalized_symbol)
+    preferred_provider = cached.get("provider") if cached else None
     if cached and cache_is_fresh(cached) and not snapshot_requires_full_sync(cached):
         return ensure_snapshot_currency(cached), "hit"
 
     if snapshot_requires_full_sync(cached):
-        price_rows, action_rows, currency, period = fetch_full_symbol_history(normalized_symbol)
+        history_result, period = fetch_full_symbol_history_result(
+            normalized_symbol,
+            preferred_provider=preferred_provider,
+        )
+        sync_message = f"Full {history_result.provider_name} sync using {period}."
+        if history_result.coverage_note:
+            sync_message = f"{sync_message} {history_result.coverage_note}"
         refreshed = write_price_history(
             normalized_symbol,
-            price_rows,
-            action_rows,
-            currency=currency,
+            history_result.price_rows,
+            history_result.action_rows,
+            currency=history_result.currency,
             source_series_type="Price",
+            provider=history_result.provider,
             sync_mode="full",
             sync_status="ok",
-            sync_message=f"Full yfinance sync using {period}.",
+            sync_message=sync_message,
             replace=True,
-            overlap_hash=stable_rows_hash(price_rows[-INCREMENTAL_OVERLAP_DAYS:], ["date", "close"]),
-            actions_hash=stable_rows_hash(action_rows, ["date", "actionType", "value"]),
+            overlap_hash=stable_rows_hash(
+                history_result.price_rows[-INCREMENTAL_OVERLAP_DAYS:],
+                ["date", "close"],
+            ),
+            actions_hash=stable_rows_hash(
+                history_result.action_rows,
+                ["date", "actionType", "value"],
+            ),
         )
         return refreshed, "refreshed"
 
     last_price_date = (cached.get("syncState") or {}).get("lastPriceDate") or cached["range"]["endDate"]
     overlap_start = shift_date(last_price_date, -INCREMENTAL_OVERLAP_DAYS)
-    fetched_rows, fetched_actions, currency = fetch_symbol_history(
+    history_result = fetch_symbol_history_result(
         normalized_symbol,
         start=overlap_start,
+        preferred_provider=preferred_provider,
     )
+    fetched_rows = history_result.price_rows
+    fetched_actions = history_result.action_rows
     fetched_end = fetched_rows[-1]["date"]
     cached_overlap = load_price_rows(normalized_symbol, overlap_start, fetched_end)
     cached_actions = load_corporate_actions(normalized_symbol, overlap_start, fetched_end)
@@ -405,31 +396,48 @@ def get_or_refresh_cached_series(symbol: str) -> tuple[dict, str]:
     prices_valid, price_message = validate_price_overlap(cached_overlap, fetched_rows)
     actions_valid, action_message = validate_action_overlap(cached_actions, fetched_actions)
     if not prices_valid or not actions_valid:
-        price_rows, action_rows, full_currency, period = fetch_full_symbol_history(normalized_symbol)
+        full_result, period = fetch_full_symbol_history_result(
+            normalized_symbol,
+            preferred_provider=preferred_provider,
+        )
+        rebuild_message = f"{price_message} {action_message} Rebuilt using {full_result.provider_name} {period}."
+        if full_result.coverage_note:
+            rebuild_message = f"{rebuild_message} {full_result.coverage_note}"
         refreshed = write_price_history(
             normalized_symbol,
-            price_rows,
-            action_rows,
-            currency=full_currency or currency,
+            full_result.price_rows,
+            full_result.action_rows,
+            currency=full_result.currency or history_result.currency,
             source_series_type="Price",
+            provider=full_result.provider,
             sync_mode="full",
             sync_status="rebuilt",
-            sync_message=f"{price_message} {action_message} Rebuilt using {period}.",
+            sync_message=rebuild_message,
             replace=True,
-            overlap_hash=stable_rows_hash(price_rows[-INCREMENTAL_OVERLAP_DAYS:], ["date", "close"]),
-            actions_hash=stable_rows_hash(action_rows, ["date", "actionType", "value"]),
+            overlap_hash=stable_rows_hash(
+                full_result.price_rows[-INCREMENTAL_OVERLAP_DAYS:],
+                ["date", "close"],
+            ),
+            actions_hash=stable_rows_hash(
+                full_result.action_rows,
+                ["date", "actionType", "value"],
+            ),
         )
         return refreshed, "rebuilt"
 
+    incremental_message = f"{price_message} {action_message}"
+    if history_result.coverage_note:
+        incremental_message = f"{incremental_message} {history_result.coverage_note}"
     refreshed = write_price_history(
         normalized_symbol,
         fetched_rows,
         fetched_actions,
-        currency=currency or cached.get("currency"),
+        currency=history_result.currency or cached.get("currency"),
         source_series_type="Price",
+        provider=history_result.provider,
         sync_mode="incremental",
         sync_status="ok",
-        sync_message=f"{price_message} {action_message}",
+        sync_message=incremental_message,
         replace=False,
         action_window=(overlap_start, fetched_end),
         overlap_hash=stable_rows_hash(fetched_rows, ["date", "close"]),
@@ -444,7 +452,12 @@ def get_or_refresh_instrument_profile(symbol: str) -> tuple[dict, str]:
     if cached and profile_cache_is_fresh(cached):
         return cached, "hit"
 
-    refreshed = fetch_symbol_profile(normalized_symbol)
+    cached_snapshot = load_cached_series(normalized_symbol)
+    preferred_provider = cached_snapshot.get("provider") if cached_snapshot else None
+    refreshed = fetch_symbol_profile(
+        normalized_symbol,
+        preferred_provider=preferred_provider,
+    )
     return refreshed, "refreshed"
 
 
@@ -457,7 +470,7 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
         or raw_snapshot.get("sourceSeriesType")
         or target_series_type
     ).strip() or target_series_type
-    provider_name = (request.get("providerName") or "Yahoo Finance").strip() or "Yahoo Finance"
+    provider_name = provider_display_name(raw_snapshot.get("provider"))
     family = (request.get("family") or "Ad hoc").strip() or "Ad hoc"
     source_url = (request.get("sourceUrl") or build_symbol_source_url(symbol)).strip()
     note = request.get("note")
@@ -471,7 +484,7 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
     sync_state = raw_snapshot.get("syncState") or {}
 
     return {
-        "provider": "yfinance",
+        "provider": raw_snapshot.get("provider") or "yfinance",
         "datasetType": "index",
         "datasetId": dataset_id,
         "label": label,
@@ -577,7 +590,7 @@ class DevServerHandler(SimpleHTTPRequestHandler):
                 self._write_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
                     {
-                        "error": "yfinance is not installed. Run ./.venv/bin/pip install -r requirements-sync.txt first.",
+                        "error": "A required local market-data provider is unavailable.",
                     },
                 )
             return
@@ -647,7 +660,7 @@ class DevServerHandler(SimpleHTTPRequestHandler):
             self._write_json(
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {
-                    "error": "yfinance is not installed. Run ./.venv/bin/pip install -r requirements-sync.txt first.",
+                    "error": "A required local market-data provider is unavailable.",
                 },
             )
 

@@ -220,6 +220,7 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS instrument_profiles (
             symbol TEXT PRIMARY KEY,
             fetched_at TEXT NOT NULL,
+            provider_name TEXT NOT NULL DEFAULT 'Yahoo Finance (yfinance)',
             quote_type TEXT,
             short_name TEXT,
             long_name TEXT,
@@ -252,6 +253,14 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
     }
     if "currency" not in existing_remembered_columns:
         connection.execute("ALTER TABLE remembered_datasets ADD COLUMN currency TEXT")
+
+    existing_profile_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(instrument_profiles)")
+    }
+    if "provider_name" not in existing_profile_columns:
+        connection.execute(
+            "ALTER TABLE instrument_profiles ADD COLUMN provider_name TEXT NOT NULL DEFAULT 'Yahoo Finance (yfinance)'",
+        )
 
     connection.commit()
 
@@ -302,6 +311,7 @@ def row_to_profile(row: sqlite3.Row) -> dict:
     return {
         "symbol": row["symbol"],
         "fetchedAt": row["fetched_at"],
+        "providerName": row["provider_name"],
         "quoteType": row["quote_type"],
         "shortName": row["short_name"],
         "longName": row["long_name"],
@@ -406,13 +416,20 @@ def _clean_dividend_yield(raw_info: dict) -> float | None:
     return _normalize_yield_ratio(raw_info.get("dividendYield"))
 
 
-def normalize_profile(symbol: str, info: dict | None) -> dict:
+def normalize_profile(
+    symbol: str,
+    info: dict | None,
+    *,
+    provider_name: str | None = None,
+) -> dict:
     raw_info = info if isinstance(info, dict) else {}
     normalized_symbol = normalize_symbol(symbol)
 
     return {
         "symbol": normalized_symbol,
         "fetchedAt": to_iso(now_utc()),
+        "providerName": str(provider_name or "Yahoo Finance (yfinance)").strip()
+        or "Yahoo Finance (yfinance)",
         "quoteType": _clean_text(raw_info.get("quoteType")),
         "shortName": _clean_text(raw_info.get("shortName")),
         "longName": _clean_text(raw_info.get("longName")),
@@ -541,6 +558,7 @@ def _ensure_symbol_row(
     symbol: str,
     currency: str | None = None,
     source_series_type: str | None = None,
+    provider: str | None = None,
     timestamp: str | None = None,
 ) -> int:
     normalized_symbol = normalize_symbol(symbol)
@@ -550,6 +568,7 @@ def _ensure_symbol_row(
     updated_at = timestamp or to_iso(now_utc())
     normalized_currency = str(currency or "").strip().upper() or None
     normalized_source_type = str(source_series_type or "Price").strip() or "Price"
+    normalized_provider = str(provider or "yfinance").strip().lower() or "yfinance"
 
     connection.execute(
         """
@@ -560,14 +579,16 @@ def _ensure_symbol_row(
             source_series_type,
             created_at,
             updated_at
-        ) VALUES (?, 'yfinance', ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(symbol) DO UPDATE SET
+            provider = excluded.provider,
             currency = COALESCE(excluded.currency, symbols.currency),
             source_series_type = COALESCE(excluded.source_series_type, symbols.source_series_type),
             updated_at = excluded.updated_at
         """,
         (
             normalized_symbol,
+            normalized_provider,
             normalized_currency,
             normalized_source_type,
             updated_at,
@@ -598,6 +619,7 @@ def _load_symbol_row(connection: sqlite3.Connection, symbol: str) -> sqlite3.Row
         SELECT
             symbol_id,
             symbol,
+            provider,
             currency,
             source_series_type
         FROM symbols
@@ -660,7 +682,7 @@ def _build_price_history_snapshot(
     )
     cache_key = symbol_cache_key(symbol_row["symbol"])
     snapshot = {
-        "provider": "yfinance",
+        "provider": symbol_row["provider"] or "yfinance",
         "datasetType": "index",
         "cacheKey": cache_key,
         "symbol": symbol_row["symbol"],
@@ -700,6 +722,7 @@ def _write_price_history_to_connection(
     *,
     currency: str | None = None,
     source_series_type: str | None = None,
+    provider: str | None = None,
     sync_mode: str = "full",
     sync_status: str = "ok",
     sync_message: str | None = None,
@@ -721,6 +744,7 @@ def _write_price_history_to_connection(
         normalized_symbol,
         currency=currency,
         source_series_type=source_series_type,
+        provider=provider,
         timestamp=timestamp,
     )
 
@@ -751,7 +775,7 @@ def _write_price_history_to_connection(
             volume,
             source,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'yfinance', ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(symbol_id, date) DO UPDATE SET
             open_value = excluded.open_value,
             high_value = excluded.high_value,
@@ -772,6 +796,7 @@ def _write_price_history_to_connection(
                 row["close"],
                 row["adjClose"],
                 row["volume"],
+                str(provider or "yfinance").strip().lower() or "yfinance",
                 timestamp,
             )
             for row in normalized_price_rows
@@ -788,7 +813,7 @@ def _write_price_history_to_connection(
                 value,
                 source,
                 updated_at
-            ) VALUES (?, ?, ?, ?, 'yfinance', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(symbol_id, date, action_type) DO UPDATE SET
                 value = excluded.value,
                 source = excluded.source,
@@ -800,6 +825,7 @@ def _write_price_history_to_connection(
                     row["date"],
                     row["actionType"],
                     row["value"],
+                    str(provider or "yfinance").strip().lower() or "yfinance",
                     timestamp,
                 )
                 for row in normalized_action_rows
@@ -1065,6 +1091,7 @@ def write_price_history(
     *,
     currency: str | None = None,
     source_series_type: str | None = None,
+    provider: str | None = None,
     sync_mode: str = "full",
     sync_status: str = "ok",
     sync_message: str | None = None,
@@ -1081,6 +1108,7 @@ def write_price_history(
             action_rows,
             currency=currency,
             source_series_type=source_series_type,
+            provider=provider,
             sync_mode=sync_mode,
             sync_status=sync_status,
             sync_message=sync_message,
@@ -1196,6 +1224,7 @@ def upsert_instrument_profile(connection: sqlite3.Connection, profile: dict) -> 
         INSERT INTO instrument_profiles (
             symbol,
             fetched_at,
+            provider_name,
             quote_type,
             short_name,
             long_name,
@@ -1214,9 +1243,10 @@ def upsert_instrument_profile(connection: sqlite3.Connection, profile: dict) -> 
             full_time_employees,
             website,
             raw_info_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(symbol) DO UPDATE SET
             fetched_at = excluded.fetched_at,
+            provider_name = excluded.provider_name,
             quote_type = excluded.quote_type,
             short_name = excluded.short_name,
             long_name = excluded.long_name,
@@ -1239,6 +1269,8 @@ def upsert_instrument_profile(connection: sqlite3.Connection, profile: dict) -> 
         (
             normalize_symbol(profile.get("symbol")),
             profile.get("fetchedAt") or to_iso(now_utc()),
+            str(profile.get("providerName") or "Yahoo Finance (yfinance)").strip()
+            or "Yahoo Finance (yfinance)",
             profile.get("quoteType"),
             profile.get("shortName"),
             profile.get("longName"),
@@ -1586,6 +1618,7 @@ def load_instrument_profile(symbol: str) -> dict | None:
             SELECT
                 symbol,
                 fetched_at,
+                provider_name,
                 quote_type,
                 short_name,
                 long_name,
@@ -1616,8 +1649,13 @@ def load_instrument_profile(symbol: str) -> dict | None:
     return row_to_profile(row)
 
 
-def write_instrument_profile(symbol: str, info: dict | None) -> dict:
-    profile = normalize_profile(symbol, info)
+def write_instrument_profile(
+    symbol: str,
+    info: dict | None,
+    *,
+    provider_name: str | None = None,
+) -> dict:
+    profile = normalize_profile(symbol, info, provider_name=provider_name)
 
     with open_runtime_store() as connection:
         upsert_instrument_profile(connection, profile)
