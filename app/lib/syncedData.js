@@ -160,6 +160,27 @@ async function requestJson(
   return payload;
 }
 
+async function requestLocalApiJson(
+  pathname,
+  body,
+  {
+    onHttpError,
+    onNetworkError = () => buildLocalApiUnavailableMessage(),
+  } = {},
+) {
+  return requestJson(buildApiUrl(pathname), {
+    requestInit: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+    onNetworkError,
+    onHttpError,
+  });
+}
+
 function validateDatasetsPayload(payload, errorMessage) {
   if (!Array.isArray(payload?.datasets)) {
     throw new Error(errorMessage);
@@ -244,15 +265,7 @@ async function loadRememberedIndexCatalog() {
 }
 
 async function fetchIndexSeries(request) {
-  const payload = await requestJson(buildApiUrl("/yfinance/index-series"), {
-    requestInit: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    },
-    onNetworkError: () => buildLocalApiUnavailableMessage(),
+  const payload = await requestLocalApiJson("/yfinance/index-series", request, {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not load that symbol.",
   });
@@ -269,18 +282,14 @@ async function fetchIndexSeries(request) {
 }
 
 async function fetchInstrumentProfile(symbol) {
-  const payload = await requestJson(buildApiUrl("/yfinance/instrument-profile"), {
-    requestInit: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ symbol }),
-    },
-    onNetworkError: () => buildLocalApiUnavailableMessage(),
+  const payload = await requestLocalApiJson(
+    "/yfinance/instrument-profile",
+    { symbol },
+    {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not load that profile.",
-  });
+    },
+  );
 
   if (!payload?.profile?.symbol) {
     throw new Error("The local data API returned an invalid profile payload.");
@@ -293,15 +302,7 @@ async function fetchInstrumentProfile(symbol) {
 }
 
 async function discoverSymbols(request) {
-  const payload = await requestJson(buildApiUrl("/symbols/discover"), {
-    requestInit: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    },
-    onNetworkError: () => buildLocalApiUnavailableMessage(),
+  const payload = await requestLocalApiJson("/symbols/discover", request, {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not search that symbol.",
   });
@@ -314,18 +315,14 @@ async function discoverSymbols(request) {
 }
 
 async function fetchMonthlyStraddleSnapshot(request) {
-  const payload = await requestJson(buildApiUrl("/yfinance/monthly-straddle"), {
-    requestInit: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    },
-    onNetworkError: () => buildLocalApiUnavailableMessage(),
+  const payload = await requestLocalApiJson(
+    "/yfinance/monthly-straddle",
+    request,
+    {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not load that options snapshot.",
-  });
+    },
+  );
 
   if (!payload?.snapshot?.symbol || !Array.isArray(payload?.snapshot?.monthlyContracts)) {
     throw new Error("The local data API returned an invalid monthly straddle payload.");
@@ -335,18 +332,14 @@ async function fetchMonthlyStraddleSnapshot(request) {
 }
 
 async function fetchOptionsScreenerSnapshot(request) {
-  const payload = await requestJson(buildApiUrl("/options/screener-snapshot"), {
-    requestInit: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    },
-    onNetworkError: () => buildLocalApiUnavailableMessage(),
+  const payload = await requestLocalApiJson(
+    "/options/screener-snapshot",
+    request,
+    {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not load that screener snapshot.",
-  });
+    },
+  );
 
   if (!Array.isArray(payload?.snapshots) || !Array.isArray(payload?.failures)) {
     throw new Error("The local data API returned an invalid options screener payload.");
@@ -356,18 +349,14 @@ async function fetchOptionsScreenerSnapshot(request) {
 }
 
 async function fetchOptionsScreenerHistory(request) {
-  const payload = await requestJson(buildApiUrl("/options/screener-history"), {
-    requestInit: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    },
-    onNetworkError: () => buildLocalApiUnavailableMessage(),
+  const payload = await requestLocalApiJson(
+    "/options/screener-history",
+    request,
+    {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not load screener history.",
-  });
+    },
+  );
 
   if (!Array.isArray(payload?.runs)) {
     throw new Error("The local data API returned an invalid options screener history payload.");
@@ -377,18 +366,14 @@ async function fetchOptionsScreenerHistory(request) {
 }
 
 async function fetchOptionsValidation(request) {
-  const payload = await requestJson(buildApiUrl("/options/screener-validation"), {
-    requestInit: {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    },
-    onNetworkError: () => buildLocalApiUnavailableMessage(),
+  const payload = await requestLocalApiJson(
+    "/options/screener-validation",
+    request,
+    {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not load options validation data.",
-  });
+    },
+  );
 
   if (!Array.isArray(payload?.observations)) {
     throw new Error("The local data API returned an invalid options validation payload.");
