@@ -1015,6 +1015,12 @@ def build_forward_validation_observation(
         }
 
     forward_return = (forward_price / effective_base_price) - 1
+    implied_move_percent = clean_history_number(row.get("impliedMovePercent"))
+    realized_beat_implied = (
+        abs(forward_return) > implied_move_percent
+        if implied_move_percent is not None and implied_move_percent >= 0
+        else None
+    )
     return {
         "symbol": symbol,
         "asOfDate": as_of_date,
@@ -1025,6 +1031,13 @@ def build_forward_validation_observation(
         "forwardPrice": forward_price,
         "forwardReturn": forward_return,
         "absoluteMove": abs(forward_return),
+        "impliedMovePercent": implied_move_percent,
+        "moveEdge": (
+            abs(forward_return) - implied_move_percent
+            if implied_move_percent is not None
+            else None
+        ),
+        "realizedBeatImplied": realized_beat_implied,
         "availableTradingDays": available_trading_days,
         "reason": None,
     }
@@ -1074,6 +1087,7 @@ def build_options_screener_validation_payload(
                     "expiry": row.get("expiry"),
                     "daysToExpiry": row.get("daysToExpiry"),
                     "spotPrice": row.get("spotPrice"),
+                    "impliedMovePercent": row.get("impliedMovePercent"),
                     "pricingLabel": row.get("pricingLabel"),
                     "pricingBucket": row.get("pricingBucket"),
                     "candidateAdvisory": row.get("candidateAdvisory"),

@@ -601,6 +601,8 @@ def test_options_validation_payload_uses_cached_forward_prices():
         assert_equal(observation["baseDate"], "2026-04-10", "weekend screener rows should anchor to prior close")
         assert_equal(observation["forwardDate"], "2026-04-14", "2-day horizon should land on the second trading day ahead")
         assert_equal(round(observation["forwardReturn"], 4), 0.02, "forward return should use cached close prices")
+        assert_equal(round(observation["moveEdge"], 4), -0.055, "move edge should compare realized move to implied move")
+        assert_equal(observation["realizedBeatImplied"], False, "realized move should not beat the archived implied move")
 
 
 def mark_cached_series_stale(symbol: str) -> None:

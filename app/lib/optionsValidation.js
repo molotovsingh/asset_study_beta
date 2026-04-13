@@ -1,7 +1,9 @@
 const OPTIONS_VALIDATION_HORIZON_DEFINITIONS = [
   { days: 1, label: "1D" },
   { days: 5, label: "5D" },
+  { days: 10, label: "10D" },
   { days: 20, label: "20D" },
+  { days: 21, label: "1M" },
   { days: 63, label: "63D" },
 ];
 
@@ -136,6 +138,7 @@ function normalizeObservation(rawObservation) {
     spotPrice: Number(rawObservation.spotPrice),
     basePrice: Number(rawObservation.basePrice),
     forwardPrice: Number(rawObservation.forwardPrice),
+    impliedMovePercent: Number(rawObservation.impliedMovePercent),
     directionScore: Number(rawObservation.directionScore),
     executionScore: Number(rawObservation.executionScore),
     confidenceScore: Number(rawObservation.confidenceScore),
@@ -144,11 +147,39 @@ function normalizeObservation(rawObservation) {
     ivPercentile: Number(rawObservation.ivPercentile),
     forwardReturn: Number(rawObservation.forwardReturn),
     absoluteMove: Number(rawObservation.absoluteMove),
+    moveEdge: Number(rawObservation.moveEdge),
+    realizedBeatImplied:
+      typeof rawObservation.realizedBeatImplied === "boolean"
+        ? rawObservation.realizedBeatImplied
+        : null,
     availableTradingDays: Number(rawObservation.availableTradingDays),
     matured: Boolean(rawObservation.matured),
     directionBucket: String(rawObservation.directionBucket || "none"),
     candidateBucket: String(rawObservation.candidateBucket || "watch"),
     pricingBucket: String(rawObservation.pricingBucket || "none"),
+  };
+}
+
+function sampleQuality(maturedCount) {
+  const count = Number(maturedCount) || 0;
+  if (count >= 60) {
+    return {
+      label: "Usable",
+      toneId: "positive",
+      note: "Enough matured rows exist to start trusting bucket separation directionally.",
+    };
+  }
+  if (count >= 20) {
+    return {
+      label: "Developing",
+      toneId: "neutral",
+      note: "The archive is starting to form, but the sample is still modest.",
+    };
+  }
+  return {
+    label: "Thin",
+    toneId: "caution",
+    note: "This is still an early sample. Treat bucket differences as provisional.",
   };
 }
 
@@ -165,6 +196,7 @@ function groupObservations(observations, groupKey) {
     .map(([key, groupRows]) => {
       const forwardReturns = groupRows.map((row) => row.forwardReturn);
       const absoluteMoves = groupRows.map((row) => row.absoluteMove);
+      const moveEdges = groupRows.map((row) => row.moveEdge);
       const ivHv20Ratios = groupRows.map((row) => row.ivHv20Ratio);
       const directionScores = groupRows.map((row) => row.directionScore);
       const latestAsOfDate = groupRows.reduce((latest, row) => {
@@ -179,6 +211,12 @@ function groupObservations(observations, groupKey) {
       const positiveCount = groupRows.filter(
         (row) => isFiniteNumber(row.forwardReturn) && row.forwardReturn > 0,
       ).length;
+      const beatImpliedCount = groupRows.filter(
+        (row) => row.realizedBeatImplied === true,
+      ).length;
+      const impliedComparables = groupRows.filter(
+        (row) => row.realizedBeatImplied !== null,
+      ).length;
 
       return {
         key,
@@ -189,6 +227,10 @@ function groupObservations(observations, groupKey) {
         medianForwardReturn: median(forwardReturns),
         winRate: groupRows.length ? positiveCount / groupRows.length : null,
         averageAbsoluteMove: average(absoluteMoves),
+        averageMoveEdge: average(moveEdges),
+        beatImpliedRate: impliedComparables
+          ? beatImpliedCount / impliedComparables
+          : null,
         averageIvHv20Ratio: average(ivHv20Ratios),
         averageDirectionScore: average(directionScores),
         rows: groupRows,
@@ -206,6 +248,58 @@ function groupObservations(observations, groupKey) {
       }
       return left.label.localeCompare(right.label);
     });
+}
+
+function findGroup(groupedResults, key) {
+  return groupedResults.find((group) => group.key === key) || null;
+}
+
+function buildPrimaryComparison(groupedResults, groupKey) {
+  let leftKey = null;
+  let rightKey = null;
+  if (groupKey === "pricingBucket") {
+    leftKey = "cheap";
+    rightKey = "rich";
+  } else if (groupKey === "candidateBucket") {
+    leftKey = "long-premium";
+    rightKey = "short-premium";
+  } else if (groupKey === "directionBucket") {
+    leftKey = "long";
+    rightKey = "short";
+  }
+
+  if (!leftKey || !rightKey) {
+    return null;
+  }
+
+  const leftGroup = findGroup(groupedResults, leftKey);
+  const rightGroup = findGroup(groupedResults, rightKey);
+  if (!leftGroup || !rightGroup) {
+    return null;
+  }
+
+  const leftReturn = leftGroup.averageForwardReturn;
+  const rightReturn = rightGroup.averageForwardReturn;
+  return {
+    leftKey,
+    rightKey,
+    leftLabel: leftGroup.label,
+    rightLabel: rightGroup.label,
+    leftCount: leftGroup.count,
+    rightCount: rightGroup.count,
+    leftReturn,
+    rightReturn,
+    spread:
+      isFiniteNumber(leftReturn) && isFiniteNumber(rightReturn)
+        ? leftReturn - rightReturn
+        : null,
+    leaderLabel:
+      isFiniteNumber(leftReturn) && isFiniteNumber(rightReturn)
+        ? leftReturn >= rightReturn
+          ? leftGroup.label
+          : rightGroup.label
+        : null,
+  };
 }
 
 function buildOptionsValidationStudyRun({
@@ -228,6 +322,11 @@ function buildOptionsValidationStudyRun({
   const maturedObservations = observations.filter((row) => row.matured);
   const pendingObservations = observations.filter((row) => !row.matured);
   const groupedResults = groupObservations(maturedObservations, normalizedGroupKey);
+  const primaryComparison = buildPrimaryComparison(
+    groupedResults,
+    normalizedGroupKey,
+  );
+  const quality = sampleQuality(maturedObservations.length);
   const latestAsOfDate = observations.reduce((latest, row) => {
     if (!row.asOfDate) {
       return latest;
@@ -254,10 +353,14 @@ function buildOptionsValidationStudyRun({
     maturedObservations,
     pendingObservations,
     groupedResults,
+    primaryComparison,
     bestGroup: groupedResults[0] || null,
     weakestGroup: groupedResults[groupedResults.length - 1] || null,
     latestMaturedObservation: maturedObservations[0] || null,
     latestPendingObservation: pendingObservations[0] || null,
+    sampleQualityLabel: quality.label,
+    sampleQualityToneId: quality.toneId,
+    sampleQualityNote: quality.note,
     exportedAt,
   };
 }
@@ -272,6 +375,8 @@ function flattenOptionsValidationGroups(studyRun) {
     medianForwardReturn: group.medianForwardReturn,
     winRate: group.winRate,
     averageAbsoluteMove: group.averageAbsoluteMove,
+    averageMoveEdge: group.averageMoveEdge,
+    beatImpliedRate: group.beatImpliedRate,
     averageIvHv20Ratio: group.averageIvHv20Ratio,
     averageDirectionScore: group.averageDirectionScore,
   }));
@@ -289,6 +394,9 @@ function flattenOptionsValidationObservations(studyRun) {
     forwardPrice: row.forwardPrice,
     forwardReturn: row.forwardReturn,
     absoluteMove: row.absoluteMove,
+    impliedMovePercent: row.impliedMovePercent,
+    moveEdge: row.moveEdge,
+    realizedBeatImplied: row.realizedBeatImplied,
     availableTradingDays: row.availableTradingDays,
     pricingLabel: row.pricingLabel,
     candidateAdvisory: row.candidateAdvisory,

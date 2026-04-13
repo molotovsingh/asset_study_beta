@@ -18,6 +18,9 @@ function renderMetricCard({ label, value, detail }) {
 }
 
 function renderInterpretation(studyRun) {
+  const comparisonText = studyRun.primaryComparison
+    ? `${studyRun.primaryComparison.leftLabel} averages ${formatPercent(studyRun.primaryComparison.leftReturn)} versus ${studyRun.primaryComparison.rightLabel} at ${formatPercent(studyRun.primaryComparison.rightReturn)}. The current spread is ${formatPercent(studyRun.primaryComparison.spread)} in favor of ${studyRun.primaryComparison.leaderLabel}.`
+    : "The selected grouping does not yet have both comparison buckets populated.";
   return renderInterpretationPanel({
     title: "Validation Read",
     summary:
@@ -25,9 +28,9 @@ function renderInterpretation(studyRun) {
     items: [
       {
         label: "Coverage",
-        tone: studyRun.maturedCount > 0 ? "Matured" : "Collecting",
-        toneId: studyRun.maturedCount > 0 ? "positive" : "neutral",
-        text: `${formatNumber(studyRun.maturedCount, 0)} matured observations and ${formatNumber(studyRun.pendingCount, 0)} pending rows are available for ${studyRun.horizonLabel} validation.`,
+        tone: studyRun.sampleQualityLabel,
+        toneId: studyRun.sampleQualityToneId,
+        text: `${formatNumber(studyRun.maturedCount, 0)} matured observations and ${formatNumber(studyRun.pendingCount, 0)} pending rows are available for ${studyRun.horizonLabel} validation. ${studyRun.sampleQualityNote}`,
       },
       {
         label: "Best Group",
@@ -52,6 +55,16 @@ function renderInterpretation(studyRun) {
         text: studyRun.weakestGroup
           ? `${studyRun.weakestGroup.label} is weakest at ${formatPercent(studyRun.weakestGroup.averageForwardReturn)} on average.`
           : "No matured group has enough data yet.",
+      },
+      {
+        label: "Signal Spread",
+        tone: studyRun.primaryComparison?.leaderLabel || "n/a",
+        toneId:
+          Number.isFinite(studyRun.primaryComparison?.spread) &&
+          studyRun.primaryComparison.spread > 0
+            ? "positive"
+            : "neutral",
+        text: comparisonText,
       },
       {
         label: "Scope",
@@ -98,6 +111,8 @@ function renderOptionsValidationResults(studyRun) {
                 <th>Median</th>
                 <th>Win Rate</th>
                 <th>Avg Abs Move</th>
+                <th>Avg Move Edge</th>
+                <th>Beat Implied</th>
                 <th>Avg IV/HV20</th>
                 <th>Avg Direction</th>
                 <th>Latest As Of</th>
@@ -114,6 +129,8 @@ function renderOptionsValidationResults(studyRun) {
                       <td>${formatPercent(group.medianForwardReturn)}</td>
                       <td>${formatPercent(group.winRate)}</td>
                       <td>${formatPercent(group.averageAbsoluteMove)}</td>
+                      <td>${formatPercent(group.averageMoveEdge)}</td>
+                      <td>${formatPercent(group.beatImpliedRate)}</td>
                       <td>${formatNumber(group.averageIvHv20Ratio, 2)}</td>
                       <td>${formatNumber(group.averageDirectionScore, 0)}</td>
                       <td>${group.latestAsOfDate ? formatDate(group.latestAsOfDate) : "n/a"}</td>
@@ -142,6 +159,7 @@ function renderOptionsValidationResults(studyRun) {
                 <th>As Of</th>
                 <th>Forward Date</th>
                 <th>Forward Return</th>
+                <th>Move Edge</th>
                 <th>Pricing</th>
                 <th>Candidate</th>
                 <th>Direction</th>
@@ -157,6 +175,7 @@ function renderOptionsValidationResults(studyRun) {
                       <td>${row.asOfDate ? formatDate(row.asOfDate) : "n/a"}</td>
                       <td>${row.forwardDate ? formatDate(row.forwardDate) : "n/a"}</td>
                       <td>${formatPercent(row.forwardReturn)}</td>
+                      <td>${formatPercent(row.moveEdge)}</td>
                       <td>${row.pricingLabel}</td>
                       <td>${row.candidateAdvisory}</td>
                       <td>${row.directionLabel}</td>
@@ -204,11 +223,13 @@ function renderOptionsValidationResults(studyRun) {
             detail: "Still collecting forward outcomes",
           })}
           ${renderMetricCard({
-            label: "Best Group",
-            value: studyRun.bestGroup?.label || "n/a",
-            detail: studyRun.bestGroup
-              ? `Avg ${formatPercent(studyRun.bestGroup.averageForwardReturn)}`
-              : "No matured groups yet",
+            label: "Signal Spread",
+            value: Number.isFinite(studyRun.primaryComparison?.spread)
+              ? formatPercent(studyRun.primaryComparison.spread)
+              : "n/a",
+            detail: studyRun.primaryComparison
+              ? `${studyRun.primaryComparison.leftLabel} vs ${studyRun.primaryComparison.rightLabel}`
+              : "Comparison bucket not ready",
           })}
         </div>
       </section>
@@ -247,12 +268,15 @@ function renderOptionsValidationResults(studyRun) {
           <p class="result-detail">Universe: ${studyRun.universe.label}</p>
           <p class="result-detail">Grouping: ${studyRun.groupDefinition.label}</p>
           <p class="result-detail">Forward horizon: ${studyRun.horizonLabel}</p>
+          <p class="result-detail">Sample quality: ${studyRun.sampleQualityLabel}</p>
           <p class="result-detail">Latest archived row: ${studyRun.latestAsOfDate ? formatDate(studyRun.latestAsOfDate) : "n/a"}</p>
         </div>
         <div class="detail-block">
           <h3>Methods</h3>
           <p class="result-detail">Each archived screener row is matched to cached daily closes for the same symbol.</p>
           <p class="result-detail">Forward outcomes use trading-day steps from the latest cached close on or before the archived screener date.</p>
+          <p class="result-detail">Move edge is realized absolute move minus the archived implied move for that row.</p>
+          <p class="result-detail">A 1M view uses 21 trading days as the monthly hold proxy.</p>
           <p class="result-detail">Rows that have not yet reached the selected horizon remain pending and are excluded from grouped outcome statistics.</p>
         </div>
         ${renderPendingBlock(studyRun)}
@@ -274,7 +298,7 @@ function optionsValidationTemplate({
           <p class="study-kicker">Study 11</p>
           <h2>Options Validation</h2>
           <p class="summary-meta">
-            Group archived screener rows and measure what the underlying did over the next few trading sessions.
+            Group archived screener rows and measure what the underlying did over the next few trading sessions or a monthly hold proxy.
           </p>
         </div>
         <form id="options-validation-form" class="card-grid options-validation-form-grid">

@@ -106,6 +106,50 @@ function renderWinRateBars(studyRun) {
   `;
 }
 
+function renderBeatImpliedBars(studyRun) {
+  const groups = studyRun.groupedResults.filter((group) =>
+    Number.isFinite(group.beatImpliedRate),
+  );
+  if (!groups.length) {
+    return `
+      <section class="visual-card options-validation-visual-card">
+        <div class="visual-empty">
+          <h2>No move-edge view yet.</h2>
+          <p>Matured rows with implied-move context are needed before premium buckets can be judged properly.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="visual-card options-validation-visual-card">
+      <div class="visual-card-head">
+        <div>
+          <p class="section-label">Beat Implied Rate</p>
+          <p class="summary-meta">
+            Share of matured rows where realized absolute move exceeded the archived implied move.
+          </p>
+        </div>
+      </div>
+      <div class="seasonality-bar-list">
+        ${groups
+          .map((group) => `
+            <div class="seasonality-bar-row">
+              <div class="seasonality-bar-meta">
+                <span class="seasonality-bar-label">${group.label}</span>
+                <span class="seasonality-bar-value">${formatPercent(group.beatImpliedRate)}</span>
+              </div>
+              <div class="seasonality-bar-track">
+                <span class="seasonality-bar-fill options-validation-win-fill" style="width: ${Math.max((group.beatImpliedRate || 0) * 100, 4)}%;"></span>
+              </div>
+            </div>
+          `)
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
 function buildScatterModel(studyRun) {
   const groups = studyRun.groupedResults.filter(
     (group) =>
@@ -245,6 +289,12 @@ function renderObservationsTable(studyRun) {
 }
 
 function renderVisualsShell(studyRun) {
+  const spreadValue = Number.isFinite(studyRun.primaryComparison?.spread)
+    ? formatPercent(studyRun.primaryComparison.spread)
+    : "n/a";
+  const spreadDetail = studyRun.primaryComparison
+    ? `${studyRun.primaryComparison.leftLabel} vs ${studyRun.primaryComparison.rightLabel}`
+    : "Comparison bucket not ready";
   return `
     <div class="visuals-shell options-validation-visuals-shell">
       <section class="card visuals-hero">
@@ -279,11 +329,17 @@ function renderVisualsShell(studyRun) {
           <strong class="visuals-summary-value">${formatNumber(studyRun.maturedCount, 0)}</strong>
           <p class="summary-meta">${formatNumber(studyRun.pendingCount, 0)} pending rows still collecting</p>
         </section>
+        <section class="card visuals-summary-card">
+          <p class="meta-label">Signal Spread</p>
+          <strong class="visuals-summary-value">${spreadValue}</strong>
+          <p class="summary-meta">${spreadDetail}</p>
+        </section>
       </div>
 
       <div class="visuals-chart-grid options-validation-visual-grid">
         ${renderOutcomeBars(studyRun)}
         ${renderWinRateBars(studyRun)}
+        ${renderBeatImpliedBars(studyRun)}
         ${renderScatter(studyRun)}
         ${renderObservationsTable(studyRun)}
       </div>

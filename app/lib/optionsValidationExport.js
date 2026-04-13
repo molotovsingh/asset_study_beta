@@ -31,6 +31,8 @@ function buildCsvRows(studyRun) {
       "Median Forward Return",
       "Win Rate",
       "Average Absolute Move",
+      "Average Move Edge",
+      "Beat Implied Rate",
       "Average IV/HV20",
       "Average Direction Score",
       "Run Id",
@@ -43,6 +45,9 @@ function buildCsvRows(studyRun) {
       "Forward Price",
       "Forward Return",
       "Absolute Move",
+      "Implied Move Percent",
+      "Move Edge",
+      "Realized Beat Implied",
       "Available Trading Days",
       "Pricing",
       "Candidate",
@@ -59,6 +64,8 @@ function buildCsvRows(studyRun) {
       group.medianForwardReturn,
       group.winRate,
       group.averageAbsoluteMove,
+      group.averageMoveEdge,
+      group.beatImpliedRate,
       group.averageIvHv20Ratio,
       group.averageDirectionScore,
       "",
@@ -99,6 +106,13 @@ function buildCsvRows(studyRun) {
       row.forwardPrice,
       row.forwardReturn,
       row.absoluteMove,
+      row.impliedMovePercent,
+      row.moveEdge,
+      row.realizedBeatImplied === null
+        ? ""
+        : row.realizedBeatImplied
+          ? "yes"
+          : "no",
       row.availableTradingDays,
       row.pricingLabel,
       row.candidateAdvisory,
@@ -134,6 +148,8 @@ function buildGroupsSheet(studyRun) {
       createCell("Median Forward Return", "header"),
       createCell("Win Rate", "header"),
       createCell("Average Absolute Move", "header"),
+      createCell("Average Move Edge", "header"),
+      createCell("Beat Implied Rate", "header"),
       createCell("Average IV/HV20", "header"),
       createCell("Average Direction Score", "header"),
     ],
@@ -145,6 +161,8 @@ function buildGroupsSheet(studyRun) {
       createCell(group.medianForwardReturn, "percent"),
       createCell(group.winRate, "percent"),
       createCell(group.averageAbsoluteMove, "percent"),
+      createCell(group.averageMoveEdge, "percent"),
+      createCell(group.beatImpliedRate, "percent"),
       createCell(group.averageIvHv20Ratio, "number2"),
       createCell(group.averageDirectionScore, "number2"),
     ]),
@@ -164,6 +182,9 @@ function buildObservationsSheet(studyRun) {
       createCell("Forward Price", "header"),
       createCell("Forward Return", "header"),
       createCell("Absolute Move", "header"),
+      createCell("Implied Move Percent", "header"),
+      createCell("Move Edge", "header"),
+      createCell("Realized Beat Implied", "header"),
       createCell("Available Trading Days", "header"),
       createCell("Pricing", "header"),
       createCell("Candidate", "header"),
@@ -185,6 +206,15 @@ function buildObservationsSheet(studyRun) {
       createCell(row.forwardPrice, "number2"),
       createCell(row.forwardReturn, "percent"),
       createCell(row.absoluteMove, "percent"),
+      createCell(row.impliedMovePercent, "percent"),
+      createCell(row.moveEdge, "percent"),
+      createCell(
+        row.realizedBeatImplied === null
+          ? ""
+          : row.realizedBeatImplied
+            ? "yes"
+            : "no",
+      ),
       createCell(row.availableTradingDays, "integer"),
       createCell(row.pricingLabel),
       createCell(row.candidateAdvisory),

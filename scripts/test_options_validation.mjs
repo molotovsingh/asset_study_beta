@@ -53,6 +53,9 @@ function buildFixtureStudyRun(overrides = {}) {
           forwardPrice: 106,
           forwardReturn: 0.06,
           absoluteMove: 0.06,
+          impliedMovePercent: 0.045,
+          moveEdge: 0.015,
+          realizedBeatImplied: true,
           availableTradingDays: 5,
           pricingLabel: "Cheap",
           pricingBucket: "cheap",
@@ -76,6 +79,9 @@ function buildFixtureStudyRun(overrides = {}) {
           forwardPrice: 103,
           forwardReturn: 0.03,
           absoluteMove: 0.03,
+          impliedMovePercent: 0.04,
+          moveEdge: -0.01,
+          realizedBeatImplied: false,
           availableTradingDays: 5,
           pricingLabel: "Cheap",
           pricingBucket: "cheap",
@@ -99,6 +105,9 @@ function buildFixtureStudyRun(overrides = {}) {
           forwardPrice: 95,
           forwardReturn: -0.05,
           absoluteMove: 0.05,
+          impliedMovePercent: 0.04,
+          moveEdge: 0.01,
+          realizedBeatImplied: true,
           availableTradingDays: 5,
           pricingLabel: "Rich",
           pricingBucket: "rich",
@@ -122,6 +131,9 @@ function buildFixtureStudyRun(overrides = {}) {
           forwardPrice: 98,
           forwardReturn: -0.02,
           absoluteMove: 0.02,
+          impliedMovePercent: 0.035,
+          moveEdge: -0.015,
+          realizedBeatImplied: false,
           availableTradingDays: 5,
           pricingLabel: "Rich",
           pricingBucket: "rich",
@@ -172,6 +184,9 @@ function testStudyRun() {
   assert(studyRun.groupedResults.length === 2, "candidate grouping should produce two matured groups");
   assert(studyRun.bestGroup?.label === "Long Premium", "long premium should lead average returns");
   assert(studyRun.weakestGroup?.label === "Short Premium", "short premium should trail average returns");
+  assert(studyRun.primaryComparison?.leaderLabel === "Long Premium", "comparison should identify the leading bucket");
+  assert(studyRun.sampleQualityLabel === "Thin", "small matured samples should be marked thin");
+  assert(studyRun.groupedResults[0].beatImpliedRate === 0.5, "groups should track beat-implied rates");
 
   const groups = flattenOptionsValidationGroups(studyRun);
   assert(groups.length === 2, "flattened groups should match grouped results");
@@ -184,6 +199,8 @@ function testStudyRun() {
   const csvRows = buildCsvRows(studyRun);
   assert(csvRows.length === 8, "csv export should include header plus groups and observations");
   assert(csvRows[0][0] === "Section", "csv header should start with Section");
+  assert(csvRows[0].includes("Average Move Edge"), "csv export should include move-edge group fields");
+  assert(csvRows[0].includes("Implied Move Percent"), "csv export should include implied-move observation fields");
 
   const workbookXml = buildWorkbookXml(studyRun);
   assert(workbookXml.includes('Worksheet ss:Name="Summary"'), "workbook should include Summary sheet");
@@ -203,17 +220,23 @@ function testViews() {
   });
   assert(template.includes('id="options-validation-form"'), "template should include the validation form");
   assert(template.includes("Forward Horizon"), "template should include the horizon selector");
+  assert(template.includes(">1M<"), "template should include the monthly hold proxy horizon");
 
   const resultsMarkup = renderOptionsValidationResults(buildFixtureStudyRun());
   assert(resultsMarkup.includes("Grouped Outcomes"), "results should include grouped outcomes section");
   assert(resultsMarkup.includes("Latest Matured Observations"), "results should include matured observations table");
   assert(resultsMarkup.includes("Pending Rows"), "results should include pending rows block");
   assert(resultsMarkup.includes("Long Premium"), "results should include group labels");
+  assert(resultsMarkup.includes("Signal Spread"), "results should include the comparison summary");
+  assert(resultsMarkup.includes("monthly hold proxy"), "results should explain the 1M horizon method");
+  assert(resultsMarkup.includes("Avg Move Edge"), "results should include move-edge columns");
 
   const visualsMarkup = renderOptionsValidationVisuals(buildFixtureStudyRun());
   assert(visualsMarkup.includes("Options Validation Visuals"), "visuals should include the hero");
   assert(visualsMarkup.includes("Average Forward Return"), "visuals should include return bars");
   assert(visualsMarkup.includes("Return / Move Map"), "visuals should include the scatter section");
+  assert(visualsMarkup.includes("Signal Spread"), "visuals should include the signal spread summary card");
+  assert(visualsMarkup.includes("Beat Implied Rate"), "visuals should include implied-move hit rates");
   console.log("ok options validation views");
 }
 
