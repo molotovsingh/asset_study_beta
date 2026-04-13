@@ -163,6 +163,12 @@ Refresh snapshots and validate them with:
 ./scripts/refresh_yfinance.sh --period 5y
 ```
 
+Audit bundled snapshot freshness, gap structure, and large day-over-day moves with:
+
+```bash
+python3 scripts/audit_yfinance_quality.py
+```
+
 Run the frontend-side calculator and export regressions with:
 
 ```bash
