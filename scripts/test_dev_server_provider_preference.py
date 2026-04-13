@@ -162,9 +162,45 @@ def test_matching_preferred_provider_keeps_cache_hit():
     assert_equal(snapshot["provider"], "yahoo_finance15", "cached provider should be preserved")
 
 
+def test_build_direction_context_uses_dev_server_cache_wrapper():
+    original_get_or_refresh_cached_series = dev_server.get_or_refresh_cached_series
+
+    points = []
+    for offset in range(260):
+        points.append([f"2026-{(offset // 28) + 1:02d}-{(offset % 28) + 1:02d}", 100 + offset])
+
+    calls: list[tuple[str, str | None]] = []
+
+    def fake_get_or_refresh(symbol, *, preferred_provider=None):
+        calls.append((symbol, preferred_provider))
+        return (
+            {
+                "symbol": symbol,
+                "points": points,
+            },
+            "hit",
+        )
+
+    dev_server.get_or_refresh_cached_series = fake_get_or_refresh
+    try:
+        context = dev_server.build_direction_context(
+            "XLF",
+            as_of_date="2026-10-08",
+            preferred_provider="yahoo_finance15",
+        )
+    finally:
+        dev_server.get_or_refresh_cached_series = original_get_or_refresh_cached_series
+
+    assert_equal(calls, [("XLF", "yahoo_finance15")], "direction context should use the dev_server cache wrapper")
+    assert_equal(context["historyStartDate"], "2026-01-01", "direction context should read from injected cached points")
+    assert_equal(context["historyEndDate"], "2026-10-08", "direction context should use the injected series range")
+    assert_equal(context["directionLabel"], "Long Bias", "rising cached series should produce a long bias")
+
+
 def main() -> int:
     test_preferred_provider_switch_rebuilds_fresh_cache()
     test_matching_preferred_provider_keeps_cache_hit()
+    test_build_direction_context_uses_dev_server_cache_wrapper()
     print("ok dev server provider preference")
     return 0
 
