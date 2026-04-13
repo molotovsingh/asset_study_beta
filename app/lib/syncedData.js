@@ -292,6 +292,27 @@ async function fetchInstrumentProfile(symbol) {
   };
 }
 
+async function discoverSymbols(request) {
+  const payload = await requestJson(buildApiUrl("/symbols/discover"), {
+    requestInit: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not search that symbol.",
+  });
+
+  if (!Array.isArray(payload?.results)) {
+    throw new Error("The local data API returned an invalid symbol discovery payload.");
+  }
+
+  return payload;
+}
+
 async function fetchMonthlyStraddleSnapshot(request) {
   const payload = await requestJson(buildApiUrl("/yfinance/monthly-straddle"), {
     requestInit: {
@@ -355,14 +376,37 @@ async function fetchOptionsScreenerHistory(request) {
   return payload;
 }
 
+async function fetchOptionsValidation(request) {
+  const payload = await requestJson(buildApiUrl("/options/screener-validation"), {
+    requestInit: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load options validation data.",
+  });
+
+  if (!Array.isArray(payload?.observations)) {
+    throw new Error("The local data API returned an invalid options validation payload.");
+  }
+
+  return payload;
+}
+
 export {
   LOCAL_API_COMMAND,
   buildLocalApiUnavailableMessage,
+  discoverSymbols,
   describeFreshness,
   fetchInstrumentProfile,
   fetchIndexSeries,
   fetchOptionsScreenerHistory,
   fetchOptionsScreenerSnapshot,
+  fetchOptionsValidation,
   fetchMonthlyStraddleSnapshot,
   getManifestDataset,
   getSnapshotFreshness,

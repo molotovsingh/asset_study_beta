@@ -1,9 +1,17 @@
 import { studyRegistry, getStudyById } from "./studies/registry.js";
 import {
+  discoverSymbols,
+  loadRememberedIndexCatalog,
+} from "./lib/syncedData.js";
+import {
   getActiveSubjectQuery,
   setActiveSubjectQuery,
   subscribeActiveSubject,
 } from "./studies/shared/activeSubject.js";
+import {
+  discoverSelectionSuggestions,
+  mergeSelectionSuggestions,
+} from "./studies/shared/indexSelection.js";
 import {
   getRecentRuns,
   subscribeRunHistory,
@@ -23,8 +31,16 @@ const studyRoot = document.querySelector("#study-root");
 const runHistoryRoot = document.querySelector("#run-history");
 const activeSubjectForm = document.querySelector("#active-subject-form");
 const activeSubjectInput = document.querySelector("#active-subject-input");
+const activeSubjectStatus = document.querySelector("#active-subject-status");
+const activeSubjectResults = document.querySelector("#active-subject-results");
 
 let unmountCurrentStudy = null;
+let activeSubjectSuggestions = [];
+let activeSubjectSuggestionQuery = "";
+let activeSubjectRememberedCatalog = [];
+let activeSubjectRememberedCatalogPromise = null;
+let activeSubjectDiscoveryTimer = null;
+let activeSubjectDiscoveryToken = 0;
 
 const HTML_ESCAPE_MAP = {
   "&": "&amp;",
@@ -36,6 +52,234 @@ const HTML_ESCAPE_MAP = {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (match) => HTML_ESCAPE_MAP[match]);
+}
+
+function normalizeDiscoveryText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function isLikelyDirectSymbol(query) {
+  const trimmed = String(query || "").trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  return /[.=^]/.test(trimmed) || /^[A-Z0-9.-]{1,18}$/.test(trimmed);
+}
+
+function clearActiveSubjectSuggestions() {
+  activeSubjectSuggestions = [];
+  activeSubjectSuggestionQuery = "";
+  activeSubjectDiscoveryToken += 1;
+  if (activeSubjectDiscoveryTimer) {
+    window.clearTimeout(activeSubjectDiscoveryTimer);
+    activeSubjectDiscoveryTimer = null;
+  }
+  renderActiveSubjectSuggestions();
+}
+
+function renderActiveSubjectStatus(message = "") {
+  if (!activeSubjectStatus) {
+    return;
+  }
+  activeSubjectStatus.textContent = message;
+}
+
+function renderActiveSubjectSuggestions() {
+  if (!activeSubjectResults) {
+    return;
+  }
+
+  if (!activeSubjectSuggestions.length) {
+    activeSubjectResults.innerHTML = "";
+    return;
+  }
+
+  activeSubjectResults.innerHTML = `
+    ${activeSubjectSuggestions
+      .map(
+        (suggestion) => `
+          <button
+            type="button"
+            class="active-asset-result"
+            data-subject-query="${escapeHtml(suggestion.subjectQuery || "")}"
+            data-input-value="${escapeHtml(suggestion.inputValue || suggestion.subjectQuery || "")}"
+          >
+            <span class="active-asset-result-main">${escapeHtml(
+              suggestion.label || suggestion.symbol || suggestion.subjectQuery || "",
+            )}</span>
+            <span class="active-asset-result-meta">${escapeHtml(
+              [
+                suggestion.symbol && suggestion.symbol !== suggestion.label
+                  ? suggestion.symbol
+                  : null,
+                suggestion.family || null,
+                suggestion.providerName || null,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            )}</span>
+          </button>
+        `,
+      )
+      .join("")}
+  `;
+}
+
+function buildActiveSubjectSelections() {
+  return mergeSelectionSuggestions(
+    { datasets: [] },
+    activeSubjectRememberedCatalog,
+  );
+}
+
+async function ensureActiveSubjectCatalog() {
+  if (!activeSubjectRememberedCatalogPromise) {
+    activeSubjectRememberedCatalogPromise = loadRememberedIndexCatalog()
+      .then((catalog) => {
+        activeSubjectRememberedCatalog = Array.isArray(catalog) ? catalog : [];
+        return activeSubjectRememberedCatalog;
+      })
+      .catch(() => {
+        activeSubjectRememberedCatalog = [];
+        return activeSubjectRememberedCatalog;
+      });
+  }
+
+  return activeSubjectRememberedCatalogPromise;
+}
+
+function buildLocalActiveSubjectSuggestions(query) {
+  return discoverSelectionSuggestions(query, buildActiveSubjectSelections(), {
+    limit: 6,
+  }).map((suggestion) => ({
+    ...suggestion,
+    inputValue: suggestion.subjectQuery,
+  }));
+}
+
+function combineActiveSubjectSuggestions(localSuggestions, remoteSuggestions) {
+  const combined = new Map();
+
+  [...localSuggestions, ...remoteSuggestions].forEach((suggestion) => {
+    const key =
+      normalizeDiscoveryText(suggestion.symbol) ||
+      normalizeDiscoveryText(suggestion.subjectQuery) ||
+      normalizeDiscoveryText(suggestion.label);
+    if (!key) {
+      return;
+    }
+
+    const current = combined.get(key);
+    if (!current || Number(suggestion.matchScore || 0) > Number(current.matchScore || 0)) {
+      combined.set(key, suggestion);
+    }
+  });
+
+  return [...combined.values()]
+    .sort((left, right) => {
+      if (Number(right.matchScore || 0) !== Number(left.matchScore || 0)) {
+        return Number(right.matchScore || 0) - Number(left.matchScore || 0);
+      }
+
+      return String(left.label || left.subjectQuery || "").localeCompare(
+        String(right.label || right.subjectQuery || ""),
+      );
+    })
+    .slice(0, 8);
+}
+
+function chooseAutoResolvedSuggestion(query, suggestions) {
+  if (!suggestions.length) {
+    return null;
+  }
+
+  const trimmedQuery = String(query || "").trim();
+  const [topSuggestion, nextSuggestion] = suggestions;
+  const topScore = Number(topSuggestion.matchScore || 0);
+  const nextScore = Number(nextSuggestion?.matchScore || 0);
+  const isProviderSuggestion = topSuggestion.kind === "provider";
+
+  if (!isProviderSuggestion && topScore >= 210) {
+    return topSuggestion;
+  }
+
+  if (
+    !isProviderSuggestion &&
+    trimmedQuery.length >= 4 &&
+    topScore >= 180 &&
+    topScore - nextScore >= 15
+  ) {
+    return topSuggestion;
+  }
+
+  return null;
+}
+
+async function refreshActiveSubjectSuggestions({
+  query = activeSubjectInput.value,
+  includeRemote = true,
+  showLoading = false,
+} = {}) {
+  const trimmedQuery = String(query || "").trim();
+  activeSubjectSuggestionQuery = trimmedQuery;
+  if (!trimmedQuery) {
+    clearActiveSubjectSuggestions();
+    renderActiveSubjectStatus("");
+    return [];
+  }
+
+  await ensureActiveSubjectCatalog();
+  const localSuggestions = buildLocalActiveSubjectSuggestions(trimmedQuery);
+  let combinedSuggestions = localSuggestions;
+
+  if (showLoading) {
+    renderActiveSubjectStatus(
+      localSuggestions.length
+        ? "Searching more matches..."
+        : "Searching symbols...",
+    );
+  }
+
+  const shouldSearchRemote =
+    includeRemote && trimmedQuery.length >= 2 && !isLikelyDirectSymbol(trimmedQuery);
+  if (shouldSearchRemote) {
+    const requestToken = ++activeSubjectDiscoveryToken;
+    try {
+      const payload = await discoverSymbols({
+        query: trimmedQuery,
+        limit: 6,
+      });
+      if (
+        requestToken !== activeSubjectDiscoveryToken ||
+        activeSubjectInput.value.trim() !== trimmedQuery
+      ) {
+        return activeSubjectSuggestions;
+      }
+
+      combinedSuggestions = combineActiveSubjectSuggestions(
+        localSuggestions,
+        Array.isArray(payload.results) ? payload.results : [],
+      );
+      if (payload.warning) {
+        renderActiveSubjectStatus(payload.warning);
+      }
+    } catch (error) {
+      renderActiveSubjectStatus(error?.message || "Could not search symbol matches.");
+    }
+  }
+
+  activeSubjectSuggestions = combinedSuggestions;
+  renderActiveSubjectSuggestions();
+  if (!combinedSuggestions.length) {
+    renderActiveSubjectStatus("No symbol matches found yet.");
+  } else if (!showLoading) {
+    renderActiveSubjectStatus("");
+  }
+  return combinedSuggestions;
 }
 
 function buildCapabilityPills(study) {
@@ -109,14 +353,15 @@ function renderActiveSubjectControl() {
   activeSubjectInput.value = getActiveSubjectQuery();
 }
 
-function applyActiveSubjectFromSidebar() {
-  const nextSubject = activeSubjectInput.value.trim();
+function applyActiveSubjectQuery(nextSubject) {
   if (!nextSubject) {
     activeSubjectInput.value = getActiveSubjectQuery();
     return;
   }
 
   setActiveSubjectQuery(nextSubject);
+  renderActiveSubjectStatus("");
+  clearActiveSubjectSuggestions();
 
   const route = parseRouteHash();
   const study = getStudyById(route.studyId) || studyRegistry[0] || null;
@@ -138,6 +383,46 @@ function applyActiveSubjectFromSidebar() {
   }
 
   mountStudyRoute();
+}
+
+async function applyActiveSubjectFromSidebar() {
+  const nextSubject = activeSubjectInput.value.trim();
+  if (!nextSubject) {
+    activeSubjectInput.value = getActiveSubjectQuery();
+    clearActiveSubjectSuggestions();
+    return;
+  }
+
+  if (isLikelyDirectSymbol(nextSubject)) {
+    applyActiveSubjectQuery(nextSubject);
+    return;
+  }
+
+  const suggestions = await refreshActiveSubjectSuggestions({
+    query: nextSubject,
+    includeRemote: true,
+    showLoading: true,
+  });
+  const autoResolvedSuggestion = chooseAutoResolvedSuggestion(
+    nextSubject,
+    suggestions,
+  );
+
+  if (autoResolvedSuggestion) {
+    activeSubjectInput.value =
+      autoResolvedSuggestion.inputValue || autoResolvedSuggestion.subjectQuery;
+    applyActiveSubjectQuery(
+      autoResolvedSuggestion.subjectQuery || autoResolvedSuggestion.inputValue,
+    );
+    return;
+  }
+
+  if (suggestions.length) {
+    renderActiveSubjectStatus("Choose a symbol match below.");
+    return;
+  }
+
+  applyActiveSubjectQuery(nextSubject);
 }
 
 function parseRouteHash() {
@@ -315,15 +600,49 @@ runHistoryRoot.addEventListener("click", handleRunHistoryClick);
 studyRoot.addEventListener("click", handleStudyRootClick);
 activeSubjectForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  applyActiveSubjectFromSidebar();
+  void applyActiveSubjectFromSidebar();
 });
-activeSubjectInput.addEventListener("change", () => {
-  applyActiveSubjectFromSidebar();
+activeSubjectInput.addEventListener("input", () => {
+  const query = activeSubjectInput.value.trim();
+  if (activeSubjectDiscoveryTimer) {
+    window.clearTimeout(activeSubjectDiscoveryTimer);
+  }
+
+  if (!query) {
+    clearActiveSubjectSuggestions();
+    renderActiveSubjectStatus("");
+    return;
+  }
+
+  activeSubjectDiscoveryTimer = window.setTimeout(() => {
+    void refreshActiveSubjectSuggestions({
+      query,
+      includeRemote: true,
+      showLoading: false,
+    });
+  }, 180);
+});
+activeSubjectResults?.addEventListener("click", (event) => {
+  const trigger = event.target.closest("[data-subject-query]");
+  if (!trigger) {
+    return;
+  }
+
+  const subjectQuery = String(trigger.dataset.subjectQuery || "").trim();
+  const inputValue = String(trigger.dataset.inputValue || subjectQuery).trim();
+  if (!subjectQuery) {
+    return;
+  }
+
+  activeSubjectInput.value = inputValue || subjectQuery;
+  applyActiveSubjectQuery(subjectQuery);
 });
 
 window.addEventListener("hashchange", mountStudyRoute);
 subscribeActiveSubject(() => {
   renderActiveSubjectControl();
+  clearActiveSubjectSuggestions();
+  renderActiveSubjectStatus("");
   const route = parseRouteHash();
   const study = getStudyById(route.studyId) || studyRegistry[0] || null;
   if (!study) {

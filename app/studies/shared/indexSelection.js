@@ -8,6 +8,22 @@ function normalizeQuery(value) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function buildSelectionSubjectQuery(selection) {
+  if (!selection) {
+    return "";
+  }
+
+  if (
+    selection.kind === "builtin" ||
+    selection.kind === "bundled" ||
+    selection.kind === "remembered"
+  ) {
+    return selection.label || selection.symbol || "";
+  }
+
+  return selection.symbol || selection.label || "";
+}
+
 function buildBuiltInSelection(entry, bundledDataset = null) {
   return {
     kind: "builtin",
@@ -131,6 +147,123 @@ function buildSelectionSignature(selection) {
   ].join("|");
 }
 
+function scoreSelectionSuggestion(entry, normalizedQuery) {
+  const normalizedLabel = normalizeQuery(entry.label || "");
+  const normalizedId = normalizeQuery(entry.id || "");
+  const normalizedSymbol = normalizeQuery(entry.symbol || "");
+  const normalizedFamily = normalizeQuery(entry.family || "");
+  const normalizedAliases = (entry.aliases || []).map((alias) =>
+    normalizeQuery(alias),
+  );
+
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  if (normalizedLabel === normalizedQuery) {
+    return { score: 220, matchKind: "exact-label" };
+  }
+
+  if (normalizedId === normalizedQuery) {
+    return { score: 214, matchKind: "exact-id" };
+  }
+
+  if (normalizedSymbol === normalizedQuery) {
+    return { score: 210, matchKind: "exact-symbol" };
+  }
+
+  if (normalizedAliases.includes(normalizedQuery)) {
+    return { score: 208, matchKind: "exact-alias" };
+  }
+
+  if (normalizedLabel.startsWith(normalizedQuery)) {
+    return { score: 182, matchKind: "starts-with-label" };
+  }
+
+  if (normalizedAliases.some((alias) => alias.startsWith(normalizedQuery))) {
+    return { score: 176, matchKind: "starts-with-alias" };
+  }
+
+  if (normalizedSymbol.startsWith(normalizedQuery)) {
+    return { score: 172, matchKind: "starts-with-symbol" };
+  }
+
+  if (normalizedLabel.includes(normalizedQuery)) {
+    return { score: 148, matchKind: "contains-label" };
+  }
+
+  if (normalizedAliases.some((alias) => alias.includes(normalizedQuery))) {
+    return { score: 142, matchKind: "contains-alias" };
+  }
+
+  if (normalizedSymbol.includes(normalizedQuery)) {
+    return { score: 138, matchKind: "contains-symbol" };
+  }
+
+  if (normalizedFamily && normalizedFamily.includes(normalizedQuery)) {
+    return { score: 122, matchKind: "contains-family" };
+  }
+
+  return null;
+}
+
+function discoverSelectionSuggestions(query, suggestions, { limit = 8 } = {}) {
+  const normalizedQuery = normalizeQuery(query);
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const matches = suggestions
+    .map((entry) => {
+      const scored = scoreSelectionSuggestion(entry, normalizedQuery);
+      if (!scored) {
+        return null;
+      }
+
+      return {
+        kind: entry.kind,
+        label: entry.label,
+        symbol: entry.symbol,
+        subjectQuery: buildSelectionSubjectQuery(entry),
+        providerName: entry.providerName || "Yahoo Finance",
+        family: entry.family || null,
+        note: entry.note || null,
+        matchKind: scored.matchKind,
+        matchScore: scored.score,
+        selection: entry,
+      };
+    })
+    .filter(Boolean);
+
+  matches.sort((left, right) => {
+    if (right.matchScore !== left.matchScore) {
+      return right.matchScore - left.matchScore;
+    }
+
+    if ((left.label || "").length !== (right.label || "").length) {
+      return (left.label || "").length - (right.label || "").length;
+    }
+
+    return (left.symbol || "").localeCompare(right.symbol || "");
+  });
+
+  const uniqueMatches = [];
+  const seen = new Set();
+  for (const suggestion of matches) {
+    const identity = buildSelectionIdentity(suggestion.selection);
+    if (seen.has(identity)) {
+      continue;
+    }
+    seen.add(identity);
+    uniqueMatches.push(suggestion);
+    if (uniqueMatches.length >= limit) {
+      break;
+    }
+  }
+
+  return uniqueMatches;
+}
+
 function mergeSelectionSuggestions(bundledManifest, rememberedCatalog) {
   const bundledDatasets = bundledManifest?.datasets || [];
   const bundledById = new Map(
@@ -237,8 +370,10 @@ function upsertRememberedCatalogEntry(catalog, entry) {
 
 export {
   buildRememberedSelection,
+  buildSelectionSubjectQuery,
   buildSelectionSignature,
   buildSeriesRequest,
+  discoverSelectionSuggestions,
   findSelectionByQuery,
   mergeSelectionSuggestions,
   upsertRememberedCatalogEntry,

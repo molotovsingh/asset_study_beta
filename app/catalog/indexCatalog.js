@@ -53,6 +53,13 @@ const indexCatalog = [
     seriesType: "Price",
     sourceUrl: "https://www.niftyindices.com/reports/historical-data",
     aliases: ["bank nifty"],
+    sync: {
+      provider: "yfinance",
+      datasetType: "index",
+      datasetId: "nifty-bank",
+      symbol: "^NSEBANK",
+      sourceSeriesType: "Price",
+    },
   },
   {
     id: "nifty-midcap-150",

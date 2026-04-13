@@ -33,6 +33,7 @@ try:
         normalize_provider_id,
         provider_display_name,
     )
+    from providers.finnhub import search_symbols as search_finnhub_symbols
     from providers.yfinance_provider import fetch_monthly_straddle_snapshot
 except ModuleNotFoundError:
     from scripts.providers.router import (
@@ -41,6 +42,7 @@ except ModuleNotFoundError:
         normalize_provider_id,
         provider_display_name,
     )
+    from scripts.providers.finnhub import search_symbols as search_finnhub_symbols
     from scripts.providers.yfinance_provider import fetch_monthly_straddle_snapshot
 
 try:
@@ -903,6 +905,214 @@ def summarize_options_screener_run(run: dict, rows: list[dict]) -> dict:
     }
 
 
+def direction_bucket(direction_label: str | None) -> str:
+    text = str(direction_label or "").strip().lower()
+    if text == "long bias":
+        return "long"
+    if text == "short bias":
+        return "short"
+    if text == "neutral":
+        return "neutral"
+    return "none"
+
+
+def build_forward_validation_observation(
+    row: dict,
+    *,
+    horizon_days: int,
+    price_rows: list[dict],
+) -> dict:
+    as_of_date = str(row.get("asOfDate") or row.get("runAsOfDate") or "").strip()
+    symbol = normalize_symbol(row.get("symbol"))
+    base_price = clean_history_number(row.get("spotPrice"))
+
+    if not symbol or not as_of_date:
+        return {
+            "symbol": symbol,
+            "asOfDate": as_of_date or None,
+            "matured": False,
+            "baseDate": None,
+            "basePrice": base_price,
+            "forwardDate": None,
+            "forwardPrice": None,
+            "forwardReturn": None,
+            "absoluteMove": None,
+            "availableTradingDays": 0,
+            "reason": "Missing symbol or as-of date.",
+        }
+
+    eligible_indexes = [
+        index
+        for index, price_row in enumerate(price_rows)
+        if str(price_row.get("date") or "") <= as_of_date
+    ]
+    if not eligible_indexes:
+        return {
+            "symbol": symbol,
+            "asOfDate": as_of_date,
+            "matured": False,
+            "baseDate": None,
+            "basePrice": base_price,
+            "forwardDate": None,
+            "forwardPrice": None,
+            "forwardReturn": None,
+            "absoluteMove": None,
+            "availableTradingDays": 0,
+            "reason": "No cached price history exists on or before the screener date.",
+        }
+
+    base_index = eligible_indexes[-1]
+    base_row = price_rows[base_index]
+    base_close = clean_history_number(base_row.get("close"))
+    effective_base_price = base_price if base_price is not None else base_close
+    if effective_base_price is None or effective_base_price <= 0:
+        return {
+            "symbol": symbol,
+            "asOfDate": as_of_date,
+            "matured": False,
+            "baseDate": base_row.get("date"),
+            "basePrice": effective_base_price,
+            "forwardDate": None,
+            "forwardPrice": None,
+            "forwardReturn": None,
+            "absoluteMove": None,
+            "availableTradingDays": max(len(price_rows) - base_index - 1, 0),
+            "reason": "No usable base close was available for validation.",
+        }
+
+    target_index = base_index + horizon_days
+    available_trading_days = max(len(price_rows) - base_index - 1, 0)
+    if target_index >= len(price_rows):
+        return {
+            "symbol": symbol,
+            "asOfDate": as_of_date,
+            "matured": False,
+            "baseDate": base_row.get("date"),
+            "basePrice": effective_base_price,
+            "forwardDate": None,
+            "forwardPrice": None,
+            "forwardReturn": None,
+            "absoluteMove": None,
+            "availableTradingDays": available_trading_days,
+            "reason": f"Only {available_trading_days} trading days have elapsed since the archived row.",
+        }
+
+    target_row = price_rows[target_index]
+    forward_price = clean_history_number(target_row.get("close"))
+    if forward_price is None:
+        return {
+            "symbol": symbol,
+            "asOfDate": as_of_date,
+            "matured": False,
+            "baseDate": base_row.get("date"),
+            "basePrice": effective_base_price,
+            "forwardDate": target_row.get("date"),
+            "forwardPrice": None,
+            "forwardReturn": None,
+            "absoluteMove": None,
+            "availableTradingDays": available_trading_days,
+            "reason": "Target close is missing from the cached history.",
+        }
+
+    forward_return = (forward_price / effective_base_price) - 1
+    return {
+        "symbol": symbol,
+        "asOfDate": as_of_date,
+        "matured": True,
+        "baseDate": base_row.get("date"),
+        "basePrice": effective_base_price,
+        "forwardDate": target_row.get("date"),
+        "forwardPrice": forward_price,
+        "forwardReturn": forward_return,
+        "absoluteMove": abs(forward_return),
+        "availableTradingDays": available_trading_days,
+        "reason": None,
+    }
+
+
+def build_options_screener_validation_payload(
+    *,
+    universe_id: str | None = None,
+    horizon_days: int,
+    limit_runs: int = 60,
+    row_limit: int = 25,
+) -> dict:
+    runs = load_recent_options_screener_runs(limit=max(1, limit_runs))
+    if universe_id:
+        runs = [
+            run
+            for run in runs
+            if str(run.get("universeId") or "").strip() == str(universe_id).strip()
+        ]
+
+    price_cache: dict[str, list[dict]] = {}
+    observations: list[dict] = []
+
+    for run in runs:
+        rows = load_options_screener_rows(
+            run_id=run["runId"],
+            limit=max(1, row_limit),
+        )
+        for row in rows:
+            symbol = normalize_symbol(row.get("symbol"))
+            if symbol not in price_cache:
+                price_cache[symbol] = load_price_rows(symbol)
+            forward = build_forward_validation_observation(
+                row,
+                horizon_days=horizon_days,
+                price_rows=price_cache[symbol],
+            )
+            observations.append(
+                {
+                    "runId": run["runId"],
+                    "universeId": run.get("universeId"),
+                    "universeLabel": run.get("universeLabel"),
+                    "createdAt": run.get("createdAt"),
+                    "symbol": symbol,
+                    "provider": row.get("provider"),
+                    "asOfDate": row.get("asOfDate"),
+                    "expiry": row.get("expiry"),
+                    "daysToExpiry": row.get("daysToExpiry"),
+                    "spotPrice": row.get("spotPrice"),
+                    "pricingLabel": row.get("pricingLabel"),
+                    "pricingBucket": row.get("pricingBucket"),
+                    "candidateAdvisory": row.get("candidateAdvisory"),
+                    "candidateBucket": row.get("candidateBucket"),
+                    "directionLabel": row.get("directionLabel"),
+                    "directionBucket": direction_bucket(row.get("directionLabel")),
+                    "directionScore": row.get("directionScore"),
+                    "executionScore": row.get("executionScore"),
+                    "confidenceScore": row.get("confidenceScore"),
+                    "ivHv20Ratio": row.get("ivHv20Ratio"),
+                    "ivHv60Ratio": row.get("ivHv60Ratio"),
+                    "ivPercentile": row.get("ivPercentile"),
+                    "seasonalityMonthLabel": row.get("seasonalityMonthLabel"),
+                    "warnings": row.get("warnings") or [],
+                    **forward,
+                }
+            )
+
+    observations.sort(
+        key=lambda entry: (
+            str(entry.get("asOfDate") or ""),
+            str(entry.get("symbol") or ""),
+            int(entry.get("runId") or 0),
+        ),
+        reverse=True,
+    )
+
+    matured_count = sum(1 for entry in observations if entry.get("matured"))
+    return {
+        "universeId": universe_id,
+        "horizonDays": int(horizon_days),
+        "runCount": len(runs),
+        "observationCount": len(observations),
+        "maturedCount": matured_count,
+        "pendingCount": len(observations) - matured_count,
+        "observations": observations,
+    }
+
+
 def build_monthly_straddle_snapshot_response(
     symbol: str,
     *,
@@ -1322,6 +1532,42 @@ class DevServerHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/symbols/discover":
+            try:
+                request = self._read_json_body()
+                query = str(request.get("query") or "").strip()
+                if len(query) < 2:
+                    raise ValueError("Enter at least two characters to search.")
+
+                limit = int(request.get("limit") or 8)
+                limit = max(1, min(limit, 12))
+                warning = None
+                try:
+                    results = search_finnhub_symbols(query, limit=limit)
+                except RuntimeError as error:
+                    results = []
+                    warning = str(error)
+
+                self._write_json(
+                    HTTPStatus.OK,
+                    {
+                        "query": query,
+                        "results": results,
+                        "warning": warning,
+                    },
+                )
+            except json.JSONDecodeError:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": "Request body must be valid JSON."},
+                )
+            except ValueError as error:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": str(error)},
+                )
+            return
+
         if parsed.path == "/api/yfinance/instrument-profile":
             try:
                 ensure_runtime_store()
@@ -1538,6 +1784,37 @@ class DevServerHandler(SimpleHTTPRequestHandler):
                         "universeId": universe_id,
                         "runs": summaries,
                     },
+                )
+            except json.JSONDecodeError:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": "Request body must be valid JSON."},
+                )
+            except ValueError as error:
+                self._write_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": str(error)},
+                )
+            return
+
+        if parsed.path == "/api/options/screener-validation":
+            try:
+                ensure_runtime_store()
+                request = self._read_json_body()
+                universe_id = str(request.get("universeId") or "").strip() or None
+                horizon_days = max(1, min(int(request.get("horizonDays") or 5), 252))
+                limit_runs = max(1, min(int(request.get("limitRuns") or 60), 240))
+                row_limit = max(1, min(int(request.get("rowLimit") or 25), 100))
+
+                payload = build_options_screener_validation_payload(
+                    universe_id=universe_id,
+                    horizon_days=horizon_days,
+                    limit_runs=limit_runs,
+                    row_limit=row_limit,
+                )
+                self._write_json(
+                    HTTPStatus.OK,
+                    payload,
                 )
             except json.JSONDecodeError:
                 self._write_json(

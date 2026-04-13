@@ -515,6 +515,94 @@ def test_options_screener_runs_persist():
         )
 
 
+def test_options_validation_payload_uses_cached_forward_prices():
+    with isolated_runtime_store():
+        runtime_store.write_price_history(
+            "AAPL",
+            [
+                {"date": "2026-04-10", "close": 100},
+                {"date": "2026-04-13", "close": 101},
+                {"date": "2026-04-14", "close": 102},
+                {"date": "2026-04-15", "close": 99},
+            ],
+            [],
+            currency="USD",
+            provider="yfinance",
+            sync_mode="full",
+            replace=True,
+        )
+        runtime_store.record_options_screener_run(
+            universe_id="us-liquid-10",
+            universe_label="US Liquid 10",
+            minimum_dte=25,
+            max_contracts=1,
+            requested_symbols=["AAPL"],
+            failures=[],
+            rows=[
+                {
+                    "symbol": "AAPL",
+                    "provider": "yfinance",
+                    "currency": "USD",
+                    "asOfDate": "2026-04-12",
+                    "expiry": "2026-05-15",
+                    "spotPrice": 100,
+                    "strike": 100,
+                    "daysToExpiry": 33,
+                    "straddleMidPrice": 7.5,
+                    "impliedMovePercent": 0.075,
+                    "straddleImpliedVolatility": 0.24,
+                    "chainImpliedVolatility": 0.23,
+                    "historicalVolatility20": 0.2,
+                    "historicalVolatility60": 0.19,
+                    "ivHv20Ratio": 1.2,
+                    "ivHv60Ratio": 1.26,
+                    "ivPercentile": 0.7,
+                    "ivHv20Percentile": 0.68,
+                    "combinedOpenInterest": 12000,
+                    "combinedVolume": 1800,
+                    "spreadShare": 0.03,
+                    "pricingLabel": "Mildly Rich",
+                    "pricingBucket": "rich",
+                    "directionScore": 60,
+                    "directionLabel": "Long Bias",
+                    "trendScore": 62,
+                    "trendLabel": "Long Bias",
+                    "trendReturn63": 0.04,
+                    "trendReturn252": 0.12,
+                    "seasonalityScore": 58,
+                    "seasonalityLabel": "Neutral",
+                    "seasonalityMonthLabel": "Apr",
+                    "seasonalityMeanReturn": 0.01,
+                    "seasonalityMedianReturn": 0.008,
+                    "seasonalityWinRate": 0.55,
+                    "seasonalityAverageAbsoluteReturn": 0.05,
+                    "seasonalityObservations": 12,
+                    "volPricingScore": 64,
+                    "executionScore": 82,
+                    "confidenceScore": 88,
+                    "candidateAdvisory": "Short Premium Candidate",
+                    "candidateBucket": "short-premium",
+                    "warnings": [],
+                }
+            ],
+            created_at="2026-04-12T08:30:00+00:00",
+        )
+
+        payload = dev_server.build_options_screener_validation_payload(
+            universe_id="us-liquid-10",
+            horizon_days=2,
+            limit_runs=10,
+            row_limit=10,
+        )
+        assert_equal(payload["runCount"], 1, "validation should see the archived run")
+        assert_equal(payload["observationCount"], 1, "validation should build one observation")
+        observation = payload["observations"][0]
+        assert_equal(observation["matured"], True, "validation observation should be matured")
+        assert_equal(observation["baseDate"], "2026-04-10", "weekend screener rows should anchor to prior close")
+        assert_equal(observation["forwardDate"], "2026-04-14", "2-day horizon should land on the second trading day ahead")
+        assert_equal(round(observation["forwardReturn"], 4), 0.02, "forward return should use cached close prices")
+
+
 def mark_cached_series_stale(symbol: str) -> None:
     with runtime_store.open_runtime_store() as connection:
         symbol_row = connection.execute(
@@ -649,6 +737,7 @@ def main() -> int:
     test_overlap_validation_detects_price_and_action_changes()
     test_option_snapshot_and_realized_metrics_persist()
     test_options_screener_runs_persist()
+    test_options_validation_payload_uses_cached_forward_prices()
     test_get_or_refresh_uses_full_then_incremental_then_rebuild()
     print("ok runtime store cache")
     return 0
