@@ -28,10 +28,23 @@ jobs:
           node-version: "22"
 
       - name: Compile Python scripts
-        run: python3 -m py_compile scripts/*.py
+        run: python3 -m py_compile scripts/*.py scripts/server/*.py
+
+      - name: Run backend regression checks
+        run: |
+          python3 scripts/test_route_dispatch.py
+          python3 scripts/test_provider_router.py
+          python3 scripts/test_dev_server_provider_preference.py
+          python3 scripts/test_runtime_store_cache.py
 
       - name: Validate bundled snapshots
         run: python3 scripts/validate_yfinance_snapshots.py --require-all-configured
+
+      - name: Audit bundled snapshot quality
+        run: python3 scripts/audit_yfinance_quality.py
+
+      - name: Run options validation checks
+        run: node scripts/test_options_validation.mjs
 
       - name: Run frontend regression checks
         run: node scripts/run_frontend_regression_checks.mjs
