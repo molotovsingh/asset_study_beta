@@ -161,7 +161,20 @@ build_trend_context = options_service.build_trend_context
 build_month_end_rows = options_service.build_month_end_rows
 month_distance = options_service.month_distance
 build_seasonality_context = options_service.build_seasonality_context
-build_direction_context = options_service.build_direction_context
+def build_direction_context(
+    symbol: str,
+    *,
+    as_of_date: str | None = None,
+    preferred_provider: str | None = None,
+) -> dict:
+    return options_service.build_direction_context(
+        symbol,
+        as_of_date=as_of_date,
+        preferred_provider=preferred_provider,
+        series_loader=get_or_refresh_cached_series,
+    )
+
+
 percentile_rank = options_service.percentile_rank
 options_pricing_label = options_service.options_pricing_label
 options_pricing_bucket = options_service.options_pricing_bucket

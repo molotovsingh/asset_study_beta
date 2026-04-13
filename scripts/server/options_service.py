@@ -237,8 +237,10 @@ def build_direction_context(
     *,
     as_of_date: str | None = None,
     preferred_provider: str | None = None,
+    series_loader=None,
 ) -> dict:
-    raw_snapshot, _cache_status = get_or_refresh_cached_series(
+    load_series = series_loader or get_or_refresh_cached_series
+    raw_snapshot, _cache_status = load_series(
         symbol,
         preferred_provider=preferred_provider,
     )
