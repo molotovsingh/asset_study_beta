@@ -1,35 +1,16 @@
 import {
   computeRiskAdjustedMetrics,
   inferPeriodsPerYear,
+  mean,
+  sampleStdDev,
   toPeriodicReturns,
 } from "./stats.js";
-
-function mean(values) {
-  if (!values.length) {
-    return null;
-  }
-
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
 
 function toLocalDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function sampleStdDev(values) {
-  if (values.length < 2) {
-    return null;
-  }
-
-  const avg = mean(values);
-  const variance =
-    values.reduce((sum, value) => sum + (value - avg) ** 2, 0) /
-    (values.length - 1);
-
-  return Math.sqrt(variance);
 }
 
 function sampleCovariance(leftValues, rightValues) {

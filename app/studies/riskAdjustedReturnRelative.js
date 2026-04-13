@@ -15,6 +15,7 @@ import {
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { renderRelativeInterpretation } from "./shared/interpretation.js";
+import { renderWarnings } from "./shared/resultsViewShared.js";
 import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
 
 const OVERVIEW_HASH = "#risk-adjusted-return/overview";
@@ -159,21 +160,6 @@ function renderMetricSection({ title, summary, cards, gridClass = "" }) {
         ${cards.join("")}
       </div>
     </section>
-  `;
-}
-
-function renderWarnings(warnings) {
-  if (!warnings.length) {
-    return "";
-  }
-
-  return `
-    <div class="detail-block">
-      <h3>Warnings</h3>
-      <ul class="warning-list">
-        ${warnings.map((warning) => `<li>${warning}</li>`).join("")}
-      </ul>
-    </div>
   `;
 }
 

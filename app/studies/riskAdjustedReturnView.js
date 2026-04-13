@@ -6,6 +6,7 @@ import {
 } from "../lib/format.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderRiskInterpretation } from "./shared/interpretation.js";
+import { renderWarnings } from "./shared/resultsViewShared.js";
 import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
 
 const RESULT_TAB_DEFINITIONS = [
@@ -234,21 +235,6 @@ function renderSectionFromDefinition(section, context) {
       }),
     ),
   });
-}
-
-function renderWarnings(warnings) {
-  if (!warnings.length) {
-    return "";
-  }
-
-  return `
-    <div class="detail-block">
-      <h3>Warnings</h3>
-      <ul class="warning-list">
-        ${warnings.map((warning) => `<li>${warning}</li>`).join("")}
-      </ul>
-    </div>
-  `;
 }
 
 function renderResults({ metrics, startDate, endDate, methodLabel, warnings }) {

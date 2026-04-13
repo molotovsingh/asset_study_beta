@@ -12,10 +12,10 @@ import {
 } from "./riskAdjustedReturnView.js";
 import {
   appendCoverageWarnings,
-  appendSnapshotWarnings,
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
+import { prepareIndexStudySeries } from "./shared/indexStudyPipeline.js";
 import {
   adoptActiveSubjectQuery,
   setActiveSubjectQuery,
@@ -31,6 +31,7 @@ import {
   readTextParam,
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
+import { validateIndexDateRange } from "./shared/validation.js";
 import { mountRiskAdjustedReturnRelative } from "./riskAdjustedReturnRelative.js";
 import { mountRiskAdjustedReturnVisuals } from "./riskAdjustedReturnVisuals.js";
 
@@ -81,19 +82,12 @@ const riskAdjustedReturnSession = {
 };
 
 function validateStudyInputs(selection, startValue, endValue, riskFreeValue) {
-  const start = new Date(`${startValue}T00:00:00`);
-  const end = new Date(`${endValue}T00:00:00`);
+  const { start, end } = validateIndexDateRange(
+    selection,
+    startValue,
+    endValue,
+  );
   const riskFreeRate = Number(riskFreeValue);
-
-  if (!selection) {
-    throw new Error("Set an active asset in the sidebar before running the study.");
-  }
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error("Pick a valid start date and end date.");
-  }
-  if (start >= end) {
-    throw new Error("Start date must be earlier than end date.");
-  }
   if (!Number.isFinite(riskFreeRate)) {
     throw new Error("Enter a valid annual risk-free rate.");
   }
@@ -289,27 +283,18 @@ function mountRiskAdjustedReturnOverview(root) {
           );
           appendCoverageWarnings(indexSeries, start, end, warnings);
         } else {
-          const { snapshot, series, rememberedEntry } =
-            await loadSelectionData(selection);
+          const preparedSeries = await prepareIndexStudySeries({
+            selection,
+            start,
+            end,
+            warnings,
+            loadSelectionData,
+            applyLoadedSnapshot,
+          });
 
-          indexSeries = filterSeriesByDate(series, start, end);
-          methodLabel = snapshot.cache
-            ? `Local ${snapshot.providerName || "market-data"} fetch using ${snapshot.symbol}`
-            : `Bundled snapshot using ${snapshot.symbol}`;
-          appendCoverageWarnings(indexSeries, start, end, warnings);
-          appendSnapshotWarnings(snapshot, warnings);
-
-          if (snapshot.sourceSeriesType !== selection.targetSeriesType) {
-            warnings.push(
-              `Loaded data currently uses ${snapshot.sourceSeriesType} series as a bootstrap proxy for ${selection.targetSeriesType}.`,
-            );
-          }
-
-          if (snapshot.note) {
-            warnings.push(snapshot.note);
-          }
-
-          applyLoadedSnapshot(selection, snapshot, rememberedEntry);
+          indexSeries = preparedSeries.filteredSeries;
+          methodLabel = preparedSeries.methodLabel;
+          preparedSeries.commitLoadedSnapshot();
         }
 
         if (indexSeries.length < 2) {

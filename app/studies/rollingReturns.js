@@ -3,7 +3,6 @@ import {
   exportRollingReturnsCsv,
   exportRollingReturnsXls,
 } from "../lib/rollingReturnsExport.js";
-import { filterSeriesByDate } from "../lib/stats.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import {
   adoptActiveSubjectQuery,
@@ -11,17 +10,17 @@ import {
 } from "./shared/activeSubject.js";
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { recordIndexStudyRun } from "./shared/indexRunHistory.js";
+import { prepareIndexStudySeries } from "./shared/indexStudyPipeline.js";
 import {
   buildCommonIndexParams,
   readCommonIndexParams,
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
 import {
-  appendCoverageWarnings,
-  appendSnapshotWarnings,
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
+import { validateIndexDateRange } from "./shared/validation.js";
 import {
   renderRollingReturnsResults,
   rollingReturnsTemplate,
@@ -42,22 +41,7 @@ const rollingReturnsSession = {
 };
 
 function validateStudyInputs(selection, startValue, endValue) {
-  const start = new Date(`${startValue}T00:00:00`);
-  const end = new Date(`${endValue}T00:00:00`);
-
-  if (!selection) {
-    throw new Error("Set an active asset in the sidebar before running the study.");
-  }
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error("Pick a valid start date and end date.");
-  }
-
-  if (start >= end) {
-    throw new Error("Start date must be earlier than end date.");
-  }
-
-  return { start, end };
+  return validateIndexDateRange(selection, startValue, endValue);
 }
 
 function renderStudyRunResults(resultsRoot, studyRun) {
@@ -162,31 +146,15 @@ function mountRollingReturnsOverview(root) {
       );
       const warnings = [];
 
-      const { snapshot, series, rememberedEntry } =
-        await loadSelectionData(selection);
-      const filteredSeries = filterSeriesByDate(series, start, end);
-      if (filteredSeries.length < 2) {
-        throw new Error(
-          "The selected date range leaves fewer than two index observations.",
-        );
-      }
-
-      const methodLabel = snapshot.cache
-        ? `Local ${snapshot.providerName || "market-data"} fetch using ${snapshot.symbol}`
-        : `Bundled snapshot using ${snapshot.symbol}`;
-
-      appendCoverageWarnings(filteredSeries, start, end, warnings);
-      appendSnapshotWarnings(snapshot, warnings);
-
-      if (snapshot.sourceSeriesType !== selection.targetSeriesType) {
-        warnings.push(
-          `Loaded data currently uses ${snapshot.sourceSeriesType} series as a bootstrap proxy for ${selection.targetSeriesType}.`,
-        );
-      }
-
-      if (snapshot.note) {
-        warnings.push(snapshot.note);
-      }
+      const preparedSeries = await prepareIndexStudySeries({
+        selection,
+        start,
+        end,
+        warnings,
+        loadSelectionData,
+        applyLoadedSnapshot,
+      });
+      const { filteredSeries, methodLabel } = preparedSeries;
 
       const rollingModel = buildRollingReturnsStudy(filteredSeries);
       if (rollingModel.unavailableWindowSummaries.length) {
@@ -203,13 +171,14 @@ function mountRollingReturnsOverview(root) {
         );
       }
 
-      applyLoadedSnapshot(selection, snapshot, rememberedEntry);
+      preparedSeries.commitLoadedSnapshot();
 
       state.lastStudyRun = {
         studyTitle: rollingReturnsStudy.title,
         selection: {
           ...selection,
-          currency: snapshot.currency || selection.currency || null,
+          currency:
+            preparedSeries.snapshot.currency || selection.currency || null,
         },
         seriesLabel: selection.label,
         indexSeries: filteredSeries,

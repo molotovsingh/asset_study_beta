@@ -6,6 +6,7 @@ import {
 } from "../lib/format.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderInterpretationPanel } from "./shared/interpretation.js";
+import { renderWarnings } from "./shared/resultsViewShared.js";
 
 function renderCard({ label, value, detail }) {
   return `
@@ -13,21 +14,6 @@ function renderCard({ label, value, detail }) {
       <p class="meta-label">${label}</p>
       <strong class="result-value">${value}</strong>
       <span class="result-caption">${detail}</span>
-    </div>
-  `;
-}
-
-function renderWarnings(warnings) {
-  if (!warnings.length) {
-    return "";
-  }
-
-  return `
-    <div class="detail-block">
-      <h3>Warnings</h3>
-      <ul class="warning-list">
-        ${warnings.map((warning) => `<li>${warning}</li>`).join("")}
-      </ul>
     </div>
   `;
 }

@@ -489,5 +489,7 @@ export {
   computeRiskAdjustedMetrics,
   filterSeriesByDate,
   inferPeriodsPerYear,
+  mean,
+  sampleStdDev,
   toPeriodicReturns,
 };
