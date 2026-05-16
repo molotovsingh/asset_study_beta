@@ -114,6 +114,12 @@ function renderRunWindow(run) {
   return `${startDate} to ${endDate}`;
 }
 
+function getDisplayWarningCount(run) {
+  const explanationSeed = buildStudyRunExplanationSeed(run);
+  const count = Number(explanationSeed?.run?.warningCount);
+  return Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+}
+
 function renderJsonBlock(label, value) {
   const hasArray = Array.isArray(value) && value.length > 0;
   const hasObject =
@@ -392,6 +398,7 @@ function renderHistoryDetail(
   const summaryItems = Array.isArray(run.summaryItems) ? run.summaryItems : [];
   const links = Array.isArray(run.links) ? run.links : [];
   const assistantPayload = getAssistantPayloadForRun(run, assistantPayloadByRunId);
+  const displayWarningCount = getDisplayWarningCount(run);
 
   return `
     <section class="card settings-card">
@@ -426,7 +433,7 @@ function renderHistoryDetail(
             <p class="settings-detail-title">Recorded context</p>
             <p class="automation-item-meta">Subject: ${escapeHtml(run.subjectQuery || "n/a")}</p>
             <p class="automation-item-meta">Symbol: ${escapeHtml(run.symbol || "n/a")}</p>
-            <p class="automation-item-meta">Warnings: ${escapeHtml(run.warningCount || 0)}</p>
+            <p class="automation-item-meta">Warnings: ${escapeHtml(displayWarningCount)}</p>
             <p class="automation-item-meta">Run kind: ${escapeHtml(run.runKind || "analysis")}</p>
             ${run.routeHash ? `<p class="automation-item-meta">Route: ${escapeHtml(run.routeHash)}</p>` : ""}
           </div>

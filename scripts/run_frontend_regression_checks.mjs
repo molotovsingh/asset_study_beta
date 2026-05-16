@@ -573,7 +573,11 @@ function testAppRouteModel() {
         actualStartDate: "2026-04-08T18:30:00.000Z",
         actualEndDate: "2026-04-10T18:30:00.000Z",
         requestedParams: { universeId: "us-liquid-10" },
-        resolvedParams: { universeId: "us-liquid-10", limit: 10 },
+        resolvedParams: {
+          universeId: "us-liquid-10",
+          limit: 10,
+          warningMessages: ["Stored caveat text despite stale warning count."],
+        },
         providerSummary: { provider: "yfinance" },
         dataSnapshotRefs: [{ kind: "cache-series", symbol: "AAPL" }],
         warningCount: 0,
@@ -631,6 +635,10 @@ function testAppRouteModel() {
   assert(
     historyPage.includes("Assistant-safe explanation seed"),
     "history settings page should render deterministic explanation seeds",
+  );
+  assert(
+    historyPage.includes("Warnings: 1"),
+    "history settings page should derive warning display count from warning messages",
   );
   assert(
     historyPage.includes("Seed JSON") &&
