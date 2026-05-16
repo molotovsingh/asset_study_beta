@@ -2,7 +2,7 @@
 
 This note exists because the current working tree is intentionally broad. The right review model is not "read every changed file alphabetically." The right model is to review the diff as a set of product and architecture packets with clear contracts.
 
-The stabilization and merge gate checklist for PR 2 lives in `docs/review/2026-05-16-pr-2-stabilization-plan.md`.
+The stabilization and merge gate checklist for PR 2 lives in `docs/review/2026-05-16-pr-2-stabilization-plan.md`. The packet-review result lives in `docs/review/2026-05-16-pr-2-packet-review.md`.
 
 ## Packet 1 - Metric Trust And Cross-Study Semantics
 
