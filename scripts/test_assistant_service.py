@@ -114,6 +114,49 @@ def test_successful_run_brief_payload():
         )
 
 
+def test_run_brief_rejects_wrong_nested_contract_versions():
+    cases = [
+        (
+            {
+                "handoff": {"version": "wrong-study-run-handoff-v1"},
+                "explanationBrief": {"version": "study-run-explanation-brief-v1"},
+            },
+            "run brief should reject wrong nested handoff contract version",
+        ),
+        (
+            {
+                "handoff": {"version": "study-run-handoff-v1"},
+                "explanationBrief": {"version": "wrong-study-run-explanation-brief-v1"},
+            },
+            "run brief should reject wrong nested explanation brief contract version",
+        ),
+    ]
+    for bridge_payload, message in cases:
+        with isolated_runtime_store():
+            recorded = record_successful_run()
+            original_bridge = assistant_service._run_node_json_bridge
+
+            def wrong_run_brief_bridge(
+                _command,
+                *,
+                input_text=None,
+                bridge_label="Assistant contract bridge",
+            ):
+                return bridge_payload
+
+            assistant_service._run_node_json_bridge = wrong_run_brief_bridge
+            try:
+                assert_raises(
+                    RuntimeError,
+                    lambda: assistant_service.build_study_run_brief_payload(
+                        {"runId": recorded["runId"]}
+                    ),
+                    message,
+                )
+            finally:
+                assistant_service._run_node_json_bridge = original_bridge
+
+
 def test_assistant_contract_payload():
     payload = assistant_service.build_assistant_contract_payload({})
     assert_equal(payload["version"], "assistant-contract-v1", "assistant contract version")
@@ -524,6 +567,7 @@ def test_assistant_contract_manifest_bridge_failure_is_bad_gateway_class_error()
 
 def main():
     test_successful_run_brief_payload()
+    test_run_brief_rejects_wrong_nested_contract_versions()
     test_assistant_contract_payload()
     test_assistant_contract_bundle_payload()
     test_assistant_contract_bundle_rejects_wrong_nested_versions()
