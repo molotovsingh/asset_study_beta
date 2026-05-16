@@ -177,6 +177,11 @@
         "requestedEndDate": "2026-05-15",
         "actualStartDate": "2026-01-02",
         "actualEndDate": "2026-04-08",
+        "resolvedParams": {
+          "warningMessages": [
+            "Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence."
+          ]
+        },
         "warningCount": 1,
         "summaryItems": [
           {
@@ -218,7 +223,9 @@
           "routeHash": "#risk-adjusted-return/overview?subject=Nifty+50&start=2026-01-01&end=2026-05-15",
           "detailLabel": "",
           "warningCount": 1,
-          "warningMessages": [],
+          "warningMessages": [
+            "Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence."
+          ],
           "errorMessage": "",
           "runKind": "analysis",
           "completedAt": "2026-05-15T10:00:00+00:00"
@@ -271,7 +278,9 @@
             "message": "The run recorded warning(s); an explanation must mention that caveat.",
             "metadata": {
               "warningCount": 1,
-              "warningMessages": []
+              "warningMessages": [
+                "Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence."
+              ]
             }
           },
           {
@@ -301,7 +310,9 @@
             "message": "The run recorded warning(s); an explanation must mention that caveat.",
             "metadata": {
               "warningCount": 1,
-              "warningMessages": []
+              "warningMessages": [
+                "Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence."
+              ]
             }
           },
           {
@@ -328,6 +339,7 @@
           "Run 102 recorded Risk-Adjusted Return for Nifty 50.",
           "Effective window: 2026-01-02 to 2026-04-08.",
           "Recorded summaries: CAGR 42.0%.",
+          "Recorded warning(s): Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence..",
           "Evidence recorded: 1 link(s), 1 snapshot reference(s)."
         ]
       }

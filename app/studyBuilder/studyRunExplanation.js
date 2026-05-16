@@ -86,6 +86,11 @@ const STUDY_RUN_EXPLANATION_EXAMPLE_RUNS = Object.freeze([
       requestedEndDate: "2026-05-15",
       actualStartDate: "2026-01-02",
       actualEndDate: "2026-04-08",
+      resolvedParams: Object.freeze({
+        warningMessages: Object.freeze([
+          "Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence.",
+        ]),
+      }),
       warningCount: 1,
       summaryItems: Object.freeze([
         Object.freeze({
