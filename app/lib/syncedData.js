@@ -1,5 +1,11 @@
 import { ASSISTANT_CONTRACT_VERSION } from "../studyBuilder/assistantContract.js";
 import {
+  ASSISTANT_CONTRACT_BUNDLE_VERSION,
+  ASSISTANT_READINESS_VERSION,
+  ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION,
+  ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION,
+} from "../studyBuilder/assistantApiContract.js";
+import {
   STUDY_BUILDER_PLAN_RESPONSE_VERSION,
   STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
 } from "../studyBuilder/studyBuilderApiContract.js";
@@ -12,11 +18,6 @@ import {
   STUDY_PROPOSAL_RESPONSE_VERSION,
   STUDY_PROPOSAL_VERSION,
 } from "../studyFactory/studyProposal.js";
-
-const ASSISTANT_CONTRACT_BUNDLE_VERSION = "assistant-contract-bundle-v1";
-const ASSISTANT_READINESS_VERSION = "assistant-readiness-v1";
-const ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION = "assistant-study-plan-dry-run-v1";
-const ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION = "assistant-study-plan-live-draft-v1";
 
 const LOCAL_API_COMMAND = "./.venv/bin/python scripts/dev_server.py --port 8000";
 

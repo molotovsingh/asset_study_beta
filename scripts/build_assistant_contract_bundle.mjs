@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import { getMetricRegistryManifest } from "../app/lib/metricRegistry.js";
 import { getStudyProposalContractManifest } from "../app/studyFactory/studyProposal.js";
+import { ASSISTANT_CONTRACT_BUNDLE_VERSION } from "../app/studyBuilder/assistantApiContract.js";
 import { getAssistantContractManifest } from "../app/studyBuilder/assistantContract.js";
 import { getIntentPlannerContractManifest } from "../app/studyBuilder/intentPlanner.js";
 import { getStudyCatalogManifest } from "../app/studyBuilder/studyCatalog.js";
@@ -10,8 +11,6 @@ import { getStudyPlanRecipeContractManifest } from "../app/studyBuilder/studyPla
 import { getStudyRunExplanationContractManifest } from "../app/studyBuilder/studyRunExplanation.js";
 import { getStudyRunExplanationBriefContractManifest } from "../app/studyBuilder/studyRunExplanationBrief.js";
 import { getStudyRunHandoffContractManifest } from "../app/studyBuilder/studyRunHandoff.js";
-
-const ASSISTANT_CONTRACT_BUNDLE_VERSION = "assistant-contract-bundle-v1";
 
 function buildAssistantContractBundle() {
   return {
