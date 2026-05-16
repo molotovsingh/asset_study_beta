@@ -1,3 +1,4 @@
+import { METRIC_REGISTRY_VERSION } from "./metricRegistry.js";
 import { ASSISTANT_CONTRACT_VERSION } from "../studyBuilder/assistantContract.js";
 import {
   ASSISTANT_CONTRACT_BUNDLE_VERSION,
@@ -5,6 +6,7 @@ import {
   ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION,
   ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION,
 } from "../studyBuilder/assistantApiContract.js";
+import { STUDY_CATALOG_MANIFEST_VERSION } from "../studyBuilder/studyCatalog.js";
 import {
   STUDY_BUILDER_PLAN_RESPONSE_VERSION,
   STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
@@ -12,6 +14,7 @@ import {
 import { INTENT_PLANNER_VERSION } from "../studyBuilder/intentPlanner.js";
 import { STUDY_PLAN_VERSION } from "../studyBuilder/studyPlan.js";
 import { STUDY_PLAN_RECIPE_STORAGE_VERSION } from "../studyBuilder/studyPlanRecipes.js";
+import { STUDY_RUN_EXPLANATION_VERSION } from "../studyBuilder/studyRunExplanation.js";
 import { STUDY_RUN_EXPLANATION_BRIEF_VERSION } from "../studyBuilder/studyRunExplanationBrief.js";
 import { STUDY_RUN_HANDOFF_VERSION } from "../studyBuilder/studyRunHandoff.js";
 import {
@@ -23,6 +26,21 @@ const LOCAL_API_COMMAND = "./.venv/bin/python scripts/dev_server.py --port 8000"
 
 function buildApiUrl(pathname) {
   return new URL(`../../api${pathname}`, import.meta.url);
+}
+
+function getAssistantBundleContractVersions() {
+  return {
+    assistant: ASSISTANT_CONTRACT_VERSION,
+    metricRegistry: METRIC_REGISTRY_VERSION,
+    studyCatalog: STUDY_CATALOG_MANIFEST_VERSION,
+    studyProposal: STUDY_PROPOSAL_VERSION,
+    intentPlanner: INTENT_PLANNER_VERSION,
+    studyPlan: STUDY_PLAN_VERSION,
+    studyPlanRecipe: STUDY_PLAN_RECIPE_STORAGE_VERSION,
+    studyRunExplanation: STUDY_RUN_EXPLANATION_VERSION,
+    studyRunHandoff: STUDY_RUN_HANDOFF_VERSION,
+    studyRunExplanationBrief: STUDY_RUN_EXPLANATION_BRIEF_VERSION,
+  };
 }
 
 function buildManifestRelativePath(syncConfig) {
@@ -360,12 +378,13 @@ async function fetchAssistantContractBundle() {
     onHttpError: (response, parsedPayload) =>
       parsedPayload?.error || "The local data API could not load the assistant contract bundle.",
   });
+  const contracts = payload?.contracts;
+  const hasExpectedContracts = Object.entries(getAssistantBundleContractVersions()).every(
+    ([key, version]) => contracts?.[key]?.version === version,
+  );
   if (
     payload?.version !== ASSISTANT_CONTRACT_BUNDLE_VERSION ||
-    payload?.contracts?.assistant?.version !== ASSISTANT_CONTRACT_VERSION ||
-    !payload?.contracts?.metricRegistry ||
-    !payload?.contracts?.studyCatalog ||
-    payload?.contracts?.studyPlan?.version !== STUDY_PLAN_VERSION
+    !hasExpectedContracts
   ) {
     throw new Error("The local data API returned an invalid assistant contract bundle payload.");
   }

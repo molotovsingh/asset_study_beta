@@ -25,23 +25,30 @@ ASSISTANT_CONTRACT_BUNDLE_VERSION = "assistant-contract-bundle-v1"
 ASSISTANT_READINESS_VERSION = "assistant-readiness-v1"
 ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION = "assistant-study-plan-dry-run-v1"
 ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION = "assistant-study-plan-live-draft-v1"
+METRIC_REGISTRY_VERSION = "metric-registry-v1"
+STUDY_CATALOG_MANIFEST_VERSION = "study-catalog-manifest-v1"
+STUDY_PROPOSAL_VERSION = "study-proposal-v1"
+INTENT_PLANNER_VERSION = "intent-planner-v1"
 STUDY_PLAN_VERSION = "study-plan-v1"
+STUDY_PLAN_RECIPE_STORAGE_VERSION = "study-plan-recipes-v1"
+STUDY_RUN_EXPLANATION_VERSION = "study-run-explanation-v1"
 STUDY_RUN_HANDOFF_VERSION = "study-run-handoff-v1"
 STUDY_RUN_EXPLANATION_BRIEF_VERSION = "study-run-explanation-brief-v1"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_OPENAI_STUDY_PLANNER_MODEL = "gpt-4.1-mini"
-REQUIRED_CONTRACT_BUNDLE_KEYS = [
-    "assistant",
-    "metricRegistry",
-    "studyCatalog",
-    "studyProposal",
-    "intentPlanner",
-    "studyPlan",
-    "studyPlanRecipe",
-    "studyRunExplanation",
-    "studyRunHandoff",
-    "studyRunExplanationBrief",
-]
+REQUIRED_CONTRACT_BUNDLE_VERSIONS = {
+    "assistant": ASSISTANT_CONTRACT_VERSION,
+    "metricRegistry": METRIC_REGISTRY_VERSION,
+    "studyCatalog": STUDY_CATALOG_MANIFEST_VERSION,
+    "studyProposal": STUDY_PROPOSAL_VERSION,
+    "intentPlanner": INTENT_PLANNER_VERSION,
+    "studyPlan": STUDY_PLAN_VERSION,
+    "studyPlanRecipe": STUDY_PLAN_RECIPE_STORAGE_VERSION,
+    "studyRunExplanation": STUDY_RUN_EXPLANATION_VERSION,
+    "studyRunHandoff": STUDY_RUN_HANDOFF_VERSION,
+    "studyRunExplanationBrief": STUDY_RUN_EXPLANATION_BRIEF_VERSION,
+}
+REQUIRED_CONTRACT_BUNDLE_KEYS = list(REQUIRED_CONTRACT_BUNDLE_VERSIONS.keys())
 
 
 class StudyRunNotFoundError(LookupError):
@@ -330,14 +337,12 @@ def build_assistant_contract_bundle_payload(_request: dict | None = None) -> dic
     if (
         payload.get("version") != ASSISTANT_CONTRACT_BUNDLE_VERSION
         or not isinstance(contracts, dict)
-        or not isinstance(contracts.get("assistant"), dict)
-        or contracts["assistant"].get("version") != ASSISTANT_CONTRACT_VERSION
-        or not isinstance(contracts.get("metricRegistry"), dict)
-        or not isinstance(contracts.get("studyCatalog"), dict)
-        or not isinstance(contracts.get("studyPlan"), dict)
-        or contracts["studyPlan"].get("version") != STUDY_PLAN_VERSION
     ):
         raise RuntimeError("Assistant contract bundle bridge returned an incomplete payload.")
+    for key, expected_version in REQUIRED_CONTRACT_BUNDLE_VERSIONS.items():
+        contract = contracts.get(key)
+        if not isinstance(contract, dict) or contract.get("version") != expected_version:
+            raise RuntimeError("Assistant contract bundle bridge returned an incomplete payload.")
     return payload
 
 

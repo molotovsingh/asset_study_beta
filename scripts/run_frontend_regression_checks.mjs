@@ -807,6 +807,19 @@ async function testStudyBuilderReadinessHydration() {
 async function testAssistantApiHelpers() {
   const originalFetch = globalThis.fetch;
   const requests = [];
+  const buildAssistantBundleContracts = (overrides = {}) => ({
+    assistant: { version: "assistant-contract-v1" },
+    metricRegistry: { version: "metric-registry-v1", rules: [] },
+    studyCatalog: { version: "study-catalog-manifest-v1", studies: [] },
+    studyProposal: { version: "study-proposal-v1" },
+    intentPlanner: { version: "intent-planner-v1" },
+    studyPlan: { version: "study-plan-v1" },
+    studyPlanRecipe: { version: "study-plan-recipes-v1" },
+    studyRunExplanation: { version: "study-run-explanation-v1" },
+    studyRunHandoff: { version: "study-run-handoff-v1" },
+    studyRunExplanationBrief: { version: "study-run-explanation-brief-v1" },
+    ...overrides,
+  });
 
   try {
     globalThis.fetch = async (url, init = {}) => {
@@ -842,12 +855,7 @@ async function testAssistantApiHelpers() {
       return new Response(
         JSON.stringify({
           version: "assistant-contract-bundle-v1",
-          contracts: {
-            assistant: { version: "assistant-contract-v1" },
-            metricRegistry: { rules: [] },
-            studyCatalog: { studies: [] },
-            studyPlan: { version: "study-plan-v1" },
-          },
+          contracts: buildAssistantBundleContracts(),
         }),
         {
           status: 200,
@@ -867,12 +875,9 @@ async function testAssistantApiHelpers() {
       new Response(
         JSON.stringify({
           version: "assistant-contract-bundle-v1",
-          contracts: {
-            assistant: { version: "wrong-assistant-contract-v1" },
-            metricRegistry: { rules: [] },
-            studyCatalog: { studies: [] },
-            studyPlan: { version: "study-plan-v1" },
-          },
+          contracts: buildAssistantBundleContracts({
+            studyRunHandoff: { version: "wrong-study-run-handoff-v1" },
+          }),
         }),
         {
           status: 200,
@@ -887,7 +892,7 @@ async function testAssistantApiHelpers() {
     }
     assert(
       invalidBundleContractMessage.includes("invalid assistant contract bundle payload"),
-      "assistant contract bundle helper should reject wrong nested assistant contract versions",
+      "assistant contract bundle helper should reject wrong nested contract versions",
     );
 
     requests.length = 0;
