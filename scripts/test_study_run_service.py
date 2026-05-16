@@ -124,9 +124,84 @@ def test_study_run_service_payloads():
         assert_equal(payload["runs"][0]["studyTitle"], "Monthly Straddle", "history payload should preserve study title")
 
 
+def test_warning_messages_derive_count_and_round_trip():
+    with isolated_runtime_store():
+        recorded = runtime_store.record_study_run(
+            {
+                "studyId": "risk-adjusted-return",
+                "studyTitle": "Risk-Adjusted Return",
+                "selectionLabel": "Nifty 50",
+                "subjectQuery": "Nifty 50",
+                "resolvedParams": {
+                    "warningMessages": [
+                        "Loaded data is marked as a Price proxy for TRI.",
+                        "Loaded data is marked as a Price proxy for TRI.",
+                        "",
+                    ]
+                },
+                "completedAt": "2026-05-15T12:00:00+00:00",
+            }
+        )
+        assert_equal(
+            recorded["warningCount"],
+            1,
+            "warning count should derive from unique warning messages when omitted",
+        )
+        assert_equal(
+            recorded["resolvedParams"]["warningMessages"],
+            ["Loaded data is marked as a Price proxy for TRI."],
+            "warning messages should be deduped and stored in resolved params",
+        )
+        loaded = runtime_store.load_study_run_by_id(recorded["runId"])
+        assert_equal(
+            loaded["warningCount"],
+            1,
+            "loaded run should preserve derived warning count",
+        )
+        assert_equal(
+            loaded["resolvedParams"]["warningMessages"],
+            ["Loaded data is marked as a Price proxy for TRI."],
+            "loaded run should preserve normalized warning messages",
+        )
+
+        saved = study_run_service.record_study_run_entry(
+            {
+                "studyId": "rolling-returns",
+                "studyTitle": "Rolling Returns",
+                "selectionLabel": "Nifty 50",
+                "subjectQuery": "Nifty 50",
+                "warnings": ["Actual data window was clipped."],
+                "warningCount": 0,
+                "completedAt": "2026-05-15T12:30:00+00:00",
+            }
+        )
+        assert_equal(
+            saved["run"]["warningCount"],
+            1,
+            "service should not undercount top-level warning messages",
+        )
+        assert_equal(
+            saved["run"]["resolvedParams"]["warningMessages"],
+            ["Actual data window was clipped."],
+            "service should persist top-level warning messages into resolved params",
+        )
+        history = study_run_service.build_study_run_history_payload({"limit": 5})
+        assert_equal(
+            history["runs"][0]["warningCount"],
+            1,
+            "history should expose normalized warning count",
+        )
+        assert_equal(
+            history["runs"][0]["resolvedParams"]["warningMessages"],
+            ["Actual data window was clipped."],
+            "history should expose normalized warning messages",
+        )
+
+
 def main():
     test_study_run_round_trip_and_defaults()
     test_study_run_service_payloads()
+    test_warning_messages_derive_count_and_round_trip()
     print("ok study run service")
 
 
