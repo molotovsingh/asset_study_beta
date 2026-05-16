@@ -201,6 +201,10 @@ Refresh snapshots and validate them with:
 ./scripts/refresh_yfinance.sh --period 5y
 ```
 
+The refresh wrapper prefers `./.venv/bin/python` when it exists, then falls back
+to `python3`/`python` on `PATH`. Set `ASSET_STUDY_PYTHON_BIN=/path/to/python`
+when CI or another automation should use a specific interpreter.
+
 Audit bundled snapshot freshness, gap structure, and large day-over-day moves with:
 
 ```bash
