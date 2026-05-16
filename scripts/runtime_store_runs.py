@@ -17,6 +17,21 @@ def _clean_json_list(value) -> list:
     return value if isinstance(value, list) else []
 
 
+def _clean_warning_messages(*values) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            message = _clean_text(item)
+            if not message or message in seen:
+                continue
+            seen.add(message)
+            cleaned.append(message)
+    return cleaned
+
+
 def _summary_item_from_row(row: sqlite3.Row) -> dict:
     return {
         "summaryKey": row["summary_key"],
@@ -330,6 +345,21 @@ def record_study_run(
     route_hash = _clean_text(study_run.get("routeHash"))
     if route_hash and not route_hash.startswith("#"):
         route_hash = None
+    requested_params = _clean_json_object(study_run.get("requestedParams"))
+    resolved_params = dict(_clean_json_object(study_run.get("resolvedParams")))
+    warning_messages = _clean_warning_messages(
+        study_run.get("warningMessages"),
+        study_run.get("warnings"),
+        resolved_params.get("warningMessages"),
+        resolved_params.get("warnings"),
+    )
+    if warning_messages:
+        resolved_params["warningMessages"] = warning_messages
+    try:
+        requested_warning_count = int(study_run.get("warningCount") or 0)
+    except (TypeError, ValueError):
+        requested_warning_count = 0
+    warning_count = max(0, requested_warning_count, len(warning_messages))
     summary_items = _clean_summary_items(study_run.get("summaryItems"))
     links = _clean_links(study_run.get("links"))
 
@@ -377,12 +407,12 @@ def record_study_run(
                 _clean_text(study_run.get("actualEndDate")),
                 _clean_text(study_run.get("detailLabel")),
                 json.dumps(
-                    _clean_json_object(study_run.get("requestedParams")),
+                    requested_params,
                     separators=(",", ":"),
                     sort_keys=True,
                 ),
                 json.dumps(
-                    _clean_json_object(study_run.get("resolvedParams")),
+                    resolved_params,
                     separators=(",", ":"),
                     sort_keys=True,
                 ),
@@ -395,7 +425,7 @@ def record_study_run(
                     _clean_json_list(study_run.get("dataSnapshotRefs")),
                     separators=(",", ":"),
                 ),
-                int(study_run.get("warningCount") or 0),
+                warning_count,
                 _clean_text(study_run.get("errorMessage")),
                 _clean_text(study_run.get("runKind")) or "analysis",
                 _clean_text(study_run.get("startedAt")),
