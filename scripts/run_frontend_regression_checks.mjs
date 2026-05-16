@@ -1009,6 +1009,35 @@ async function testAssistantApiHelpers() {
       "assistant dry-run helper should POST intent and return a non-executing payload",
     );
 
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "assistant-study-plan-dry-run-v1",
+          mode: "intent",
+          intent: "Compare Nifty 50 against Sensex",
+          readiness: { version: "assistant-readiness-v1", status: "ok" },
+          plannerResult: { version: "intent-planner-v1" },
+          plan: { version: "study-plan-v1" },
+          validation: { ok: true },
+          preview: { canRun: true },
+          execution: { executed: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let executingDryRunMessage = "";
+    try {
+      await dryRunAssistantStudyPlan({ intent: "Compare Nifty 50 against Sensex" });
+    } catch (error) {
+      executingDryRunMessage = error?.message || "";
+    }
+    assert(
+      executingDryRunMessage.includes("invalid assistant StudyPlan dry-run payload"),
+      "assistant dry-run helper should reject executing success payloads",
+    );
+
     requests.length = 0;
     globalThis.fetch = async (url, init = {}) => {
       requests.push({ url: String(url), init });
@@ -1044,6 +1073,37 @@ async function testAssistantApiHelpers() {
       "assistant live-draft helper should POST intent and return a validated non-executing payload",
     );
 
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "assistant-study-plan-live-draft-v1",
+          provider: "openai",
+          model: "gpt-test",
+          mode: "intent",
+          intent: "Compare Nifty 50 against Sensex",
+          readiness: { version: "assistant-readiness-v1", status: "ok" },
+          modelResult: { responseId: "resp_test", parsedJson: true },
+          plan: { version: "study-plan-v1" },
+          validation: { ok: true },
+          preview: { canRun: true },
+          execution: { executed: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let executingLiveDraftMessage = "";
+    try {
+      await liveDraftAssistantStudyPlan({ intent: "Compare Nifty 50 against Sensex" });
+    } catch (error) {
+      executingLiveDraftMessage = error?.message || "";
+    }
+    assert(
+      executingLiveDraftMessage.includes("invalid assistant StudyPlan live-draft payload"),
+      "assistant live-draft helper should reject executing success payloads",
+    );
+
     requests.length = 0;
     globalThis.fetch = async (url, init = {}) => {
       requests.push({ url: String(url), init });
@@ -1072,6 +1132,35 @@ async function testAssistantApiHelpers() {
         requests[0].url.endsWith("/api/study-factory/proposal") &&
         JSON.parse(requests[0].init.body).idea.includes("RBI"),
       "study-factory proposal helper should POST an idea and return a read-only proposal",
+    );
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "study-proposal-response-v1",
+          mode: "read-only",
+          proposal: {
+            version: "study-proposal-v1",
+            feasibility: { status: "needs-evidence-archive" },
+          },
+          execution: { executed: false, generatedCode: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let generatingProposalMessage = "";
+    try {
+      await buildStudyFactoryProposal({
+        idea: "Can RBI policy headlines move bank index volatility?",
+      });
+    } catch (error) {
+      generatingProposalMessage = error?.message || "";
+    }
+    assert(
+      generatingProposalMessage.includes("invalid study proposal payload"),
+      "study-factory proposal helper should reject generated-code success payloads",
     );
 
     requests.length = 0;

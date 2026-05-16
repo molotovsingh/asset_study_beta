@@ -394,7 +394,7 @@ async function dryRunAssistantStudyPlan(request) {
     !payload?.plan ||
     !payload?.validation ||
     !payload?.preview ||
-    !payload?.execution
+    payload?.execution?.executed !== false
   ) {
     throw new Error("The local data API returned an invalid assistant StudyPlan dry-run payload.");
   }
@@ -414,7 +414,7 @@ async function liveDraftAssistantStudyPlan(request) {
     !payload?.plan ||
     !payload?.validation ||
     !payload?.preview ||
-    !payload?.execution
+    payload?.execution?.executed !== false
   ) {
     throw new Error("The local data API returned an invalid assistant StudyPlan live-draft payload.");
   }
@@ -430,7 +430,8 @@ async function buildStudyFactoryProposal(request) {
     payload?.version !== "study-proposal-response-v1" ||
     payload?.mode !== "read-only" ||
     !payload?.proposal ||
-    !payload?.execution
+    payload?.execution?.executed !== false ||
+    payload?.execution?.generatedCode !== false
   ) {
     throw new Error("The local data API returned an invalid study proposal payload.");
   }
