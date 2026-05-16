@@ -152,6 +152,7 @@ Shared contract:
 - planner examples are part of that contract, so future AI work has concrete intent-to-study fixtures instead of relying only on prose
 - planner diagnostics use stable codes such as `intent.template_defaulted`, so UI and assistant consumers do not need to parse warning prose
 - planner confidence is explicit: `draft` means clean template match, `needs-review` means defaulted/warning diagnostics, and `blocked` means the intent could not produce a usable draft without correction
+- Study Builder API response versions are shared through `app/studyBuilder/studyBuilderApiContract.js`; backend bridge output and frontend API helpers also validate nested `intent-planner-v1` and `study-plan-v1` packets, not only the outer response wrapper
 - a versioned `StudyPlan` schema
 - the current deterministic contract is generated at `docs/study-plan-contract.json` from `app/studyBuilder/studyPlan.js`
 - the backend Study Builder endpoints run through `scripts/build_study_builder_payload.mjs`, so Python does not reimplement planner templates, route parsing, metric-policy validation, or confirmation-preview rules
