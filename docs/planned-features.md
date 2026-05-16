@@ -10,6 +10,7 @@ The rule for this repo is simple: if a future feature matters, it should have a 
 | --- | --- | --- | --- |
 | AI Study Builder | Planned | [AI Study Builder](planned-features/ai-study-builder.md) | Lets users describe the study they want in natural language while keeping the app's deterministic study engine, metric policy, and data-window validation in control. |
 | Agentic Study Factory | Read-only proposal slice implemented | [Agentic Study Factory](planned-features/agentic-study-factory.md) | Evaluates whether a new study idea has existing-study coverage, approved tools, evidence requirements, and caveats before code, data fetching, or conclusions exist. |
+| True Total-Return Sourcing | Product-owner decision required | [True Total-Return Sourcing](planned-features/true-total-return-sourcing.md) | Decides which index datasets can be treated as true total-return evidence, which remain price/proxy evidence, and how those caveats flow into exports and assistant briefs. |
 
 ## Parked Vision Tracks
 
