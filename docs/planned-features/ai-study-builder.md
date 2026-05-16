@@ -175,6 +175,7 @@ Shared contract:
 - assistant explanation briefs are defined by `app/studyBuilder/studyRunExplanationBrief.js`, generated at `docs/study-run-explanation-brief-contract.json`, and checked with `node scripts/export_study_run_explanation_brief_contract.mjs --check`
 - the brief is a permission envelope for future generated prose: it says whether result conclusions are allowed, which caveats must be mentioned, which assistant actions are allowed, and which claims are prohibited; Run History renders this as `Assistant Explanation Brief`
 - backend and UI consumers should use `POST /api/assistant/study-run-brief` instead of rebuilding handoff or brief objects from `/api/study-runs` on their own; Run History keeps a local JS fallback only so the settings page remains readable if the local backend is unavailable
+- the Python run-brief service treats the JS bridge as authoritative, but still verifies the nested handoff and explanation-brief contract versions before returning the payload
 - the top-level assistant contract records the endpoint's `400`, `404`, and `502` failure modes; the Python service also times out the Node contract bridge so a wedged builder cannot hang an assistant request indefinitely
 - the assistant contract endpoint also runs through the JS contract bridge, so backend discovery stays aligned with the same JS source-of-truth modules as the generated docs
 - the readiness endpoint is intentionally keyless; live AI keys are only needed later for explicit LLM smoke tests, not for contract, recipe, ledger, or route-readiness checks
