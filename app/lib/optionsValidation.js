@@ -157,7 +157,66 @@ function normalizeObservation(rawObservation) {
     directionBucket: String(rawObservation.directionBucket || "none"),
     candidateBucket: String(rawObservation.candidateBucket || "watch"),
     pricingBucket: String(rawObservation.pricingBucket || "none"),
+    primaryTradeIdea: String(rawObservation.primaryTradeIdea || "No Preset Match"),
   };
+}
+
+function buildObservationDedupKey(observation) {
+  return [
+    observation.universeId || "",
+    observation.symbol || "",
+    observation.asOfDate?.toISOString?.().slice(0, 10) || "",
+    observation.expiry || "",
+    Number.isFinite(observation.daysToExpiry) ? observation.daysToExpiry : "",
+    observation.pricingBucket || "",
+    observation.candidateBucket || "",
+    observation.directionBucket || "",
+    observation.primaryTradeIdea || "",
+    Number.isFinite(observation.impliedMovePercent)
+      ? observation.impliedMovePercent.toFixed(6)
+      : "",
+  ].join("|");
+}
+
+function dedupeObservations(observations) {
+  const deduped = new Map();
+
+  observations.forEach((observation) => {
+    const dedupKey = buildObservationDedupKey(observation);
+    const current = deduped.get(dedupKey);
+    if (!current) {
+      deduped.set(dedupKey, {
+        ...observation,
+        duplicateCount: 1,
+      });
+      return;
+    }
+
+    const currentRunId = Number.isFinite(current.runId) ? current.runId : -Infinity;
+    const nextRunId = Number.isFinite(observation.runId) ? observation.runId : -Infinity;
+    const shouldReplace =
+      nextRunId > currentRunId ||
+      (nextRunId === currentRunId &&
+        observation.createdAt &&
+        (!current.createdAt || observation.createdAt > current.createdAt));
+
+    deduped.set(dedupKey, {
+      ...(shouldReplace ? observation : current),
+      duplicateCount: Number(current.duplicateCount || 1) + 1,
+    });
+  });
+
+  return [...deduped.values()].sort((left, right) => {
+    const leftDate = left.asOfDate?.getTime?.() || 0;
+    const rightDate = right.asOfDate?.getTime?.() || 0;
+    if (leftDate !== rightDate) {
+      return rightDate - leftDate;
+    }
+    if ((right.runId || 0) !== (left.runId || 0)) {
+      return (right.runId || 0) - (left.runId || 0);
+    }
+    return String(left.symbol || "").localeCompare(String(right.symbol || ""));
+  });
 }
 
 function sampleQuality(maturedCount) {
@@ -318,7 +377,8 @@ function buildOptionsValidationStudyRun({
 
   const normalizedGroupKey = normalizeGroupKey(groupKey);
   const normalizedHorizonDays = normalizeHorizonDays(horizonDays);
-  const observations = validationPayload.observations.map(normalizeObservation);
+  const rawObservations = validationPayload.observations.map(normalizeObservation);
+  const observations = dedupeObservations(rawObservations);
   const maturedObservations = observations.filter((row) => row.matured);
   const pendingObservations = observations.filter((row) => !row.matured);
   const groupedResults = groupObservations(maturedObservations, normalizedGroupKey);
@@ -345,9 +405,13 @@ function buildOptionsValidationStudyRun({
     groupKey: normalizedGroupKey,
     groupDefinition: getGroupDefinition(normalizedGroupKey),
     runCount: Number(validationPayload.runCount) || 0,
-    observationCount: Number(validationPayload.observationCount) || observations.length,
-    maturedCount: Number(validationPayload.maturedCount) || maturedObservations.length,
-    pendingCount: Number(validationPayload.pendingCount) || pendingObservations.length,
+    observationCount: observations.length,
+    maturedCount: maturedObservations.length,
+    pendingCount: pendingObservations.length,
+    rerunCountCollapsed: Math.max(
+      Number(validationPayload.rerunCountCollapsed) || 0,
+      rawObservations.length - observations.length,
+    ),
     latestAsOfDate,
     observations,
     maturedObservations,

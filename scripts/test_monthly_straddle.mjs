@@ -300,6 +300,7 @@ function testStudyRun() {
   assert(studyRun.curveShape === "Flat", "fixture curve should read as flat");
   assert(studyRun.focusVolComparison.label === "Mildly Rich", "fixture should classify front IV/HV properly");
   assert(studyRun.historySummary.observations === 3, "study run should preserve front-history observations");
+  assert(studyRun.historySummary.hasCrediblePercentiles === false, "thin front-history should suppress percentile display");
   assert(studyRun.historySummary.ivPercentile === 1, "current fixture IV should be at the top percentile");
   assert(studyRun.warnings.length >= 3, "study run should include base snapshot and history warnings");
 
@@ -316,6 +317,7 @@ function testStudyRun() {
   assert(workbook.includes('Worksheet ss:Name="Summary"'), "workbook should include Summary sheet");
   assert(workbook.includes('Worksheet ss:Name="Contracts"'), "workbook should include Contracts sheet");
   assert(workbook.includes('Worksheet ss:Name="History"'), "workbook should include History sheet");
+  assert(workbook.includes("Suppressed until front-history is deeper"), "summary export should explain suppressed percentile context");
   console.log("ok monthly straddle study");
 }
 
@@ -333,7 +335,8 @@ function testViews() {
   assert(resultsMarkup.includes("Focus Contract"), "overview should include the focus section");
   assert(resultsMarkup.includes("Monthly Contracts"), "overview should include the contracts table");
   assert(resultsMarkup.includes("IV/HV20"), "overview should include IV/HV context");
-  assert(resultsMarkup.includes("IV Percentile"), "overview should include IV percentile context");
+  assert(resultsMarkup.includes("History Depth"), "overview should replace thin percentile cards with history depth");
+  assert(resultsMarkup.includes("Percentile Status"), "overview should explain suppressed percentile context when history is thin");
   assert(resultsMarkup.includes("Export CSV"), "overview should include export buttons");
 
   const populatedRoot = { innerHTML: "", addEventListener() {}, removeEventListener() {} };
@@ -342,6 +345,7 @@ function testViews() {
   assert(populatedRoot.innerHTML.includes("IV Curve"), "visuals should include the IV curve card");
   assert(populatedRoot.innerHTML.includes("Vol Context"), "visuals should include the vol context card");
   assert(populatedRoot.innerHTML.includes("Front History"), "visuals should include the front-history card");
+  assert(populatedRoot.innerHTML.includes("History Depth"), "visuals should show history depth instead of a thin percentile headline");
   dispose();
 
   const emptyRoot = { innerHTML: "", addEventListener() {}, removeEventListener() {} };

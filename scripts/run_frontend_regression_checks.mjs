@@ -10,6 +10,24 @@ import {
   renderStudyShell,
 } from "../app/studies/studyShell.js";
 import {
+  DEFAULT_SETTINGS_SECTION,
+  STUDY_BUILDER_SETTINGS_SECTION,
+  buildSettingsRouteHash,
+  parseAppRouteHash,
+} from "../app/appRoute.js";
+import {
+  renderAutomationSettingsPage,
+  renderAutomationSidebarSummary,
+} from "../app/settings/automationSettings.js";
+import { renderRunHistorySettingsPage } from "../app/settings/studyRunHistorySettings.js";
+import {
+  EXAMPLE_STUDY_PLAN,
+  mountStudyBuilderSettingsPage,
+  renderStudyBuilderSettingsPage,
+} from "../app/settings/studyBuilderSettings.js";
+import { buildStudyPlanConfirmationPreview } from "../app/studyBuilder/studyPlan.js";
+import { STUDY_PLAN_RECIPE_STORAGE_KEY } from "../app/studyBuilder/studyPlanRecipes.js";
+import {
   DEFAULT_ACTIVE_SUBJECT_QUERY,
   adoptActiveSubjectQuery,
   getActiveSubjectQuery,
@@ -20,6 +38,7 @@ import {
   MAX_RUN_HISTORY_ITEMS,
   clearRunHistory,
   getRecentRuns,
+  mergeStudyRuns,
   recordStudyRun,
   subscribeRunHistory,
 } from "../app/studies/shared/runHistory.js";
@@ -27,10 +46,15 @@ import {
   buildCommonIndexParams,
   readCommonIndexParams,
 } from "../app/studies/shared/shareableInputs.js";
+import { getStudyKickerLabel } from "../app/studies/shared/studyOrdinal.js";
 import {
   renderRiskInterpretation,
   renderSeasonalityInterpretation,
 } from "../app/studies/shared/interpretation.js";
+import {
+  buildAvailableStudyWindow,
+  toInputDate,
+} from "../app/studies/shared/overviewUtils.js";
 import { renderResults as renderRiskResults } from "../app/studies/riskAdjustedReturnView.js";
 import { renderRelativeResults } from "../app/studies/riskAdjustedReturnRelative.js";
 import { renderSeasonalityResults } from "../app/studies/seasonalityView.js";
@@ -72,7 +96,24 @@ import {
   serializeCsv,
   toIsoDate,
 } from "../app/lib/studyExport.js";
+import {
+  buildStudyFactoryProposal,
+  deleteStudyPlanRecipe,
+  dryRunAssistantStudyPlan,
+  draftStudyBuilderPlan,
+  fetchAssistantContract,
+  fetchAssistantContractBundle,
+  fetchAssistantReadiness,
+  fetchStudyPlanRecipes,
+  fetchStudyRunBrief,
+  liveDraftAssistantStudyPlan,
+  saveStudyPlanRecipe,
+  validateStudyBuilderPlan,
+} from "../app/lib/syncedData.js";
 import { computeRiskAdjustedMetrics } from "../app/lib/stats.js";
+import { runMetricRegistryChecks } from "./test_metric_registry.mjs";
+import { runStudyBuilderChecks } from "./test_study_builder.mjs";
+import { runSymbolDiscoveryChecks } from "./test_symbol_discovery.mjs";
 
 const MONTH_LABELS = [
   "Jan",
@@ -137,6 +178,24 @@ function assertDateEqual(actual, expected, label) {
   );
 }
 
+function createMemoryStorage() {
+  const values = new Map();
+  return {
+    getItem(key) {
+      return values.has(key) ? values.get(key) : null;
+    },
+    setItem(key, value) {
+      values.set(key, String(value));
+    },
+    removeItem(key) {
+      values.delete(key);
+    },
+    clear() {
+      values.clear();
+    },
+  };
+}
+
 function testActiveSubjectStore() {
   assert(
     getActiveSubjectQuery() === DEFAULT_ACTIVE_SUBJECT_QUERY,
@@ -195,6 +254,8 @@ function testRunHistoryStore() {
       symbol: "AAPL",
       requestedStartDate: new Date("2021-01-01T00:00:00"),
       requestedEndDate: "2026-01-01",
+      actualStartDate: "2021-01-04",
+      actualEndDate: "2025-12-31",
       completedAt: "2026-04-10T07:30:00.000Z",
     }) === true,
     "run history should accept a valid run",
@@ -203,6 +264,51 @@ function testRunHistoryStore() {
   assert(
     getRecentRuns()[0].requestedStartDate === "2021-01-01",
     "run history should normalize start dates",
+  );
+  assert(
+    getRecentRuns()[0].actualEndDate === "2025-12-31",
+    "run history should preserve actual loaded coverage dates",
+  );
+  assert(
+    getRecentRuns()[0].routeHash === "",
+    "legacy run history entries should default routeHash safely",
+  );
+
+  recordStudyRun({
+    studyId: "options-screener",
+    studyTitle: "Options Screener",
+    subjectQuery: "us-liquid-10",
+    selectionLabel: "US Liquid 10",
+    detailLabel: "10 rows · IV/HV20 · 25D minimum",
+    routeHash: "#options-screener/overview?u=us-liquid-10&sort=ivHv20Ratio&dte=25",
+    completedAt: "2026-04-10T08:30:00.000Z",
+  });
+  assert(
+    getRecentRuns()[0].routeHash ===
+      "#options-screener/overview?u=us-liquid-10&sort=ivHv20Ratio&dte=25",
+    "run history should preserve route hashes for non-index studies",
+  );
+  assert(
+    getRecentRuns()[0].detailLabel === "10 rows · IV/HV20 · 25D minimum",
+    "run history should preserve optional detail labels",
+  );
+  assert(
+    mergeStudyRuns([
+      {
+        studyId: "monthly-straddle",
+        studyTitle: "Monthly Straddle",
+        subjectQuery: "AAPL",
+        selectionLabel: "AAPL",
+        detailLabel: "25D minimum · 4 contract(s)",
+        routeHash: "#monthly-straddle/overview?subject=AAPL",
+        completedAt: "2026-04-10T09:30:00.000Z",
+      },
+    ]) === true,
+    "run history should merge durable backend runs",
+  );
+  assert(
+    getRecentRuns()[0].studyId === "monthly-straddle",
+    "merged backend runs should sort by completion time",
   );
 
   for (let index = 0; index < MAX_RUN_HISTORY_ITEMS + 2; index += 1) {
@@ -221,6 +327,776 @@ function testRunHistoryStore() {
   unsubscribe();
   clearRunHistory();
   console.log("ok run history");
+}
+
+function testAvailableStudyWindow() {
+  const window = buildAvailableStudyWindow({
+    selection: {
+      range: {
+        startDate: "2021-04-08",
+        endDate: "2026-04-08",
+      },
+    },
+    fallbackBaseDate: new Date("2026-05-14T00:00:00"),
+  });
+  assert(
+    toInputDate(window.startDate) === "2021-04-08",
+    "available window should anchor the start date to the first available market date when needed",
+  );
+  assert(
+    toInputDate(window.endDate) === "2026-04-08",
+    "available window should anchor the end date to the latest available market date",
+  );
+  console.log("ok available window");
+}
+
+function testStudyKickerLabels() {
+  assert(
+    getStudyKickerLabel("risk-adjusted-return") === "Study 01",
+    "risk-adjusted-return should derive its ordinal from the registry",
+  );
+  assert(
+    getStudyKickerLabel("options-screener") === "Study 04",
+    "options screener should derive its ordinal from the registry",
+  );
+  assert(
+    getStudyKickerLabel("options-validation") === "Study 05",
+    "options validation should derive its ordinal from the registry",
+  );
+  console.log("ok study kicker labels");
+}
+
+function testAppRouteModel() {
+  const studyRoute = parseAppRouteHash("#risk-adjusted-return/overview?subject=Nifty+50");
+  assert(studyRoute.kind === "study", "study hashes should parse as study routes");
+  assert(
+    studyRoute.studyId === "risk-adjusted-return" && studyRoute.viewId === "overview",
+    "study routes should preserve study/view ids",
+  );
+
+  const settingsRoute = parseAppRouteHash("#settings/automations");
+  assert(settingsRoute.kind === "settings", "settings hash should parse as settings route");
+  assert(
+    settingsRoute.section === DEFAULT_SETTINGS_SECTION,
+    "settings route should preserve the automations section",
+  );
+
+  const unknownSettingsRoute = parseAppRouteHash("#settings/unknown");
+  assert(
+    unknownSettingsRoute.section === DEFAULT_SETTINGS_SECTION,
+    "unknown settings sections should normalize to automations",
+  );
+
+  assert(
+    buildSettingsRouteHash("automations") === "#settings/automations",
+    "settings hash builder should produce the canonical automations route",
+  );
+  assert(
+    buildSettingsRouteHash(STUDY_BUILDER_SETTINGS_SECTION) === "#settings/study-builder",
+    "settings hash builder should produce the study-builder route",
+  );
+  const studyBuilderRoute = parseAppRouteHash("#settings/study-builder");
+  assert(
+    studyBuilderRoute.kind === "settings" &&
+      studyBuilderRoute.section === STUDY_BUILDER_SETTINGS_SECTION,
+    "study-builder hash should parse as a settings route",
+  );
+  const historyRoute = parseAppRouteHash("#settings/history?studyId=options-screener&limit=50");
+  assert(historyRoute.kind === "settings", "history hash should parse as settings route");
+  assert(historyRoute.section === "history", "history route should preserve the history section");
+  assert(
+    historyRoute.params.get("studyId") === "options-screener",
+    "history route should preserve query params",
+  );
+
+  const sidebarSummary = renderAutomationSidebarSummary(
+    {
+      automations: [{ automationId: "daily-maintenance", isActive: true }],
+    },
+    {
+      summary: {
+        totalSymbols: 25,
+        attentionSymbolCount: 3,
+        syncErrorCount: 1,
+        totalCollectionRuns: 4,
+      },
+      attentionSymbols: [{ symbol: "AAPL", issue: "stale-check" }],
+    },
+  );
+  assert(
+    sidebarSummary.includes("Saved automations: 1 total"),
+    "sidebar summary should describe configured automation counts",
+  );
+  assert(
+    sidebarSummary.includes("Attention"),
+    "sidebar summary should expose the runtime tone",
+  );
+
+  const settingsPage = renderAutomationSettingsPage({
+    automationState: {
+      automations: [],
+      defaults: {
+        automationId: "daily-maintenance",
+        label: "Daily Maintenance",
+        intervalMinutes: 1440,
+        isActive: true,
+        runMarketCollection: true,
+        runOptionsCollection: true,
+        refreshExchangeSymbolMasters: false,
+        marketUniverseIds: ["smoke-aapl"],
+        optionsUniverseIds: ["us-liquid-10"],
+      },
+      catalogs: {
+        marketUniverses: [{ universeId: "smoke-aapl", activeMembers: 1 }],
+        optionsUniverses: [{ universeId: "us-liquid-10" }],
+      },
+    },
+    automationRuntimeHealth: {
+      summary: {
+        totalSymbols: 25,
+        attentionSymbolCount: 3,
+        syncErrorCount: 1,
+        totalCollectionRuns: 4,
+      },
+      attentionSymbols: [{ symbol: "AAPL", issue: "stale-check", historyEndDate: "2026-04-10" }],
+      universeHealth: [],
+    },
+    statusMessage: "Automation completed.",
+    selectedAutomationId: "",
+  });
+  assert(
+    settingsPage.includes('id="settings-automation-form"'),
+    "settings page should render the automation editor form",
+  );
+  assert(
+    settingsPage.includes("System visibility"),
+    "settings page should include runtime health detail",
+  );
+
+  const historyPage = renderRunHistorySettingsPage({
+    runs: [
+      {
+        runId: 12,
+        studyId: "options-screener",
+        studyTitle: "Options Screener",
+        selectionLabel: "US Liquid 10",
+        subjectQuery: "us-liquid-10",
+        status: "success",
+        routeHash: "#options-screener/overview?u=us-liquid-10",
+        detailLabel: "10 rows · IV/HV20",
+        actualStartDate: "2026-04-08T18:30:00.000Z",
+        actualEndDate: "2026-04-10T18:30:00.000Z",
+        requestedParams: { universeId: "us-liquid-10" },
+        resolvedParams: { universeId: "us-liquid-10", limit: 10 },
+        providerSummary: { provider: "yfinance" },
+        dataSnapshotRefs: [{ kind: "cache-series", symbol: "AAPL" }],
+        warningCount: 0,
+        runKind: "analysis",
+        completedAt: "2026-05-15T10:00:00+00:00",
+        summaryItems: [
+          { label: "Filtered Rows", valueNumber: 10, valueKind: "integer" },
+        ],
+        links: [
+          {
+            linkType: "evidence-source",
+            targetKind: "options_screener_run",
+            targetId: "42",
+            targetLabel: "Run 42",
+            metadata: { signalVersion: "options-screener-v2" },
+          },
+        ],
+      },
+    ],
+    statusMessage: "",
+    filters: { studyId: "options-screener", status: "success", limit: 50 },
+    selectedRunId: "12",
+    isLoading: false,
+    assistantPayloadByRunId: {
+      12: {
+        handoff: {
+          version: "study-run-handoff-v1",
+          readyForReplay: true,
+          source: "backend-assistant-endpoint",
+          run: { runId: 12, studyId: "options-screener" },
+        },
+        explanationBrief: {
+          version: "study-run-explanation-brief-v1",
+          mode: "result-with-caveats",
+          title: "Backend brief",
+          summary: "Backend-owned assistant payload.",
+          resultConclusionAllowed: true,
+          replay: { canReplay: true },
+          allowedAssistantActions: ["explain_result_with_caveats"],
+          requiredCaveats: [],
+          prohibitedClaims: ["Do not invent missing evidence."],
+        },
+      },
+    },
+    assistantPayloadStatusByRunId: { 12: "ready" },
+  });
+  assert(
+    historyPage.includes("Ledger query"),
+    "history settings page should render the ledger filter controls",
+  );
+  assert(
+    historyPage.includes("Evidence Links"),
+    "history settings page should render durable evidence links",
+  );
+  assert(
+    historyPage.includes("Assistant-safe explanation seed"),
+    "history settings page should render deterministic explanation seeds",
+  );
+  assert(
+    historyPage.includes("Seed JSON") &&
+      historyPage.includes("&quot;version&quot;: &quot;study-run-explanation-v1&quot;"),
+    "history settings page should render the machine-readable explanation seed payload",
+  );
+  assert(
+    historyPage.includes("Replay StudyPlan") &&
+      historyPage.includes("Route-safe") &&
+      historyPage.includes("&quot;studyId&quot;: &quot;options-screener&quot;"),
+    "history settings page should render a validated replay StudyPlan from the recorded route",
+  );
+  assert(
+    historyPage.includes("Assistant Handoff JSON") &&
+      historyPage.includes("Download Handoff JSON") &&
+      historyPage.includes('data-history-handoff-export="12"') &&
+      historyPage.includes("&quot;version&quot;: &quot;study-run-handoff-v1&quot;") &&
+      historyPage.includes("&quot;readyForReplay&quot;: true"),
+    "history settings page should render and expose the combined assistant handoff payload",
+  );
+  assert(
+    historyPage.includes("Assistant Explanation Brief") &&
+      historyPage.includes("result-with-caveats") &&
+      historyPage.includes("Backend-owned assistant payload.") &&
+      historyPage.includes("Allowed assistant actions") &&
+      historyPage.includes("Prohibited claims"),
+    "history settings page should render the backend assistant prose permission envelope",
+  );
+  assert(
+    historyPage.includes("2026-04-08 to 2026-04-10") &&
+      !historyPage.includes("2026-04-08T18:30:00.000Z to 2026-04-10T18:30:00.000Z"),
+    "history settings page should render ledger windows as date-only values",
+  );
+  const studyBuilderPage = renderStudyBuilderSettingsPage({
+    planText: JSON.stringify(EXAMPLE_STUDY_PLAN, null, 2),
+    preview: buildStudyPlanConfirmationPreview(EXAMPLE_STUDY_PLAN),
+    statusMessage: "Plan validated.",
+  });
+  assert(
+    studyBuilderPage.includes("Study Builder Preview") &&
+      studyBuilderPage.includes("Assistant Readiness") &&
+      studyBuilderPage.includes("Go to route") &&
+      studyBuilderPage.includes("#risk-adjusted-return/overview"),
+    "study builder settings page should render a deterministic route preview",
+  );
+  console.log("ok app routes");
+}
+
+async function testStudyBuilderBackendRecipeHydration() {
+  const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, "window");
+  const originalWindow = globalThis.window;
+  const storage = createMemoryStorage();
+  storage.setItem(
+    STUDY_PLAN_RECIPE_STORAGE_KEY,
+    JSON.stringify({
+      version: "study-plan-recipes-v1",
+      recipes: [
+        {
+          id: "local-only",
+          version: "study-plan-recipes-v1",
+          name: "Local Only Recipe",
+          plan: EXAMPLE_STUDY_PLAN,
+          createdAt: "2026-05-15T00:00:00.000Z",
+          updatedAt: "2026-05-15T00:00:00.000Z",
+        },
+      ],
+    }),
+  );
+
+  let resolveBackendRecipes;
+  const backendRecipesPromise = new Promise((resolve) => {
+    resolveBackendRecipes = resolve;
+  });
+  const root = {
+    innerHTML: "",
+    addEventListener() {},
+    removeEventListener() {},
+    querySelector() {
+      return null;
+    },
+  };
+
+  try {
+    globalThis.window = { localStorage: storage };
+    const unmount = mountStudyBuilderSettingsPage(root, {
+      fetchStudyPlanRecipes: () => backendRecipesPromise,
+    });
+
+    assert(
+      root.innerHTML.includes("Local Only Recipe"),
+      "study-builder settings should render browser-local recipes before backend hydration completes",
+    );
+
+    resolveBackendRecipes({
+      version: "study-plan-recipes-v1",
+      recipes: [],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert(
+      !root.innerHTML.includes("Local Only Recipe") &&
+        root.innerHTML.includes("No saved StudyPlan recipes yet."),
+      "study-builder settings should replace stale local recipes with an empty successful backend response",
+    );
+
+    unmount();
+  } finally {
+    if (hadWindow) {
+      globalThis.window = originalWindow;
+    } else {
+      delete globalThis.window;
+    }
+  }
+
+  console.log("ok study-builder recipe hydration");
+}
+
+async function testStudyBuilderReadinessHydration() {
+  let resolveReadiness;
+  const readinessPromise = new Promise((resolve) => {
+    resolveReadiness = resolve;
+  });
+  const root = {
+    innerHTML: "",
+    addEventListener() {},
+    removeEventListener() {},
+    querySelector() {
+      return null;
+    },
+  };
+
+  const unmount = mountStudyBuilderSettingsPage(root, {
+    fetchAssistantReadiness: () => readinessPromise,
+  });
+
+  assert(
+    root.innerHTML.includes("Checking deterministic assistant rail"),
+    "study-builder settings should render assistant readiness loading state",
+  );
+
+  resolveReadiness({
+    version: "assistant-readiness-v1",
+    status: "ok",
+    summary: { total: 13, passed: 13, failed: 0 },
+    checks: [],
+    liveAiTesting: {
+      status: "not-required",
+      requiredOnlyWhen: "A live LLM smoke test is added.",
+    },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert(
+    root.innerHTML.includes("Deterministic assistant rail is healthy") &&
+      root.innerHTML.includes("13 / 13 checks passed") &&
+      root.innerHTML.includes("not-required"),
+    "study-builder settings should hydrate backend assistant readiness",
+  );
+
+  unmount();
+  console.log("ok study-builder readiness hydration");
+}
+
+async function testAssistantApiHelpers() {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "assistant-contract-v1",
+          contracts: [],
+          backendEndpoints: [{ path: "/api/assistant/study-run-brief" }],
+          hardStops: ["Do not invent study IDs."],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+
+    const contract = await fetchAssistantContract();
+    assert(
+      contract.version === "assistant-contract-v1",
+      "assistant contract helper should return the top-level contract payload",
+    );
+    assert(
+      requests[0].url.endsWith("/api/assistant/contract") &&
+        !requests[0].init.method,
+      "assistant contract helper should call the backend contract endpoint with GET semantics",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "assistant-contract-bundle-v1",
+          contracts: {
+            assistant: { version: "assistant-contract-v1" },
+            metricRegistry: { rules: [] },
+            studyCatalog: { studies: [] },
+            studyPlan: { version: "study-plan-v1" },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const contractBundle = await fetchAssistantContractBundle();
+    assert(
+      contractBundle.version === "assistant-contract-bundle-v1" &&
+        requests[0].url.endsWith("/api/assistant/contract-bundle") &&
+        !requests[0].init.method,
+      "assistant contract bundle helper should call the backend bundle endpoint with GET semantics",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "assistant-readiness-v1",
+          status: "ok",
+          summary: { total: 3, passed: 3, failed: 0 },
+          checks: [],
+          liveAiTesting: { status: "not-required" },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const readinessPayload = await fetchAssistantReadiness({ artifactChecks: false });
+    assert(
+      readinessPayload.version === "assistant-readiness-v1" &&
+        requests[0].url.endsWith("/api/assistant/readiness?artifactChecks=false") &&
+        !requests[0].init.method,
+      "assistant readiness helper should call the backend readiness endpoint with GET semantics",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          run: { runId: 12 },
+          handoff: { version: "study-run-handoff-v1" },
+          explanationBrief: { version: "study-run-explanation-brief-v1" },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+
+    const payload = await fetchStudyRunBrief({ runId: 12 });
+    assert(payload.run.runId === 12, "assistant brief helper should return the run payload");
+    assert(
+      payload.handoff.version === "study-run-handoff-v1" &&
+        payload.explanationBrief.version === "study-run-explanation-brief-v1",
+      "assistant brief helper should return handoff and explanation brief payloads",
+    );
+    assert(
+      requests[0].url.endsWith("/api/assistant/study-run-brief"),
+      "assistant brief helper should call the backend assistant endpoint",
+    );
+    assert(
+      requests[0].init.method === "POST" &&
+        JSON.parse(requests[0].init.body).runId === 12,
+      "assistant brief helper should POST the durable run id as JSON",
+    );
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ error: "runId must be a positive integer." }), {
+        status: 400,
+        statusText: "Bad Request",
+        headers: { "Content-Type": "application/json" },
+      });
+    let badRequestMessage = "";
+    try {
+      await fetchStudyRunBrief({ runId: "abc" });
+    } catch (error) {
+      badRequestMessage = error?.message || "";
+    }
+    assert(
+      badRequestMessage === "runId must be a positive integer.",
+      "assistant brief helper should preserve backend validation errors",
+    );
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ run: { runId: 12 }, handoff: {} }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    let invalidPayloadMessage = "";
+    try {
+      await fetchStudyRunBrief({ runId: 12 });
+    } catch (error) {
+      invalidPayloadMessage = error?.message || "";
+    }
+    assert(
+      invalidPayloadMessage.includes("invalid assistant run brief payload"),
+      "assistant brief helper should reject incomplete success payloads",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "assistant-study-plan-dry-run-v1",
+          mode: "intent",
+          intent: "Compare Nifty 50 against Sensex",
+          readiness: { version: "assistant-readiness-v1", status: "ok" },
+          plannerResult: { version: "intent-planner-v1" },
+          plan: { version: "study-plan-v1" },
+          validation: { ok: true },
+          preview: { canRun: true },
+          execution: { executed: false },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const dryRunPayload = await dryRunAssistantStudyPlan({
+      intent: "Compare Nifty 50 against Sensex",
+    });
+    assert(
+      dryRunPayload.version === "assistant-study-plan-dry-run-v1" &&
+        dryRunPayload.execution.executed === false &&
+        requests[0].url.endsWith("/api/assistant/study-plan-dry-run") &&
+        JSON.parse(requests[0].init.body).intent.includes("Sensex"),
+      "assistant dry-run helper should POST intent and return a non-executing payload",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "assistant-study-plan-live-draft-v1",
+          provider: "openai",
+          model: "gpt-test",
+          mode: "intent",
+          intent: "Compare Nifty 50 against Sensex",
+          readiness: { version: "assistant-readiness-v1", status: "ok" },
+          modelResult: { responseId: "resp_test", parsedJson: true },
+          plan: { version: "study-plan-v1" },
+          validation: { ok: true },
+          preview: { canRun: true },
+          execution: { executed: false },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const liveDraftPayload = await liveDraftAssistantStudyPlan({
+      intent: "Compare Nifty 50 against Sensex",
+    });
+    assert(
+      liveDraftPayload.version === "assistant-study-plan-live-draft-v1" &&
+        liveDraftPayload.provider === "openai" &&
+        liveDraftPayload.execution.executed === false &&
+        requests[0].url.endsWith("/api/assistant/study-plan-live-draft") &&
+        JSON.parse(requests[0].init.body).intent.includes("Sensex"),
+      "assistant live-draft helper should POST intent and return a validated non-executing payload",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "study-proposal-response-v1",
+          mode: "read-only",
+          proposal: {
+            version: "study-proposal-v1",
+            feasibility: { status: "needs-evidence-archive" },
+          },
+          execution: { executed: false, generatedCode: false },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const proposalPayload = await buildStudyFactoryProposal({
+      idea: "Can RBI policy headlines move bank index volatility?",
+    });
+    assert(
+      proposalPayload.version === "study-proposal-response-v1" &&
+        proposalPayload.execution.executed === false &&
+        requests[0].url.endsWith("/api/study-factory/proposal") &&
+        JSON.parse(requests[0].init.body).idea.includes("RBI"),
+      "study-factory proposal helper should POST an idea and return a read-only proposal",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "study-builder-plan-response-v1",
+          plannerResult: { version: "intent-planner-v1" },
+          plan: { version: "study-plan-v1" },
+          preview: { canRun: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const draftPayload = await draftStudyBuilderPlan({ intent: "Compare Nifty 50 against Sensex" });
+    assert(
+      draftPayload.version === "study-builder-plan-response-v1" &&
+        requests[0].url.endsWith("/api/study-builder/plan") &&
+        JSON.parse(requests[0].init.body).intent.includes("Nifty 50"),
+      "study-builder draft helper should POST intent to the backend planner endpoint",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "study-builder-validation-response-v1",
+          mode: "route",
+          validation: { ok: true },
+          preview: { canRun: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const validationPayload = await validateStudyBuilderPlan({
+      routeHash: "#drawdown-study/overview?subject=TSLA",
+    });
+    assert(
+      validationPayload.mode === "route" &&
+        requests[0].url.endsWith("/api/study-builder/validate") &&
+        JSON.parse(requests[0].init.body).routeHash.includes("drawdown-study"),
+      "study-builder validation helper should POST plans or route hashes to the backend validator endpoint",
+    );
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ version: "study-builder-validation-response-v1" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    let invalidStudyBuilderPayloadMessage = "";
+    try {
+      await validateStudyBuilderPlan({ plan: {} });
+    } catch (error) {
+      invalidStudyBuilderPayloadMessage = error?.message || "";
+    }
+    assert(
+      invalidStudyBuilderPayloadMessage.includes("invalid study-builder validation payload"),
+      "study-builder validation helper should reject incomplete success payloads",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "study-plan-recipes-v1",
+          limit: 50,
+          recipes: [{ id: "risk", name: "Risk", plan: { version: "study-plan-v1" } }],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const recipePayload = await fetchStudyPlanRecipes({ limit: 10 });
+    assert(
+      recipePayload.recipes.length === 1 &&
+        requests[0].url.endsWith("/api/study-builder/recipes?limit=10") &&
+        !requests[0].init.method,
+      "study-plan recipe helper should GET backend recipes with query params",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          recipe: { id: "risk" },
+          recipes: [{ id: "risk" }],
+          validation: { ok: true },
+          preview: { canRun: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const saveRecipePayload = await saveStudyPlanRecipe({
+      name: "Risk",
+      plan: { version: "study-plan-v1" },
+    });
+    assert(
+      saveRecipePayload.ok &&
+        requests[0].url.endsWith("/api/study-builder/recipes/save") &&
+        JSON.parse(requests[0].init.body).name === "Risk",
+      "study-plan recipe save helper should POST recipes to the backend",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({ ok: true, recipes: [] }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const deleteRecipePayload = await deleteStudyPlanRecipe({ id: "risk" });
+    assert(
+      deleteRecipePayload.ok &&
+        requests[0].url.endsWith("/api/study-builder/recipes/delete") &&
+        JSON.parse(requests[0].init.body).id === "risk",
+      "study-plan recipe delete helper should POST recipe ids to the backend",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  console.log("ok assistant api helpers");
 }
 
 function testShareableInputUrls() {
@@ -1401,8 +2277,63 @@ async function runRiskRegressionChecks() {
           "risk result view should include interpretation panel",
         );
       }
+
+      if (datasetId === "nifty-50" && window.label === "1y") {
+        const html = renderRiskResults({
+          metrics: actual,
+          startDate: filteredSeries[0].date,
+          endDate: filteredSeries.at(-1).date,
+          methodLabel: "Regression snapshot",
+          warnings: [],
+        });
+        assert(
+          html.includes("CAGR"),
+          "full-year risk window should keep CAGR available as a headline",
+        );
+      }
     }
   }
+
+  const { snapshot: shortSnapshot, series: shortSeriesAll } = await loadSnapshot("nifty-50");
+  const shortSeries = filterSeriesByDate(
+    shortSeriesAll,
+    new Date("2026-01-01T00:00:00"),
+    FIXED_END,
+  );
+  const shortMetrics = computeRiskAdjustedMetrics(shortSeries, {
+    constantRiskFreeRate: CONSTANT_RISK_FREE_RATE,
+  });
+  const shortHtml = renderRiskResults({
+    metrics: shortMetrics,
+    startDate: shortSeries[0].date,
+    endDate: shortSeries.at(-1).date,
+    methodLabel: "Regression snapshot",
+    warnings: [],
+  });
+  assert(
+    shortHtml.includes("Annualized Pace"),
+    "short risk window should demote CAGR to annualized pace",
+  );
+  assert(
+    shortHtml.includes("Primary return for short or thin windows"),
+    "short risk window should explain that period return is primary",
+  );
+  const shortWorkbookXml = buildStudyWorkbookXml(
+    buildRiskPayload(shortSnapshot, shortSeries, shortMetrics),
+  );
+  assert(
+    shortWorkbookXml.includes("Annualized Pace") &&
+      shortWorkbookXml.includes("Return / Max DD"),
+    "short risk workbook should use demoted annualized labels",
+  );
+  assert(
+    shortWorkbookXml.includes("Period truth first; annualized values diagnostic"),
+    "short risk workbook should record the annualized headline policy",
+  );
+  assert(
+    shortWorkbookXml.includes("return observations"),
+    "risk workbook should include sample-count notes for annualized diagnostics",
+  );
 
   console.log("ok risk metrics");
 }
@@ -1457,6 +2388,21 @@ async function runSeasonalityRegressionChecks() {
   assert(
     modelWithoutPartials.summary.yearsObserved === expectedWithoutPartials.summary.yearsObserved,
     "seasonality yearsObserved mismatch",
+  );
+  const seasonalityBucketCounts = modelWithoutPartials.bucketStats
+    .map((bucket) => bucket.observations)
+    .filter((observations) => observations > 0);
+  assert(
+    modelWithoutPartials.summary.minBucketObservations === Math.min(...seasonalityBucketCounts),
+    "seasonality min bucket observations mismatch",
+  );
+  assert(
+    modelWithoutPartials.summary.maxBucketObservations === Math.max(...seasonalityBucketCounts),
+    "seasonality max bucket observations mismatch",
+  );
+  assert(
+    Number.isFinite(modelWithoutPartials.summary.medianBucketObservations),
+    "seasonality median bucket observations should be finite",
   );
   assert(
     modelWithoutPartials.summary.skippedTransitions ===
@@ -1520,6 +2466,18 @@ async function runSeasonalityRegressionChecks() {
     resultHtml.includes("What This Means"),
     "seasonality result view should include interpretation panel",
   );
+  assert(
+    resultHtml.includes("Sample Depth"),
+    "seasonality result view should headline sample depth",
+  );
+  assert(
+    resultHtml.includes("Per-month sample depth"),
+    "seasonality result view should explain per-month sample depth",
+  );
+  assert(
+    !resultHtml.includes("<p class=\"meta-label\">Years Observed</p>"),
+    "seasonality result view should not headline years observed",
+  );
   const csvRows = buildSeasonalityCsvRows(payload);
   const workbookXml = buildSeasonalityWorkbookXml(payload);
   assert(
@@ -1531,6 +2489,10 @@ async function runSeasonalityRegressionChecks() {
     worksheetNames.join("|") ===
       "Summary|Month Buckets|Year-Month Heatmap|Monthly Rows|Warnings",
     `seasonality worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+  assert(
+    workbookXml.includes("Min Bucket Observations"),
+    "seasonality workbook should include bucket-depth rows",
   );
 
   console.log("ok seasonality");
@@ -1565,6 +2527,10 @@ async function runRelativeRegressionChecks() {
     resultHtml.includes("Relative Read"),
     "relative result view should include interpretation panel",
   );
+  assert(
+    resultHtml.includes("CAGR Spread"),
+    "full-year relative window should keep CAGR spread available",
+  );
   const csvRows = buildRelativeCsvRows(payload);
   const workbookXml = buildRelativeWorkbookXml(payload);
   assert(
@@ -1575,6 +2541,46 @@ async function runRelativeRegressionChecks() {
   assert(
     worksheetNames.join("|") === "Summary|Metrics|Aligned Periods|Warnings",
     `relative worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+
+  const shortAssetSeries = filterSeriesByDate(
+    assetSeriesAll,
+    new Date("2026-01-01T00:00:00"),
+    FIXED_END,
+  );
+  const shortBenchmarkSeries = filterSeriesByDate(
+    benchmarkSeriesAll,
+    new Date("2026-01-01T00:00:00"),
+    FIXED_END,
+  );
+  const shortRelativeMetrics = computeRelativeMetrics(
+    shortAssetSeries,
+    shortBenchmarkSeries,
+    {
+      constantRiskFreeRate: CONSTANT_RISK_FREE_RATE,
+    },
+  );
+  const shortRelativeHtml = renderRelativeResults(
+    buildRelativePayload(assetSnapshot, benchmarkSnapshot, shortRelativeMetrics),
+  );
+  assert(
+    shortRelativeHtml.includes("Annualized Pace Spread"),
+    "short relative window should demote CAGR spread to annualized pace spread",
+  );
+  assert(
+    shortRelativeHtml.includes("First-pass period truth first"),
+    "short relative window should promote period truth in summary copy",
+  );
+  const shortRelativeWorkbookXml = buildRelativeWorkbookXml(
+    buildRelativePayload(assetSnapshot, benchmarkSnapshot, shortRelativeMetrics),
+  );
+  assert(
+    shortRelativeWorkbookXml.includes("Annualized Pace Spread"),
+    "short relative workbook should demote CAGR spread to annualized pace spread",
+  );
+  assert(
+    shortRelativeWorkbookXml.includes("Terminal wealth difference across the overlap"),
+    "relative workbook should explain relative wealth as the primary period read",
   );
 
   console.log("ok relative");
@@ -1759,6 +2765,15 @@ async function runSipRegressionChecks() {
     resultHtml.includes("What This Means"),
     "sip result view should include interpretation panel",
   );
+  assert(
+    resultHtml.includes("Best XIRR Cohort") &&
+      resultHtml.includes("Worst XIRR Cohort"),
+    "sip result view should label start-month rankings as cohort XIRR reads",
+  );
+  assert(
+    resultHtml.includes("same-terminal comparisons, not fixed-horizon start-month rankings"),
+    "sip result view should explain same-terminal cohort semantics",
+  );
   const csvRows = buildSipCsvRows(payload);
   const workbookXml = buildSipWorkbookXml(payload);
   assert(
@@ -1770,6 +2785,10 @@ async function runSipRegressionChecks() {
     worksheetNames.join("|") ===
       "Summary|Cohorts|Full Window Path|Cash Flows|Warnings",
     `sip worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+  assert(
+    workbookXml.includes("Cohort Comparison Mode"),
+    "sip workbook should record the cohort comparison mode",
   );
 
   console.log("ok sip simulator");
@@ -1854,6 +2873,14 @@ async function runLumpsumVsSipRegressionChecks() {
     resultHtml.includes("What This Means"),
     "lumpsum vs sip result view should include interpretation panel",
   );
+  assert(
+    resultHtml.includes("Win rate and advantage use terminal wealth"),
+    "lumpsum vs sip result view should state the terminal-wealth win criterion",
+  );
+  assert(
+    resultHtml.includes("CAGR and XIRR are not directly comparable"),
+    "lumpsum vs sip result view should warn against comparing CAGR and XIRR directly",
+  );
   const csvRows = buildLumpsumVsSipCsvRows(payload);
   const workbookXml = buildLumpsumVsSipWorkbookXml(payload);
   assert(
@@ -1865,6 +2892,11 @@ async function runLumpsumVsSipRegressionChecks() {
     worksheetNames.join("|") ===
       "Summary|Cohorts|Representative SIP Path|Warnings",
     `lumpsum vs sip worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+  assert(
+    workbookXml.includes("Win Criterion") &&
+      workbookXml.includes("Terminal wealth"),
+    "lumpsum vs sip workbook should record the win criterion",
   );
 
   console.log("ok lumpsum vs sip");
@@ -1906,6 +2938,11 @@ async function runDrawdownRegressionChecks() {
       actual.summary.timeUnderwaterRate <= 1,
     "drawdown time underwater rate should be bounded",
   );
+  assertClose(
+    actual.summary.materialityThreshold,
+    0.001,
+    "drawdown materiality threshold mismatch",
+  );
 
   for (const [index, episode] of actual.episodesByDepth.entries()) {
     assert(
@@ -1943,6 +2980,10 @@ async function runDrawdownRegressionChecks() {
     resultHtml.includes("Ranked Episodes"),
     "drawdown result view should include ranked episode table",
   );
+  assert(
+    resultHtml.includes("Materiality threshold"),
+    "drawdown result view should explain the materiality threshold",
+  );
   const csvRows = buildDrawdownCsvRows(payload);
   const workbookXml = buildDrawdownWorkbookXml(payload);
   assert(
@@ -1953,6 +2994,26 @@ async function runDrawdownRegressionChecks() {
   assert(
     worksheetNames.join("|") === "Summary|Episodes|Underwater|Warnings",
     `drawdown worksheet names mismatch: ${worksheetNames.join(", ")}`,
+  );
+  assert(
+    workbookXml.includes("Materiality Threshold"),
+    "drawdown workbook should include the materiality threshold row",
+  );
+
+  const microSeries = [
+    { date: new Date("2026-01-01T00:00:00"), value: 100 },
+    { date: new Date("2026-01-02T00:00:00"), value: 99.96 },
+    { date: new Date("2026-01-03T00:00:00"), value: 100.01 },
+  ];
+  const microDrawdown = buildDrawdownStudy(microSeries);
+  assert(
+    microDrawdown.episodes.length === 0,
+    "sub-threshold drawdowns should not form counted episodes",
+  );
+  assertClose(
+    microDrawdown.summary.timeUnderwaterRate,
+    0,
+    "sub-threshold drawdowns should not count as underwater time",
   );
 
   console.log("ok drawdown");
@@ -2001,7 +3062,16 @@ async function runExportRegressionChecks() {
 
 async function main() {
   testActiveSubjectStore();
+  testAppRouteModel();
+  await testStudyBuilderBackendRecipeHydration();
+  await testStudyBuilderReadinessHydration();
+  await testAssistantApiHelpers();
+  assertionCount += runMetricRegistryChecks();
+  assertionCount += runStudyBuilderChecks();
+  runSymbolDiscoveryChecks();
   testRunHistoryStore();
+  testAvailableStudyWindow();
+  testStudyKickerLabels();
   testShareableInputUrls();
   testInterpretationPanels();
   await runRiskRegressionChecks();

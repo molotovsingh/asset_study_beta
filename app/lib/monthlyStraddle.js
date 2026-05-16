@@ -1,3 +1,5 @@
+import { MIN_CREDIBLE_PERCENTILE_HISTORY } from "./metricRegistry.js";
+
 const DEFAULT_MINIMUM_DTE = 25;
 const DEFAULT_CONTRACT_COUNT = 4;
 
@@ -179,6 +181,7 @@ function buildHistorySummary(frontHistory, focusContract) {
       startDate: null,
       endDate: null,
       hasEnoughHistory: false,
+      hasCrediblePercentiles: false,
       ivPercentile: null,
       movePercentile: null,
       ivHv20Percentile: null,
@@ -190,7 +193,8 @@ function buildHistorySummary(frontHistory, focusContract) {
     observations: frontHistory.length,
     startDate: frontHistory[0].asOfDate,
     endDate: frontHistory[frontHistory.length - 1].asOfDate,
-    hasEnoughHistory: frontHistory.length >= 20,
+    hasEnoughHistory: frontHistory.length >= MIN_CREDIBLE_PERCENTILE_HISTORY,
+    hasCrediblePercentiles: frontHistory.length >= MIN_CREDIBLE_PERCENTILE_HISTORY,
     ivPercentile: computePercentileRank(
       frontHistory.map((row) => row.straddleImpliedVolatility),
       focusContract.straddleImpliedVolatility,
@@ -406,6 +410,7 @@ function flattenMonthlyStraddleRows(studyRun) {
 export {
   DEFAULT_CONTRACT_COUNT,
   DEFAULT_MINIMUM_DTE,
+  MIN_CREDIBLE_PERCENTILE_HISTORY,
   buildMonthlyStraddleStudyRun,
   flattenMonthlyStraddleRows,
 };

@@ -41,8 +41,9 @@ function buildRunHistoryId(run) {
   return [
     run.studyId,
     run.symbol,
-    run.requestedStartDate,
-    run.requestedEndDate,
+    run.routeHash,
+    run.actualStartDate || run.requestedStartDate,
+    run.actualEndDate || run.requestedEndDate,
     run.completedAt,
   ]
     .filter(Boolean)
@@ -60,6 +61,8 @@ function sanitizeRunHistoryEntry(entry) {
   const selectionLabel = normalizeRunHistoryText(entry.selectionLabel);
   const symbol = normalizeRunHistoryText(entry.symbol);
   const completedAt = normalizeRunHistoryText(entry.completedAt);
+  const detailLabel = normalizeRunHistoryText(entry.detailLabel);
+  const routeHash = normalizeRunHistoryText(entry.routeHash);
 
   if (!studyId || !studyTitle || !subjectQuery || !completedAt) {
     return null;
@@ -74,7 +77,11 @@ function sanitizeRunHistoryEntry(entry) {
     symbol,
     requestedStartDate: toDateString(entry.requestedStartDate),
     requestedEndDate: toDateString(entry.requestedEndDate),
+    actualStartDate: toDateString(entry.actualStartDate),
+    actualEndDate: toDateString(entry.actualEndDate),
     completedAt,
+    detailLabel,
+    routeHash: routeHash.startsWith("#") ? routeHash : "",
   };
 
   return {
@@ -126,6 +133,30 @@ function getRecentRuns() {
   return [...runHistory];
 }
 
+function mergeStudyRuns(entries) {
+  const sanitizedEntries = Array.isArray(entries)
+    ? entries.map(sanitizeRunHistoryEntry).filter(Boolean)
+    : [];
+  if (!sanitizedEntries.length) {
+    return false;
+  }
+
+  const mergedById = new Map();
+  [...sanitizedEntries, ...runHistory].forEach((entry) => {
+    const current = mergedById.get(entry.id);
+    if (!current || String(entry.completedAt) > String(current.completedAt)) {
+      mergedById.set(entry.id, entry);
+    }
+  });
+
+  runHistory = [...mergedById.values()]
+    .sort((left, right) => String(right.completedAt).localeCompare(String(left.completedAt)))
+    .slice(0, MAX_RUN_HISTORY_ITEMS);
+  writeStoredRunHistory(runHistory);
+  notifyRunHistoryListeners();
+  return true;
+}
+
 function recordStudyRun(entry) {
   const sanitizedEntry = sanitizeRunHistoryEntry({
     ...entry,
@@ -159,6 +190,7 @@ export {
   clearRunHistory,
   MAX_RUN_HISTORY_ITEMS,
   getRecentRuns,
+  mergeStudyRuns,
   recordStudyRun,
   subscribeRunHistory,
 };

@@ -4,23 +4,12 @@ import { renderInterpretationPanel } from "./shared/interpretation.js";
 import {
   DEFAULT_OPTIONS_SCREENER_BIAS,
   DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER,
+  DEFAULT_OPTIONS_SCREENER_PRESET_ID,
   DEFAULT_OPTIONS_SCREENER_SORT_KEY,
+  OPTIONS_SCREENER_PRESET_DEFINITIONS,
   OPTIONS_SCREENER_SORT_DEFINITIONS,
   getSortDefinition,
 } from "../lib/optionsScreener.js";
-
-function formatMetricValue(styleId, value) {
-  if (!Number.isFinite(value)) {
-    return "n/a";
-  }
-  if (styleId === "percent") {
-    return formatPercent(value);
-  }
-  if (styleId === "integer") {
-    return formatNumber(value, 0);
-  }
-  return formatNumber(value, 2);
-}
 
 function renderMetricCard({ label, value, detail }) {
   return `
@@ -36,6 +25,55 @@ function renderBadge(label, bucket, classPrefix) {
   return `<span class="${classPrefix} ${classPrefix}-${bucket}">${label}</span>`;
 }
 
+function renderIdeaPills(labels) {
+  const normalizedLabels = Array.isArray(labels)
+    ? labels.filter((label) => String(label || "").trim())
+    : [];
+  if (!normalizedLabels.length) {
+    return `<span class="options-screener-pill">No Preset Match</span>`;
+  }
+  return normalizedLabels
+    .map(
+      (label) => `
+        <span class="options-screener-pill">${label}</span>
+      `,
+    )
+    .join("");
+}
+
+function renderCrossSectionalSummary(row) {
+  return [
+    `IV ${formatNumber(row.ivRank, 0)}`,
+    `RV ${formatNumber(row.rvRank, 0)}`,
+    `VRP ${formatNumber(row.vrpRank, 0)}`,
+    `Term ${formatNumber(row.termStructureRank, 0)}`,
+    `Skew ${formatNumber(row.skewRank, 0)}`,
+  ].join(" · ");
+}
+
+function renderSortMetricValue(row, sortDefinition) {
+  const value = row?.[sortDefinition.key];
+  if (!Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  switch (sortDefinition.styleId) {
+    case "percent":
+      return formatPercent(value);
+    case "integer":
+      return formatNumber(value, 0);
+    default:
+      return formatNumber(value, 2);
+  }
+}
+
+function renderTermStructureValue(row) {
+  if (!Number.isFinite(row.termStructureSteepness)) {
+    return row.termStructureLabel || "No Read";
+  }
+  return `${row.termStructureLabel} · ${formatPercent(row.termStructureSteepness)}`;
+}
+
 function buildDrilldownHash(row, studyRun) {
   return buildStudyViewHash("monthly-straddle", "overview", {
     subject: row.symbol,
@@ -46,10 +84,17 @@ function buildDrilldownHash(row, studyRun) {
 
 function renderOptionsScreenerInterpretation(studyRun) {
   const sortDefinition = getSortDefinition(studyRun.sortKey);
+  const selectedPresetText = studyRun.presetDefinition
+    ? `${studyRun.presetDefinition.label} is active, so only rows matching that playbook remain visible.`
+    : "All trade-idea presets are visible, so the table shows the full opportunity set.";
+  const presetHitCount = Object.values(studyRun.presetCounts || {}).reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  );
   return renderInterpretationPanel({
     title: "Screener Read",
     summary:
-      "This is a front-month daily options screen. Direction, vol pricing, execution, and confidence stay separate so the advisory can be inspected instead of guessed.",
+      "This is a front-month daily options screen. IV, RV, VRP, curve shape, and skew stay separate so the preset matches can be inspected instead of guessed.",
     items: [
       {
         label: "Universe",
@@ -71,27 +116,25 @@ function renderOptionsScreenerInterpretation(studyRun) {
           : "No usable direction read is available in this run.",
       },
       {
-        label: "Vol",
+        label: "VRP",
         tone: studyRun.topRichRow?.symbol || "n/a",
         toneId: "caution",
         text:
           studyRun.topRichRow && studyRun.topCheapRow
-            ? `${studyRun.topRichRow.symbol} is richest on IV/HV20 at ${formatNumber(studyRun.topRichRow.ivHv20Ratio, 2)}, while ${studyRun.topCheapRow.symbol} is cheapest at ${formatNumber(studyRun.topCheapRow.ivHv20Ratio, 2)}.`
+            ? `${studyRun.topRichRow.symbol} has the richest front VRP at ${formatPercent(studyRun.topRichRow.vrp)}, while ${studyRun.topCheapRow.symbol} is cheapest on IV/HV20 at ${formatNumber(studyRun.topCheapRow.ivHv20Ratio, 2)}.`
             : "No clear rich-versus-cheap split is available in this run.",
       },
       {
-        label: "Execution",
-        tone: studyRun.bestExecutionRow?.symbol || "n/a",
+        label: "Ideas",
+        tone: studyRun.presetDefinition?.label || "All Presets",
         toneId: "neutral",
-        text: studyRun.bestExecutionRow
-          ? `${studyRun.bestExecutionRow.symbol} currently has the best execution read at ${formatNumber(studyRun.bestExecutionRow.executionScore, 0)} after open interest, volume, and spread quality.`
-          : "No execution score is available in this run.",
+        text: `${selectedPresetText} ${formatNumber(presetHitCount, 0)} total preset matches exist across the current universe.`,
       },
       {
         label: "Sort",
         tone: sortDefinition.label,
         toneId: "neutral",
-        text: `The current table is filtered to pricing ${studyRun.bias}, advisory ${studyRun.candidateFilter}, and ranked by ${sortDefinition.label}.`,
+        text: `The current table is filtered to pricing ${studyRun.bias}, advisory ${studyRun.candidateFilter}, preset ${studyRun.presetDefinition?.label || "All Presets"}, and ranked by ${sortDefinition.label}.`,
       },
     ],
   });
@@ -180,6 +223,11 @@ function renderOptionsScreenerHistory(historyPayload, universeLabel = "current u
 
 function renderOptionsScreenerResults(studyRun) {
   const sortDefinition = getSortDefinition(studyRun.sortKey);
+  const selectedPresetLabel = studyRun.presetDefinition?.label || "All Presets";
+  const totalPresetMatches = Object.values(studyRun.presetCounts || {}).reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  );
   const tableMarkup = studyRun.filteredRows.length
     ? `
         <div class="rolling-table-wrap">
@@ -187,17 +235,17 @@ function renderOptionsScreenerResults(studyRun) {
             <thead>
               <tr>
                 <th>Symbol</th>
+                <th>Ideas</th>
                 <th>Direction</th>
                 <th>Pricing</th>
                 <th>Candidate</th>
-                <th>IV/HV20</th>
-                <th>Dir Score</th>
-                <th>Exec</th>
-                <th>Conf</th>
-                <th>IV/HV60</th>
                 <th>IV Pctl</th>
-                <th>Seasonality</th>
-                <th>Trend</th>
+                <th>RV Pctl</th>
+                <th>VRP</th>
+                <th>Term</th>
+                <th>Skew</th>
+                <th>X-Sect Rank</th>
+                <th>Active Sort (${sortDefinition.label})</th>
                 <th>Expiry</th>
               </tr>
             </thead>
@@ -209,17 +257,17 @@ function renderOptionsScreenerResults(studyRun) {
                       <th scope="row">
                         <a href="${buildDrilldownHash(row, studyRun)}">${row.symbol}</a>
                       </th>
+                      <td><div class="options-screener-pill-grid">${renderIdeaPills(row.tradeIdeaLabels)}</div></td>
                       <td>${renderBadge(row.directionLabel, row.directionBucket, "options-screener-direction-badge")}</td>
                       <td>${renderBadge(row.pricingLabel, row.pricingBucket, "options-screener-badge")}</td>
                       <td>${renderBadge(row.candidateAdvisory, row.candidateBucket, "options-screener-candidate-badge")}</td>
-                      <td>${formatNumber(row.ivHv20Ratio, 2)}</td>
-                      <td>${formatNumber(row.directionScore, 0)}</td>
-                      <td>${formatNumber(row.executionScore, 0)}</td>
-                      <td>${formatNumber(row.confidenceScore, 0)}</td>
-                      <td>${formatNumber(row.ivHv60Ratio, 2)}</td>
                       <td>${formatPercent(row.ivPercentile)}</td>
-                      <td>${row.seasonalityMonthLabel || "n/a"} · ${formatPercent(row.seasonalityMeanReturn)} · ${formatPercent(row.seasonalityWinRate)}</td>
-                      <td>${row.trendLabel} · ${formatPercent(row.directionContext?.trend?.return63)}</td>
+                      <td>${formatPercent(row.rvPercentile)}</td>
+                      <td>${formatPercent(row.vrp)}</td>
+                      <td>${renderTermStructureValue(row)}</td>
+                      <td>${formatPercent(row.normalizedSkew)}</td>
+                      <td>${renderCrossSectionalSummary(row)}</td>
+                      <td>${renderSortMetricValue(row, sortDefinition)}</td>
                       <td>${row.expiry}</td>
                     </tr>
                   `,
@@ -231,7 +279,7 @@ function renderOptionsScreenerResults(studyRun) {
       `
     : `
         <div class="empty-state">
-          No rows match the current pricing <strong>${studyRun.bias}</strong> and candidate <strong>${studyRun.candidateFilter}</strong> filters. Change the filters or rerun the universe.
+          No rows match the current pricing <strong>${studyRun.bias}</strong>, candidate <strong>${studyRun.candidateFilter}</strong>, and preset <strong>${selectedPresetLabel}</strong> filters. Change the filters or rerun the universe.
         </div>
       `;
 
@@ -241,7 +289,7 @@ function renderOptionsScreenerResults(studyRun) {
         <div>
           <p class="section-label">Screener Exports</p>
           <p class="summary-meta">
-            Export the filtered options screen for ${studyRun.universe.label}, including any failures from this run.
+            Export the filtered options screen for ${studyRun.universe.label}, including the new IV/RV/VRP, curve, skew, and preset columns.
           </p>
         </div>
         <div class="results-export-actions">
@@ -255,7 +303,12 @@ function renderOptionsScreenerResults(studyRun) {
           ${renderMetricCard({
             label: "Rows Loaded",
             value: formatNumber(studyRun.rows.length, 0),
-            detail: `${formatNumber(studyRun.filteredRows.length, 0)} shown after ${studyRun.bias} filter`,
+            detail: `${formatNumber(studyRun.filteredRows.length, 0)} shown after active filters`,
+          })}
+          ${renderMetricCard({
+            label: "Preset Filter",
+            value: selectedPresetLabel,
+            detail: `${formatNumber(totalPresetMatches, 0)} total preset matches across the universe`,
           })}
           ${renderMetricCard({
             label: "Archive",
@@ -275,7 +328,7 @@ function renderOptionsScreenerResults(studyRun) {
             label: "Top Rich",
             value: studyRun.topRichRow?.symbol || "n/a",
             detail: studyRun.topRichRow
-              ? `IV/HV20 ${formatNumber(studyRun.topRichRow.ivHv20Ratio, 2)}`
+              ? `VRP ${formatPercent(studyRun.topRichRow.vrp)} · IV/HV20 ${formatNumber(studyRun.topRichRow.ivHv20Ratio, 2)}`
               : "No rich candidate in this run",
           })}
           ${renderMetricCard({
@@ -308,6 +361,7 @@ function renderOptionsScreenerResults(studyRun) {
           <p class="result-detail">Universe: ${studyRun.universe.label}</p>
           <p class="result-detail">As of: ${studyRun.asOfDate ? formatDate(studyRun.asOfDate) : "n/a"}</p>
           <p class="result-detail">Minimum DTE: ${formatNumber(studyRun.minimumDte, 0)}</p>
+          <p class="result-detail">Preset filter: ${selectedPresetLabel}</p>
           <p class="result-detail">Rows shown: ${formatNumber(studyRun.filteredRows.length, 0)}</p>
           <p class="result-detail">Local archive: ${studyRun.storage ? `Run #${studyRun.storage.runId} · ${formatNumber(studyRun.storage.rowCount, 0)} stored rows` : "Unavailable"}</p>
           <p class="result-detail">Provider mix: ${studyRun.providerSummary
@@ -317,10 +371,10 @@ function renderOptionsScreenerResults(studyRun) {
         </div>
         <div class="detail-block">
           <h3>Methods</h3>
-          <p class="result-detail">Each row uses the nearest standard monthly contract that meets the DTE filter.</p>
-          <p class="result-detail">Pricing labels are based on the front contract IV/HV rubric from the monthly straddle study.</p>
-          <p class="result-detail">Direction scores blend cached trend checks with current-calendar-month seasonality from the local daily series cache.</p>
-          <p class="result-detail">Execution scores use open interest, volume, and spread share. Confidence scores downgrade thin IV history or thin seasonality samples.</p>
+          <p class="result-detail">Each row uses the nearest standard monthly contract that meets the DTE filter, then compares it against stored front-contract history for IV and RV percentile context.</p>
+          <p class="result-detail">VRP uses front straddle IV minus HV20. Term structure steepness normalizes the front-to-back IV slope to a 30-day span so names with different expiries remain comparable.</p>
+          <p class="result-detail">Normalized skew approximates downside skew as 25-delta put IV relative to an ATM reference IV from the live chain. Upside skew is calculated too, but the table shows the downside read.</p>
+          <p class="result-detail">Cross-sectional ranks rescale each metric from 1 to 100 across the currently loaded universe so today’s relative opportunity set is visible next to each symbol’s own historical percentile reads.</p>
           <p class="result-detail">Each completed run is archived locally so later filters and validation can use normalized screener rows instead of rerunning the full universe.</p>
         </div>
         ${renderFailureBlock(studyRun)}
@@ -355,6 +409,7 @@ function optionsScreenerTemplate({
   universeId,
   bias,
   candidateFilter,
+  presetId,
   sortKey,
   minimumDteValue,
   presetMarkup,
@@ -401,6 +456,19 @@ function optionsScreenerTemplate({
             </select>
           </label>
           <label class="field">
+            <span class="field-label">Trade Idea</span>
+            <select id="options-screener-preset" class="input">
+              <option value="all" ${presetId === DEFAULT_OPTIONS_SCREENER_PRESET_ID ? "selected" : ""}>All Presets</option>
+              ${OPTIONS_SCREENER_PRESET_DEFINITIONS
+                .map(
+                  (definition) => `
+                    <option value="${definition.id}" ${definition.id === presetId ? "selected" : ""}>${definition.label}</option>
+                  `,
+                )
+                .join("")}
+            </select>
+          </label>
+          <label class="field">
             <span class="field-label">Sort By</span>
             <select id="options-screener-sort" class="input">
               ${OPTIONS_SCREENER_SORT_DEFINITIONS
@@ -430,7 +498,7 @@ function optionsScreenerTemplate({
       <section id="options-screener-results-root" class="card results-card">
         <div class="empty-state">
           <h2>No screener run is loaded yet.</h2>
-          <p>Run the current universe to rank rich and cheap front-month volatility reads.</p>
+          <p>Run the current universe to rank rich and cheap front-month volatility reads and surface trade-idea matches.</p>
         </div>
       </section>
     </div>

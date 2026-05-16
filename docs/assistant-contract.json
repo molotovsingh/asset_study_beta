@@ -1,0 +1,407 @@
+{
+  "version": "assistant-contract-v1",
+  "purpose": "Top-level contract index for deterministic AI study-builder integrations.",
+  "sourceOfTruth": "The app modules are authoritative. Generated JSON files are inspectable copies checked for drift.",
+  "contracts": [
+    {
+      "id": "study-catalog",
+      "version": "study-catalog-manifest-v1",
+      "sourceModule": "app/studyBuilder/studyCatalog.js",
+      "generatedArtifact": "docs/study-catalog-manifest.json",
+      "checkCommand": "node scripts/export_study_catalog_manifest.mjs --check",
+      "role": "Lists real studies, views, labels, summaries, and capabilities."
+    },
+    {
+      "id": "intent-planner",
+      "version": "intent-planner-v1",
+      "sourceModule": "app/studyBuilder/intentPlanner.js",
+      "generatedArtifact": "docs/intent-planner-contract.json",
+      "checkCommand": "node scripts/export_intent_planner_contract.mjs --check",
+      "role": "Maps simple user-language requests to draft StudyPlan objects without AI calls."
+    },
+    {
+      "id": "study-plan",
+      "version": "study-plan-v1",
+      "sourceModule": "app/studyBuilder/studyPlan.js",
+      "generatedArtifact": "docs/study-plan-contract.json",
+      "checkCommand": "node scripts/export_study_plan_contract.mjs --check",
+      "role": "Validates proposed study routes and builds confirmation previews before execution."
+    },
+    {
+      "id": "study-plan-recipes",
+      "version": "study-plan-recipes-v1",
+      "sourceModule": "app/studyBuilder/studyPlanRecipes.js",
+      "generatedArtifact": "docs/study-plan-recipe-contract.json",
+      "checkCommand": "node scripts/export_study_plan_recipe_contract.mjs --check",
+      "role": "Defines reusable validated StudyPlan recipes, persisted by backend settings endpoints with browser-local fallback."
+    },
+    {
+      "id": "study-run-explanation",
+      "version": "study-run-explanation-v1",
+      "sourceModule": "app/studyBuilder/studyRunExplanation.js",
+      "generatedArtifact": "docs/study-run-explanation-contract.json",
+      "checkCommand": "node scripts/export_study_run_explanation_contract.mjs --check",
+      "role": "Builds deterministic explanation seeds from durable study-run ledger records."
+    },
+    {
+      "id": "study-run-handoff",
+      "version": "study-run-handoff-v1",
+      "sourceModule": "app/studyBuilder/studyRunHandoff.js",
+      "generatedArtifact": "docs/study-run-handoff-contract.json",
+      "checkCommand": "node scripts/export_study_run_handoff_contract.mjs --check",
+      "role": "Combines explanation seed and replay StudyPlan into one assistant-safe handoff payload."
+    },
+    {
+      "id": "study-run-explanation-brief",
+      "version": "study-run-explanation-brief-v1",
+      "sourceModule": "app/studyBuilder/studyRunExplanationBrief.js",
+      "generatedArtifact": "docs/study-run-explanation-brief-contract.json",
+      "checkCommand": "node scripts/export_study_run_explanation_brief_contract.mjs --check",
+      "role": "Converts a handoff into a deterministic permission envelope for future assistant prose."
+    },
+    {
+      "id": "metric-registry",
+      "version": "metric-registry-v1",
+      "sourceModule": "app/lib/metricRegistry.js",
+      "generatedArtifact": "docs/metric-registry-manifest.json",
+      "checkCommand": "node scripts/export_metric_registry_manifest.mjs --check",
+      "role": "Controls metric headline, diagnostic, suppressed, export, and policy-validation behavior."
+    },
+    {
+      "id": "study-proposal",
+      "version": "study-proposal-v1",
+      "sourceModule": "app/studyFactory/studyProposal.js",
+      "generatedArtifact": "docs/study-proposal-contract.json",
+      "checkCommand": "node scripts/export_study_proposal_contract.mjs --check",
+      "role": "Read-only feasibility proposal for new study ideas before code, data fetches, or conclusions."
+    }
+  ],
+  "requiredFlow": [
+    "Read study-catalog before planning.",
+    "Use the intent planner only as a draft helper; never treat it as authority.",
+    "Emit study-plan-v1 JSON only.",
+    "Validate the StudyPlan and metric proposals deterministically.",
+    "Show the deterministic confirmation preview.",
+    "Execute only after explicit user confirmation.",
+    "Explain results only from durable run records, assistant handoffs, explanation seeds, and registry caveats.",
+    "Fetch completed-run handoffs through POST /api/assistant/study-run-brief when crossing the backend boundary.",
+    "Before generated result prose, build a study-run explanation brief from the handoff and obey its allowed actions."
+  ],
+  "backendEndpoints": [
+    {
+      "id": "assistant-contract",
+      "method": "GET",
+      "path": "/api/assistant/contract",
+      "requestShape": {},
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "contracts",
+        "requiredFlow",
+        "backendEndpoints",
+        "hardStops"
+      ],
+      "errorStatuses": [
+        {
+          "status": 502,
+          "condition": "the JS assistant contract manifest bridge is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-readable top-level contract index for deterministic assistant integrations."
+    },
+    {
+      "id": "assistant-contract-bundle",
+      "method": "GET",
+      "path": "/api/assistant/contract-bundle",
+      "requestShape": {},
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "purpose",
+        "contracts"
+      ],
+      "errorStatuses": [
+        {
+          "status": 502,
+          "condition": "the JS assistant contract bundle bridge is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-readable full deterministic contract bundle for in-app assistant consumers."
+    },
+    {
+      "id": "assistant-readiness",
+      "method": "GET",
+      "path": "/api/assistant/readiness",
+      "requestShape": {
+        "artifactChecks": "optional boolean-like query parameter; false skips generated-doc drift commands"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "status",
+        "summary",
+        "checks",
+        "liveAiTesting"
+      ],
+      "errorStatuses": [
+        {
+          "status": 502,
+          "condition": "a deterministic contract bridge or readiness command is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-readable assistant readiness summary; keyless deterministic preflight before live AI testing."
+    },
+    {
+      "id": "study-run-brief",
+      "method": "POST",
+      "path": "/api/assistant/study-run-brief",
+      "requestShape": {
+        "runId": "positive integer durable study_runs.runId"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "run",
+        "handoff",
+        "explanationBrief"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "missing, non-integer, boolean, zero, or negative runId"
+        },
+        {
+          "status": 404,
+          "condition": "no durable study run exists for the requested runId"
+        },
+        {
+          "status": 502,
+          "condition": "the JS assistant contract bridge is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-owned durable ledger boundary for completed-run explanation and replay handoff."
+    },
+    {
+      "id": "assistant-study-plan-dry-run",
+      "method": "POST",
+      "path": "/api/assistant/study-plan-dry-run",
+      "requestShape": {
+        "intent": "plain-language research intent"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "mode",
+        "intent",
+        "readiness",
+        "plannerResult",
+        "plan",
+        "validation",
+        "preview",
+        "execution"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "request body is not a JSON object or intent is missing"
+        },
+        {
+          "status": 502,
+          "condition": "the deterministic study-builder or readiness bridge is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-owned keyless dry run for future assistant planning: draft, validate, and report readiness without executing a study or calling an AI model."
+    },
+    {
+      "id": "assistant-study-plan-live-draft",
+      "method": "POST",
+      "path": "/api/assistant/study-plan-live-draft",
+      "requestShape": {
+        "intent": "plain-language research intent",
+        "model": "optional OpenAI model id; defaults to configured OPENAI_STUDY_PLANNER_MODEL, OPENAI_MODEL, or safe app default",
+        "maxOutputTokens": "optional positive integer"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "mode",
+        "provider",
+        "model",
+        "intent",
+        "readiness",
+        "modelResult",
+        "plan",
+        "validation",
+        "preview",
+        "execution"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "request body is not a JSON object, intent is missing, or OPENAI_API_KEY is not configured"
+        },
+        {
+          "status": 502,
+          "condition": "OpenAI request, JSON parsing, deterministic validation, or readiness bridge fails"
+        }
+      ],
+      "role": "Optional live OpenAI planner boundary: model drafts StudyPlan JSON, deterministic app validates it, and no study execution or result prose occurs."
+    },
+    {
+      "id": "study-builder-plan",
+      "method": "POST",
+      "path": "/api/study-builder/plan",
+      "requestShape": {
+        "intent": "plain-language research intent"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "plannerResult",
+        "plan",
+        "preview"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "request body is not a JSON object"
+        },
+        {
+          "status": 502,
+          "condition": "the JS study-builder contract bridge is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-owned deterministic intent-to-StudyPlan draft boundary; no AI call is made."
+    },
+    {
+      "id": "study-factory-proposal",
+      "method": "POST",
+      "path": "/api/study-factory/proposal",
+      "requestShape": {
+        "idea": "natural-language study idea",
+        "approvedTools": "optional array of approved tool descriptors"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "mode",
+        "proposal",
+        "execution"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "request body is not a JSON object or idea is missing"
+        },
+        {
+          "status": 502,
+          "condition": "the JS study proposal bridge is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-owned read-only proposal boundary for evaluating whether a new study idea is testable."
+    },
+    {
+      "id": "study-builder-validate",
+      "method": "POST",
+      "path": "/api/study-builder/validate",
+      "requestShape": {
+        "plan": "study-plan-v1 object, or routeHash for route conversion"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "mode",
+        "validation",
+        "preview"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "request body is not a JSON object"
+        },
+        {
+          "status": 502,
+          "condition": "the JS study-builder contract bridge is unavailable, invalid, or timed out"
+        }
+      ],
+      "role": "Backend-owned deterministic StudyPlan validation and confirmation-preview boundary."
+    },
+    {
+      "id": "study-builder-recipes",
+      "method": "GET",
+      "path": "/api/study-builder/recipes",
+      "requestShape": {
+        "limit": "optional positive integer query parameter"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "version",
+        "limit",
+        "recipes"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "limit is not an integer"
+        }
+      ],
+      "role": "Backend-owned list of reusable validated StudyPlan recipes; not completed-run evidence."
+    },
+    {
+      "id": "study-builder-recipe-save",
+      "method": "POST",
+      "path": "/api/study-builder/recipes/save",
+      "requestShape": {
+        "name": "optional user-facing recipe name",
+        "plan": "study-plan-v1 object"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "ok",
+        "recipe",
+        "recipes",
+        "validation",
+        "preview"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "request body is not a JSON object"
+        },
+        {
+          "status": 502,
+          "condition": "the JS study-builder contract bridge or local recipe store is unavailable"
+        }
+      ],
+      "role": "Backend-owned save/update boundary for reusable validated StudyPlan recipes."
+    },
+    {
+      "id": "study-builder-recipe-delete",
+      "method": "POST",
+      "path": "/api/study-builder/recipes/delete",
+      "requestShape": {
+        "id": "StudyPlan recipe id"
+      },
+      "successStatus": 200,
+      "successResponseFields": [
+        "ok",
+        "recipes"
+      ],
+      "errorStatuses": [
+        {
+          "status": 400,
+          "condition": "request body is not a JSON object or recipe id is missing"
+        }
+      ],
+      "role": "Backend-owned delete boundary for reusable StudyPlan recipes."
+    }
+  ],
+  "hardStops": [
+    "Do not invent study IDs, view IDs, route params, or metric IDs.",
+    "Do not bypass the confirmation preview.",
+    "Do not headline or export a metric rejected by the metric registry.",
+    "Do not explain a study result without a durable study-run ledger record.",
+    "Do not rebuild replay parameters manually when a handoff replay StudyPlan is available.",
+    "Do not generate result conclusions when the explanation brief blocks them.",
+    "Do not treat generated JSON artifacts as editable source-of-truth files."
+  ]
+}

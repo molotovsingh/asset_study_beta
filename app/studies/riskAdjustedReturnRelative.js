@@ -4,6 +4,7 @@ import {
   formatNumber,
   formatPercent,
 } from "../lib/format.js";
+import { buildRelativeMetricPresentation } from "../lib/metricRegistry.js";
 import { exportRelativeStudyCsv, exportRelativeStudyXls } from "../lib/relativeStudyExport.js";
 import { computeRelativeMetrics, convertSeriesCurrency } from "../lib/relativeStats.js";
 import {
@@ -165,6 +166,8 @@ function renderMetricSection({ title, summary, cards, gridClass = "" }) {
 
 function renderRelativeResults(payload) {
   const { relativeMetrics } = payload;
+  const metricPresentation = buildRelativeMetricPresentation({ relativeMetrics });
+  const { policy: metricPolicy } = metricPresentation;
 
   return `
     <div class="results-shell">
@@ -188,40 +191,40 @@ function renderRelativeResults(payload) {
       </div>
       ${renderMetricSection({
         title: "Relative Quick Read",
-        summary: "First-pass spread, fit, and benchmark sensitivity.",
+        summary: metricPolicy.canHeadlineAnnualized
+          ? "First-pass spread, fit, and benchmark sensitivity."
+          : "First-pass period truth first; annualized spread is secondary on this overlap.",
         gridClass: "relative-results-grid",
         cards: [
           renderMetricCard({
-            label: "Asset CAGR",
-            value: formatPercent(relativeMetrics.assetMetrics.annualizedReturn),
-            detail: `${payload.assetLabel} ${payload.assetComparisonCurrency || ""}`.trim(),
+            label: metricPresentation.relativeWealth.label,
+            value: formatPercent(metricPresentation.relativeWealth.value),
+            detail: metricPresentation.relativeWealth.detail,
           }),
           renderMetricCard({
-            label: "Benchmark CAGR",
-            value: formatPercent(
-              relativeMetrics.benchmarkMetrics.annualizedReturn,
-            ),
-            detail: `${payload.benchmarkLabel} ${payload.benchmarkComparisonCurrency || ""}`.trim(),
+            label: metricPresentation.activeReturn.label,
+            value: formatPercent(metricPresentation.activeReturn.value),
+            detail: metricPresentation.activeReturn.detail,
           }),
           renderMetricCard({
-            label: "CAGR Spread",
-            value: formatPercent(relativeMetrics.cagrSpread),
-            detail: "Asset CAGR minus benchmark CAGR",
+            label: metricPresentation.annualizedSpread.label,
+            value: formatPercent(metricPresentation.annualizedSpread.value),
+            detail: metricPresentation.annualizedSpread.detail,
           }),
           renderMetricCard({
-            label: "Relative Wealth",
-            value: formatPercent(relativeMetrics.relativeWealth),
-            detail: "Ending relative wealth from the same start base",
+            label: "Outperformance Rate",
+            value: formatPercent(relativeMetrics.outperformanceRate),
+            detail: `Frequency across ${formatNumber(relativeMetrics.overlapReturnObservations, 0)} aligned returns`,
           }),
           renderMetricCard({
             label: "Correlation",
             value: formatNumber(relativeMetrics.correlation),
-            detail: "Aligned period log returns",
+            detail: `${formatNumber(relativeMetrics.overlapReturnObservations, 0)} aligned return observations`,
           }),
           renderMetricCard({
             label: "Beta",
             value: formatNumber(relativeMetrics.beta),
-            detail: "Asset sensitivity to benchmark moves",
+            detail: `${formatNumber(relativeMetrics.overlapReturnObservations, 0)} aligned return observations`,
           }),
         ],
       })}
@@ -229,6 +232,7 @@ function renderRelativeResults(payload) {
         relativeMetrics,
         assetLabel: payload.assetLabel,
         benchmarkLabel: payload.benchmarkLabel,
+        metricPolicy,
       })}
       ${renderMetricSection({
         title: "Relative Risk",
@@ -238,12 +242,12 @@ function renderRelativeResults(payload) {
           renderMetricCard({
             label: "Tracking Error",
             value: formatPercent(relativeMetrics.trackingError),
-            detail: "Annualized std dev of excess log returns",
+            detail: `Annualized diagnostic from ${formatNumber(relativeMetrics.overlapReturnObservations, 0)} aligned returns`,
           }),
           renderMetricCard({
             label: "Information Ratio",
             value: formatNumber(relativeMetrics.informationRatio),
-            detail: "Annualized excess log return divided by tracking error",
+            detail: `Secondary diagnostic from ${formatNumber(relativeMetrics.overlapReturnObservations, 0)} aligned returns`,
           }),
           renderMetricCard({
             label: "Outperformance Rate",

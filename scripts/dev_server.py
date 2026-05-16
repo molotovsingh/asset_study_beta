@@ -7,7 +7,8 @@ import json
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from threading import Event, Thread
+from urllib.parse import parse_qs, urlparse
 
 try:
     from env_utils import load_local_env
@@ -44,9 +45,9 @@ except ModuleNotFoundError:
     )
 
 try:
-    from server import index_service, options_service, routes as server_routes
+    from server import automation_service, index_service, options_service, routes as server_routes
 except ModuleNotFoundError:
-    from scripts.server import index_service, options_service, routes as server_routes
+    from scripts.server import automation_service, index_service, options_service, routes as server_routes
 
 
 DEFAULT_HISTORY_PERIOD = index_service.DEFAULT_HISTORY_PERIOD
@@ -58,6 +59,7 @@ PRICE_ABSOLUTE_TOLERANCE = index_service.PRICE_ABSOLUTE_TOLERANCE
 PRICE_RELATIVE_TOLERANCE = index_service.PRICE_RELATIVE_TOLERANCE
 OPTIONS_SCREENER_MAX_SYMBOLS = options_service.OPTIONS_SCREENER_MAX_SYMBOLS
 OPTIONS_SCREENER_FETCH_CONCURRENCY = options_service.OPTIONS_SCREENER_FETCH_CONCURRENCY
+AUTOMATION_POLL_SECONDS = 30
 
 
 def parse_args() -> argparse.Namespace:
@@ -188,6 +190,14 @@ summarize_options_screener_run = options_service.summarize_options_screener_run
 direction_bucket = options_service.direction_bucket
 build_forward_validation_observation = options_service.build_forward_validation_observation
 build_options_screener_validation_payload = options_service.build_options_screener_validation_payload
+normalize_trade_validation_group_key = options_service.normalize_trade_validation_group_key
+normalize_trade_validation_horizon = options_service.normalize_trade_validation_horizon
+build_trade_validation_observation = options_service.build_trade_validation_observation
+build_trade_validation_payload = options_service.build_trade_validation_payload
+build_trade_validation_response = options_service.build_trade_validation_response
+sync_tracked_positions_for_run = options_service.sync_tracked_positions_for_run
+refresh_open_tracked_option_marks = options_service.refresh_open_tracked_option_marks
+collect_options_evidence_for_universe = options_service.collect_options_evidence_for_universe
 build_monthly_straddle_snapshot_response = options_service.build_monthly_straddle_snapshot_response
 shift_date = index_service.shift_date
 years_ago_start_date = index_service.years_ago_start_date
@@ -217,21 +227,36 @@ def parse_json_body(raw_body: bytes) -> object:
     return json.loads(raw_body.decode("utf-8"))
 
 
+def parse_query_request(query_string: str) -> dict:
+    if not query_string:
+        return {}
+    parsed = parse_qs(query_string, keep_blank_values=False)
+    request: dict[str, object] = {}
+    for key, values in parsed.items():
+        if not values:
+            continue
+        request[key] = values[-1] if len(values) == 1 else values
+    return request
+
+
 def dispatch_api_request(
     method: str,
     path: str,
     raw_body: bytes | None = None,
+    request: dict | None = None,
 ) -> tuple[HTTPStatus, dict]:
     try:
-        request = (
+        parsed_request = (
             parse_json_body(raw_body or b"")
             if str(method or "").upper() == "POST"
-            else {}
+            else dict(request or {})
         )
-        payload = server_routes.dispatch_request(method, path, request)
+        payload = server_routes.dispatch_request(method, path, parsed_request)
         return HTTPStatus.OK, payload
     except json.JSONDecodeError:
         return HTTPStatus.BAD_REQUEST, {"error": "Request body must be valid JSON."}
+    except server_routes.ApiResourceNotFoundError as error:
+        return HTTPStatus.NOT_FOUND, {"error": str(error)}
     except server_routes.UnknownApiRouteError:
         return HTTPStatus.NOT_FOUND, {"error": "Unknown API endpoint."}
     except ValueError as error:
@@ -270,7 +295,11 @@ class DevServerHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
-            status, payload = dispatch_api_request("GET", parsed.path)
+            status, payload = dispatch_api_request(
+                "GET",
+                parsed.path,
+                request=parse_query_request(parsed.query),
+            )
             self._write_json(status, payload)
             return
 
@@ -287,13 +316,49 @@ class DevServerHandler(SimpleHTTPRequestHandler):
         self._write_json(status, payload)
 
 
+class AutomationScheduler:
+    def __init__(self, *, poll_seconds: int = AUTOMATION_POLL_SECONDS):
+        self.poll_seconds = max(5, int(poll_seconds))
+        self._stop_event = Event()
+        self._thread: Thread | None = None
+
+    def _run_loop(self) -> None:
+        while not self._stop_event.wait(self.poll_seconds):
+            try:
+                automation_service.run_due_automations()
+            except Exception as error:  # noqa: BLE001
+                print(f"[automation-scheduler] {error}")
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = Thread(
+            target=self._run_loop,
+            name="automation-scheduler",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+            self._thread = None
+
+
 def main() -> int:
     args = parse_args()
     ensure_runtime_store()
     handler = partial(DevServerHandler, directory=str(REPO_ROOT))
     server = ThreadingHTTPServer((args.host, args.port), handler)
+    scheduler = AutomationScheduler()
+    scheduler.start()
     print(f"Serving Index Study Lab on http://{args.host}:{args.port}")
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        scheduler.stop()
+        server.server_close()
     return 0
 
 

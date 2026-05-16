@@ -65,8 +65,10 @@ function renderSelectionDetails(
     runtimeSnapshot?.sourceSeriesType || selection.sourceSeriesType;
   const note = runtimeSnapshot?.note || selection.note || null;
   const sourceLabel =
-    selection.kind === "builtin" || selection.kind === "bundled"
-      ? "Bundled"
+    selection.kind === "builtin"
+      ? "Built-in"
+      : selection.kind === "bundled"
+        ? "Bundled"
       : selection.kind === "remembered"
         ? "Saved Symbol"
         : "Symbol";
@@ -111,10 +113,16 @@ function renderSelectionDetails(
       "Last fetched",
       `<p class="summary-meta">Saved locally. Run the study to refresh it.</p>`,
     );
-  } else if (selection.kind === "adhoc" || selection.kind === "remembered") {
+  } else if (
+    selection.kind === "adhoc" ||
+    selection.kind === "remembered" ||
+    (selection.kind === "builtin" && !selection.sync)
+  ) {
     runtimeMeta =
       backendState === "ready"
-        ? `<p class="summary-meta">Will fetch <span class="mono">${selection.symbol}</span> through the local backend.</p>`
+        ? selection.kind === "adhoc"
+          ? `<p class="summary-meta">Unverified symbol. Run the study once to confirm <span class="mono">${selection.symbol}</span> before profile metadata is shown or the entry is saved locally.</p>`
+          : `<p class="summary-meta">Will fetch <span class="mono">${selection.symbol}</span> through the local backend.</p>`
         : `<p class="summary-meta">This selection needs the local backend. Start <span class="mono">${LOCAL_API_COMMAND}</span> first.</p>`;
   } else {
     runtimeMeta = `<p class="summary-meta">Bundled snapshot is ready to load.</p>`;

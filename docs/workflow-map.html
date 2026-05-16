@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Index Study Lab Workflow Map</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f7f8f3'/%3E%3Cpath d='M14 42h10V22H14v20Zm16 0h10V14H30v28Zm16 0h10V28H46v14Z' fill='%23176b4d'/%3E%3C/svg%3E">
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8f3;
+        --panel: #ffffff;
+        --panel-soft: #f1f5ec;
+        --ink: #17201b;
+        --muted: #657067;
+        --line: #d8ddd2;
+        --line-strong: #aeb7aa;
+        --green: #176b4d;
+        --green-soft: #e4f3ec;
+        --blue: #265d8f;
+        --blue-soft: #e7f0f8;
+        --orange: #a35e12;
+        --orange-soft: #faecd8;
+        --red: #9e2b2b;
+        --red-soft: #f8e4e1;
+        --purple: #674a9c;
+        --purple-soft: #eee8f8;
+        --shadow: 0 18px 50px rgba(24, 35, 24, 0.1);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(247, 248, 243, 0.95)),
+          var(--bg);
+        color: var(--ink);
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 28px;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 24px;
+        align-items: end;
+        margin: 0 auto 22px;
+        max-width: 1680px;
+      }
+
+      .title-block h1 {
+        margin: 0;
+        font-size: clamp(28px, 3.2vw, 48px);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .title-block p {
+        margin: 12px 0 0;
+        max-width: 860px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .source-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        padding: 9px 13px;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .source-pill strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 300px minmax(700px, 1fr) 390px;
+        gap: 18px;
+        max-width: 1680px;
+        margin: 0 auto;
+      }
+
+      .panel {
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+      }
+
+      .sidebar {
+        padding: 14px;
+        align-self: start;
+        position: sticky;
+        top: 18px;
+        max-height: calc(100vh - 36px);
+        overflow: auto;
+      }
+
+      .side-heading {
+        margin: 4px 4px 12px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .flow-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .flow-button {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+        text-align: left;
+        border-radius: 10px;
+        padding: 12px;
+        cursor: pointer;
+        transition:
+          border-color 140ms ease,
+          background-color 140ms ease,
+          transform 140ms ease;
+      }
+
+      .flow-button:hover {
+        border-color: var(--line-strong);
+        transform: translateY(-1px);
+      }
+
+      .flow-button.is-active {
+        border-color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .flow-title {
+        display: block;
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1.25;
+      }
+
+      .flow-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+        border-radius: 999px;
+        padding: 3px 8px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 750;
+      }
+
+      .tag.implemented {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .tag.not-implemented {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+
+      .tag.external {
+        background: var(--purple-soft);
+        color: var(--purple);
+      }
+
+      .map-panel {
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .map-toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding: 14px 16px;
+      }
+
+      .map-toolbar h2 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      .map-toolbar p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        background: var(--line-strong);
+      }
+
+      .legend-swatch.frontend {
+        background: var(--green);
+      }
+
+      .legend-swatch.backend {
+        background: var(--blue);
+      }
+
+      .legend-swatch.data {
+        background: var(--orange);
+      }
+
+      .legend-swatch.tooling {
+        background: var(--purple);
+      }
+
+      .legend-swatch.missing {
+        background: var(--red);
+      }
+
+      .map-canvas {
+        position: relative;
+        min-height: 900px;
+        overflow: auto;
+        background:
+          linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        background-size: 44px 44px;
+        background-color: #fbfcf8;
+      }
+
+      .edge-layer {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+      }
+
+      .edge {
+        fill: none;
+        stroke: rgba(23, 107, 77, 0.82);
+        stroke-width: 0.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        filter: drop-shadow(0 2px 2px rgba(23, 107, 77, 0.15));
+      }
+
+      .edge.not-implemented {
+        stroke: rgba(158, 43, 43, 0.78);
+      }
+
+      .edge-label {
+        fill: var(--ink);
+        font-size: 1.25px;
+        font-weight: 900;
+        pointer-events: none;
+        text-anchor: middle;
+        dominant-baseline: central;
+      }
+
+      .edge-dot {
+        fill: #fff;
+        stroke: var(--green);
+        stroke-width: 0.24px;
+      }
+
+      .edge-dot.not-implemented {
+        stroke: var(--red);
+      }
+
+      .node {
+        position: absolute;
+        width: 158px;
+        min-height: 86px;
+        transform: translate(-50%, -50%);
+        border: 1px solid var(--line);
+        border-left: 5px solid var(--line-strong);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.96);
+        padding: 10px;
+        box-shadow: 0 10px 30px rgba(30, 40, 32, 0.08);
+        cursor: pointer;
+        transition:
+          opacity 160ms ease,
+          transform 160ms ease,
+          border-color 160ms ease,
+          box-shadow 160ms ease;
+      }
+
+      .node:hover {
+        transform: translate(-50%, -52%);
+        box-shadow: 0 16px 34px rgba(30, 40, 32, 0.13);
+      }
+
+      .node.is-dim {
+        opacity: 0.28;
+      }
+
+      .node.is-active {
+        border-color: var(--green);
+        box-shadow: 0 18px 36px rgba(23, 107, 77, 0.17);
+      }
+
+      .node.is-selected {
+        outline: 3px solid rgba(38, 93, 143, 0.18);
+      }
+
+      .node[data-group="Frontend"] {
+        border-left-color: var(--green);
+      }
+
+      .node[data-group="Backend"] {
+        border-left-color: var(--blue);
+      }
+
+      .node[data-group="Data"] {
+        border-left-color: var(--orange);
+      }
+
+      .node[data-group="Tooling"] {
+        border-left-color: var(--purple);
+      }
+
+      .node[data-group="Not implemented"] {
+        border-left-color: var(--red);
+      }
+
+      .node-group {
+        margin: 0 0 5px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 850;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .node-title {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.22;
+        font-weight: 850;
+      }
+
+      .node-type {
+        margin: 7px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.3;
+      }
+
+      .detail-panel {
+        align-self: start;
+        position: sticky;
+        top: 18px;
+        max-height: calc(100vh - 36px);
+        overflow: auto;
+      }
+
+      .detail-section {
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .detail-section:last-child {
+        border-bottom: 0;
+      }
+
+      .detail-section h2,
+      .detail-section h3 {
+        margin: 0;
+        letter-spacing: 0;
+      }
+
+      .detail-section h2 {
+        font-size: 23px;
+        line-height: 1.1;
+      }
+
+      .detail-section h3 {
+        font-size: 15px;
+      }
+
+      .detail-copy {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.58;
+      }
+
+      .trigger {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 10px;
+        background: var(--panel-soft);
+        color: var(--ink);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .file-list {
+        display: grid;
+        gap: 6px;
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .file-list li {
+        overflow-wrap: anywhere;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 7px 8px;
+        background: #fff;
+        color: #2f3a33;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .step-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .step {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        padding: 12px;
+      }
+
+      .step-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .step-title {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 850;
+        line-height: 1.35;
+      }
+
+      .step-num {
+        flex: 0 0 auto;
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--green-soft);
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .step p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .step strong {
+        color: var(--ink);
+      }
+
+      .component-flows {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .mini-button {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--ink);
+        padding: 5px 9px;
+        font-size: 11px;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .mini-button:hover {
+        border-color: var(--green);
+      }
+
+      .empty {
+        padding: 18px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 1240px) {
+        .layout {
+          grid-template-columns: 280px minmax(620px, 1fr);
+        }
+
+        .detail-panel {
+          position: static;
+          grid-column: 1 / -1;
+          max-height: none;
+        }
+      }
+
+      @media (max-width: 880px) {
+        .page {
+          padding: 16px;
+        }
+
+        .topbar,
+        .layout {
+          display: block;
+        }
+
+        .source-pill {
+          margin-top: 14px;
+        }
+
+        .sidebar,
+        .detail-panel {
+          position: static;
+          max-height: none;
+          margin-bottom: 14px;
+        }
+
+        .map-toolbar {
+          display: block;
+        }
+
+        .legend {
+          justify-content: flex-start;
+          margin-top: 10px;
+        }
+
+        .map-canvas {
+          min-width: 980px;
+          min-height: 900px;
+        }
+
+        .map-panel {
+          overflow: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <div class="title-block">
+          <h1 id="page-title">Workflow Map</h1>
+          <p id="page-description">
+            Loading the JSON workflow document...
+          </p>
+        </div>
+        <div class="source-pill">
+          Source <strong>docs/workflow-map.json</strong>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="panel sidebar">
+          <div class="side-heading">Actions</div>
+          <div id="flow-list" class="flow-list"></div>
+        </aside>
+
+        <section class="panel map-panel" aria-label="Component workflow map">
+          <div class="map-toolbar">
+            <div>
+              <h2 id="map-title">Components and Packages</h2>
+              <p id="map-subtitle">Click an action to highlight the path. Click a component for details.</p>
+            </div>
+            <div class="legend" aria-label="Component groups">
+              <span class="legend-item"><span class="legend-swatch frontend"></span>Frontend</span>
+              <span class="legend-item"><span class="legend-swatch backend"></span>Backend</span>
+              <span class="legend-item"><span class="legend-swatch data"></span>Data</span>
+              <span class="legend-item"><span class="legend-swatch tooling"></span>Tooling</span>
+              <span class="legend-item"><span class="legend-swatch missing"></span>Not present</span>
+            </div>
+          </div>
+          <div id="map-canvas" class="map-canvas">
+            <svg id="edge-layer" class="edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L8,3.5 L0,7 Z" fill="#176b4d"></path>
+                </marker>
+                <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L8,3.5 L0,7 Z" fill="#9e2b2b"></path>
+                </marker>
+              </defs>
+            </svg>
+            <div id="node-layer"></div>
+          </div>
+        </section>
+
+        <aside id="detail-panel" class="panel detail-panel">
+          <div class="empty">Select a flow to see handoffs and payloads.</div>
+        </aside>
+      </main>
+    </div>
+
+    <script>
+      const state = {
+        data: null,
+        selectedFlowId: null,
+        selectedComponentId: null
+      };
+
+      const groupClass = {
+        Frontend: "frontend",
+        Backend: "backend",
+        Data: "data",
+        Tooling: "tooling",
+        "Not implemented": "missing"
+      };
+
+      const els = {
+        pageTitle: document.querySelector("#page-title"),
+        pageDescription: document.querySelector("#page-description"),
+        flowList: document.querySelector("#flow-list"),
+        nodeLayer: document.querySelector("#node-layer"),
+        edgeLayer: document.querySelector("#edge-layer"),
+        detailPanel: document.querySelector("#detail-panel")
+      };
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        })[char]);
+      }
+
+      function fileList(files) {
+        if (!files || files.length === 0) {
+          return '<p class="detail-copy">No files exist for this node in the current repo.</p>';
+        }
+
+        return `
+          <ul class="file-list">
+            ${files.map((file) => `<li>${escapeHtml(file)}</li>`).join("")}
+          </ul>
+        `;
+      }
+
+      function statusTag(status) {
+        const css = status === "implemented" ? "implemented" : "not-implemented";
+        return `<span class="tag ${css}">${escapeHtml(status)}</span>`;
+      }
+
+      function categoryTag(category) {
+        const css = category === "Requested example" ? "external" : "";
+        return `<span class="tag ${css}">${escapeHtml(category)}</span>`;
+      }
+
+      function getComponent(componentId) {
+        return state.data.components.find((component) => component.id === componentId);
+      }
+
+      function getFlow(flowId) {
+        return state.data.flows.find((flow) => flow.id === flowId);
+      }
+
+      function activeNodeIds(flow) {
+        const ids = new Set();
+        for (const step of flow?.steps || []) {
+          ids.add(step.from);
+          ids.add(step.to);
+        }
+        return ids;
+      }
+
+      function flowsForComponent(componentId) {
+        return state.data.flows.filter((flow) =>
+          (flow.steps || []).some((step) => step.from === componentId || step.to === componentId)
+        );
+      }
+
+      function renderFlowList() {
+        els.flowList.innerHTML = state.data.flows
+          .map((flow) => `
+            <button
+              type="button"
+              class="flow-button${flow.id === state.selectedFlowId ? " is-active" : ""}"
+              data-flow-id="${escapeHtml(flow.id)}"
+            >
+              <span class="flow-title">${escapeHtml(flow.title)}</span>
+              <span class="flow-meta">
+                ${statusTag(flow.status)}
+                ${categoryTag(flow.category)}
+              </span>
+            </button>
+          `)
+          .join("");
+      }
+
+      function renderNodes() {
+        const flow = getFlow(state.selectedFlowId);
+        const activeIds = activeNodeIds(flow);
+        const hasFlow = Boolean(flow);
+
+        els.nodeLayer.innerHTML = state.data.components
+          .map((component) => {
+            const active = activeIds.has(component.id);
+            const dim = hasFlow && !active;
+            const selected = state.selectedComponentId === component.id;
+            return `
+              <button
+                type="button"
+                class="node${active ? " is-active" : ""}${dim ? " is-dim" : ""}${selected ? " is-selected" : ""}"
+                data-component-id="${escapeHtml(component.id)}"
+                data-group="${escapeHtml(component.group)}"
+                style="left: ${Number(component.x)}%; top: ${Number(component.y)}%;"
+              >
+                <p class="node-group">${escapeHtml(component.group)}</p>
+                <p class="node-title">${escapeHtml(component.title)}</p>
+                <p class="node-type">${escapeHtml(component.type)}</p>
+              </button>
+            `;
+          })
+          .join("");
+      }
+
+      function curvedPath(from, to) {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const bend = Math.max(4, Math.min(14, Math.abs(dx) * 0.18 + Math.abs(dy) * 0.08));
+        const mx = (from.x + to.x) / 2;
+        const my = (from.y + to.y) / 2;
+        const sign = dx * dy >= 0 ? 1 : -1;
+        const cx = mx - sign * bend;
+        const cy = my + sign * bend;
+        return `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
+      }
+
+      function renderEdges() {
+        const flow = getFlow(state.selectedFlowId);
+        const steps = flow?.steps || [];
+        const isNotImplemented = flow?.status !== "implemented";
+        const paths = steps
+          .map((step, index) => {
+            const from = getComponent(step.from);
+            const to = getComponent(step.to);
+            if (!from || !to) {
+              return "";
+            }
+            const midpoint = {
+              x: (Number(from.x) + Number(to.x)) / 2,
+              y: (Number(from.y) + Number(to.y)) / 2
+            };
+            return `
+              <path
+                class="edge${isNotImplemented ? " not-implemented" : ""}"
+                d="${curvedPath(from, to)}"
+                marker-end="url(#${isNotImplemented ? "arrow-red" : "arrow"})"
+              ></path>
+              <circle class="edge-dot${isNotImplemented ? " not-implemented" : ""}" cx="${midpoint.x}" cy="${midpoint.y}" r="1.25"></circle>
+              <text class="edge-label" x="${midpoint.x}" y="${midpoint.y}">${index + 1}</text>
+            `;
+          })
+          .join("");
+
+        els.edgeLayer.querySelectorAll(".edge, .edge-label, .edge-dot").forEach((node) => node.remove());
+        els.edgeLayer.insertAdjacentHTML("beforeend", paths);
+      }
+
+      function renderSelectedComponent(component) {
+        if (!component) {
+          return "";
+        }
+
+        const related = flowsForComponent(component.id);
+        return `
+          <div class="detail-section">
+            <h3>Selected Component</h3>
+            <p class="detail-copy"><strong>${escapeHtml(component.title)}</strong> (${escapeHtml(component.group)} / ${escapeHtml(component.type)})</p>
+            <p class="detail-copy">${escapeHtml(component.role)}</p>
+            <p class="detail-copy">${escapeHtml(component.details)}</p>
+            ${fileList(component.files)}
+            <div class="component-flows">
+              ${related.map((flow) => `
+                <button class="mini-button" type="button" data-flow-id="${escapeHtml(flow.id)}">
+                  ${escapeHtml(flow.title)}
+                </button>
+              `).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      function renderFlowDetails(flow) {
+        if (!flow) {
+          return '<div class="empty">Select a flow to see handoffs and payloads.</div>';
+        }
+
+        return `
+          <div class="detail-section">
+            <div class="flow-meta">
+              ${statusTag(flow.status)}
+              ${categoryTag(flow.category)}
+            </div>
+            <h2 style="margin-top: 10px;">${escapeHtml(flow.title)}</h2>
+            <p class="detail-copy">${escapeHtml(flow.summary)}</p>
+            <div class="trigger"><strong>Trigger:</strong> ${escapeHtml(flow.trigger)}</div>
+            <div class="trigger"><strong>Result:</strong> ${escapeHtml(flow.result)}</div>
+          </div>
+          <div class="detail-section">
+            <h3>Primary Files</h3>
+            ${fileList(flow.primaryFiles)}
+          </div>
+          <div class="detail-section">
+            <h3>Handoffs</h3>
+            <div class="step-list">
+              ${(flow.steps || []).map((step, index) => {
+                const from = getComponent(step.from);
+                const to = getComponent(step.to);
+                return `
+                  <article class="step">
+                    <div class="step-top">
+                      <p class="step-title">${escapeHtml(from?.title || step.from)} -> ${escapeHtml(to?.title || step.to)}</p>
+                      <span class="step-num">${index + 1}</span>
+                    </div>
+                    <p><strong>${escapeHtml(step.label)}:</strong> ${escapeHtml(step.details)}</p>
+                    <p><strong>Passes:</strong> ${escapeHtml(step.passes)}</p>
+                  </article>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      function renderDetails() {
+        const flow = getFlow(state.selectedFlowId);
+        const component = getComponent(state.selectedComponentId);
+        els.detailPanel.innerHTML = `
+          ${renderSelectedComponent(component)}
+          ${renderFlowDetails(flow)}
+        `;
+      }
+
+      function selectFlow(flowId) {
+        state.selectedFlowId = flowId;
+        const flow = getFlow(flowId);
+        const activeIds = activeNodeIds(flow);
+        if (state.selectedComponentId && !activeIds.has(state.selectedComponentId)) {
+          state.selectedComponentId = null;
+        }
+        render();
+      }
+
+      function selectComponent(componentId) {
+        state.selectedComponentId = componentId;
+        render();
+      }
+
+      function render() {
+        renderFlowList();
+        renderNodes();
+        renderEdges();
+        renderDetails();
+      }
+
+      function showLoadError(error) {
+        els.pageTitle.textContent = "Workflow Map";
+        els.pageDescription.textContent = "Could not load docs/workflow-map.json.";
+        els.flowList.innerHTML = "";
+        els.nodeLayer.innerHTML = "";
+        els.edgeLayer.querySelectorAll(".edge, .edge-label, .edge-dot").forEach((node) => node.remove());
+        els.detailPanel.innerHTML = `
+          <div class="empty">
+            <strong>JSON load failed.</strong><br>
+            ${escapeHtml(error.message || error)}<br><br>
+            Serve the repo instead of opening the file directly:<br>
+            <code>cd /Users/aksingh/asset_study_beta && python3 -m http.server 8000</code><br>
+            Then open <code>http://127.0.0.1:8000/docs/workflow-map.html</code>.
+          </div>
+        `;
+      }
+
+      async function loadWorkflowData() {
+        const response = await fetch("./workflow-map.json", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} while loading workflow-map.json`);
+        }
+        return response.json();
+      }
+
+      els.flowList.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-flow-id]");
+        if (!button) {
+          return;
+        }
+        selectFlow(button.dataset.flowId);
+      });
+
+      els.nodeLayer.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-component-id]");
+        if (!button) {
+          return;
+        }
+        selectComponent(button.dataset.componentId);
+      });
+
+      els.detailPanel.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-flow-id]");
+        if (!button) {
+          return;
+        }
+        selectFlow(button.dataset.flowId);
+      });
+
+      loadWorkflowData()
+        .then((data) => {
+          state.data = data;
+          state.selectedFlowId = data.flows[0]?.id || null;
+          els.pageTitle.textContent = data.metadata?.title || "Workflow Map";
+          els.pageDescription.textContent = data.metadata?.description || "";
+          render();
+        })
+        .catch(showLoadError);
+    </script>
+  </body>
+</html>

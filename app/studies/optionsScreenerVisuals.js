@@ -3,6 +3,7 @@ import {
   exportOptionsScreenerCsv,
   exportOptionsScreenerXls,
 } from "../lib/optionsScreenerExport.js";
+import { getSortDefinition } from "../lib/optionsScreener.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { buildStudyViewHash } from "./studyShell.js";
 
@@ -11,6 +12,7 @@ function buildOverviewHash(studyRun) {
     u: studyRun.universe.id,
     bias: studyRun.bias,
     advice: studyRun.candidateFilter,
+    preset: studyRun.presetId,
     sort: studyRun.sortKey,
     dte: studyRun.minimumDte,
   });
@@ -21,6 +23,7 @@ function buildEmptyOverviewHash(session) {
     u: session.universeId,
     bias: session.bias,
     advice: session.candidateFilter,
+    preset: session.presetId,
     sort: session.sortKey,
     dte: session.minimumDteValue,
   });
@@ -111,6 +114,60 @@ function renderDirectionMix(studyRun) {
         <div>
           <p class="section-label">Direction Mix</p>
           <p class="summary-meta">Trend plus current-calendar-month seasonality across the loaded universe.</p>
+        </div>
+      </div>
+      <div class="seasonality-bar-list">
+        ${buckets
+          .map(
+            (entry) => `
+              <div class="seasonality-bar-row">
+                <div class="seasonality-bar-meta">
+                  <span class="seasonality-bar-label">${entry.label}</span>
+                  <span class="seasonality-bar-value">${formatNumber(entry.value, 0)}</span>
+                </div>
+                <div class="seasonality-bar-track">
+                  <span class="seasonality-bar-fill ${entry.fillClass}" style="width: ${Math.max((entry.value / maxValue) * 100, 4)}%;"></span>
+                </div>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderTradeIdeaMix(studyRun) {
+  const buckets = [
+    {
+      label: "Long Calendar",
+      value: Number(studyRun.presetCounts?.["long-calendar"]) || 0,
+      fillClass: "options-screener-fill-cheap",
+    },
+    {
+      label: "Sell Vega",
+      value: Number(studyRun.presetCounts?.["sell-vega"]) || 0,
+      fillClass: "options-screener-fill-rich",
+    },
+    {
+      label: "Buy Gamma/Vega",
+      value: Number(studyRun.presetCounts?.["buy-gamma-vega"]) || 0,
+      fillClass: "options-screener-fill-fair",
+    },
+    {
+      label: "Short Calendar",
+      value: Number(studyRun.presetCounts?.["short-calendar"]) || 0,
+      fillClass: "options-screener-fill-none",
+    },
+  ];
+  const maxValue = Math.max(...buckets.map((entry) => entry.value), 1);
+
+  return `
+    <section class="visual-card options-screener-visual-card">
+      <div class="visual-card-head">
+        <div>
+          <p class="section-label">Trade Ideas</p>
+          <p class="summary-meta">Preset hits across the currently loaded universe.</p>
         </div>
       </div>
       <div class="seasonality-bar-list">
@@ -232,6 +289,7 @@ function renderLiquidityView(studyRun) {
 }
 
 function renderVisualsShell(studyRun) {
+  const sortDefinition = getSortDefinition(studyRun.sortKey);
   const richRows = [...studyRun.rows]
     .filter((row) => row.pricingBucket === "rich")
     .sort((left, right) => right.ivHv20Ratio - left.ivHv20Ratio)
@@ -251,7 +309,7 @@ function renderVisualsShell(studyRun) {
             ${studyRun.universe.label} · ${formatNumber(studyRun.rows.length, 0)} loaded rows · ${studyRun.asOfDate ? formatDate(studyRun.asOfDate) : "n/a"}
           </p>
           <p class="summary-meta">
-            Bias ${studyRun.bias} · candidate ${studyRun.candidateFilter} · sort ${studyRun.sortKey} · front monthly only · ${studyRun.storage ? `archive #${studyRun.storage.runId}` : "archive unavailable"}
+            Bias ${studyRun.bias} · candidate ${studyRun.candidateFilter} · preset ${studyRun.presetDefinition?.label || "All Presets"} · sort ${sortDefinition.label} · front monthly only · ${studyRun.storage ? `archive #${studyRun.storage.runId}` : "archive unavailable"}
           </p>
         </div>
         <div class="visuals-actions">
@@ -266,6 +324,17 @@ function renderVisualsShell(studyRun) {
           <p class="meta-label">Rows Loaded</p>
           <strong class="visuals-summary-value">${formatNumber(studyRun.rows.length, 0)}</strong>
           <p class="summary-meta">${formatNumber(studyRun.failures.length, 0)} failures</p>
+        </section>
+        <section class="card visuals-summary-card">
+          <p class="meta-label">Preset Hits</p>
+          <strong class="visuals-summary-value">${formatNumber(
+            Object.values(studyRun.presetCounts || {}).reduce(
+              (sum, value) => sum + (Number(value) || 0),
+              0,
+            ),
+            0,
+          )}</strong>
+          <p class="summary-meta">${studyRun.presetDefinition?.label || "All Presets"} filter</p>
         </section>
         <section class="card visuals-summary-card">
           <p class="meta-label">Top Direction</p>
@@ -287,6 +356,7 @@ function renderVisualsShell(studyRun) {
       <div class="visuals-chart-grid options-screener-visual-grid">
         ${renderPricingMix(studyRun)}
         ${renderDirectionMix(studyRun)}
+        ${renderTradeIdeaMix(studyRun)}
         ${renderLeaderboard(
           "Top Rich",
           "Highest IV/HV20 rows in the current run. These are candidates for review, not auto-trades.",

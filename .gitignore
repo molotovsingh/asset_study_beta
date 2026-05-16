@@ -11,6 +11,7 @@ coverage/
 .venv/
 __pycache__/
 data/local-cache/
+.playwright-cli/
 
 # Secrets
 .env

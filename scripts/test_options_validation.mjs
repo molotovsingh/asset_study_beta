@@ -38,8 +38,8 @@ function buildFixtureStudyRun(overrides = {}) {
     groupKey: DEFAULT_OPTIONS_VALIDATION_GROUP_KEY,
     validationPayload: {
       runCount: 3,
-      observationCount: 5,
-      maturedCount: 4,
+      observationCount: 7,
+      maturedCount: 6,
       pendingCount: 1,
       observations: [
         {
@@ -67,6 +67,34 @@ function buildFixtureStudyRun(overrides = {}) {
           directionScore: 74,
           executionScore: 88,
           confidenceScore: 90,
+          primaryTradeIdea: "Buy Gamma/Vega",
+        },
+        {
+          runId: 5,
+          symbol: "AAPL",
+          asOfDate: "2026-04-10",
+          baseDate: "2026-04-10",
+          forwardDate: "2026-04-17",
+          matured: true,
+          basePrice: 100,
+          forwardPrice: 106,
+          forwardReturn: 0.06,
+          absoluteMove: 0.06,
+          impliedMovePercent: 0.045,
+          moveEdge: 0.015,
+          realizedBeatImplied: true,
+          availableTradingDays: 5,
+          pricingLabel: "Cheap",
+          pricingBucket: "cheap",
+          candidateAdvisory: "Long Premium Candidate",
+          candidateBucket: "long-premium",
+          directionLabel: "Long Bias",
+          directionBucket: "long",
+          ivHv20Ratio: 0.82,
+          directionScore: 74,
+          executionScore: 88,
+          confidenceScore: 90,
+          primaryTradeIdea: "Buy Gamma/Vega",
         },
         {
           runId: 4,
@@ -93,6 +121,7 @@ function buildFixtureStudyRun(overrides = {}) {
           directionScore: 58,
           executionScore: 80,
           confidenceScore: 84,
+          primaryTradeIdea: "Buy Gamma/Vega",
         },
         {
           runId: 3,
@@ -119,6 +148,7 @@ function buildFixtureStudyRun(overrides = {}) {
           directionScore: 32,
           executionScore: 76,
           confidenceScore: 79,
+          primaryTradeIdea: "Sell Vega",
         },
         {
           runId: 2,
@@ -145,6 +175,32 @@ function buildFixtureStudyRun(overrides = {}) {
           directionScore: 49,
           executionScore: 72,
           confidenceScore: 75,
+          primaryTradeIdea: "Sell Vega",
+        },
+        {
+          runId: 2,
+          symbol: "AMD",
+          asOfDate: "2026-04-12",
+          baseDate: "2026-04-11",
+          forwardDate: null,
+          matured: false,
+          basePrice: 100,
+          forwardPrice: null,
+          forwardReturn: null,
+          absoluteMove: null,
+          availableTradingDays: 1,
+          pricingLabel: "Fair",
+          pricingBucket: "fair",
+          candidateAdvisory: "No Vol Edge",
+          candidateBucket: "watch",
+          directionLabel: "Long Bias",
+          directionBucket: "long",
+          ivHv20Ratio: 1.04,
+          directionScore: 61,
+          executionScore: 69,
+          confidenceScore: 52,
+          primaryTradeIdea: "No Preset Match",
+          reason: "Only 1 trading day has elapsed since the archived row.",
         },
         {
           runId: 1,
@@ -168,6 +224,7 @@ function buildFixtureStudyRun(overrides = {}) {
           directionScore: 61,
           executionScore: 69,
           confidenceScore: 52,
+          primaryTradeIdea: "No Preset Match",
           reason: "Only 1 trading day has elapsed since the archived row.",
         },
       ],
@@ -181,6 +238,7 @@ function testStudyRun() {
   assert(studyRun.runCount === 3, "run count should round-trip");
   assert(studyRun.maturedCount === 4, "matured rows should round-trip");
   assert(studyRun.pendingCount === 1, "pending rows should round-trip");
+  assert(studyRun.rerunCountCollapsed === 2, "same-day reruns should collapse into distinct evidence rows");
   assert(studyRun.groupedResults.length === 2, "candidate grouping should produce two matured groups");
   assert(studyRun.bestGroup?.label === "Long Premium", "long premium should lead average returns");
   assert(studyRun.weakestGroup?.label === "Short Premium", "short premium should trail average returns");
@@ -194,7 +252,10 @@ function testStudyRun() {
 
   const observations = flattenOptionsValidationObservations(studyRun);
   assert(observations.length === 5, "flattened observations should include matured and pending rows");
-  assert(observations[0].symbol === "AAPL", "flattened observations should preserve symbol ordering");
+  assert(
+    observations.find((row) => row.symbol === "AAPL")?.runId === 5,
+    "flattened observations should retain the latest rerun when collapsing duplicates",
+  );
 
   const csvRows = buildCsvRows(studyRun);
   assert(csvRows.length === 8, "csv export should include header plus groups and observations");

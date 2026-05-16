@@ -264,6 +264,292 @@ async function loadRememberedIndexCatalog() {
   return payload.datasets;
 }
 
+async function fetchRuntimeHealth() {
+  const payload = await requestJson(buildApiUrl("/system/runtime-health"), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || buildLocalApiUnavailableMessage(),
+  });
+  if (!payload?.summary || !Array.isArray(payload?.attentionSymbols)) {
+    throw new Error("The local data API returned an invalid runtime health payload.");
+  }
+  return payload;
+}
+
+async function fetchAutomationState() {
+  const payload = await requestJson(buildApiUrl("/automations"), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || buildLocalApiUnavailableMessage(),
+  });
+  if (!Array.isArray(payload?.automations) || !payload?.catalogs) {
+    throw new Error("The local data API returned an invalid automation payload.");
+  }
+  return payload;
+}
+
+function buildQueryString(request) {
+  const searchParams = new URLSearchParams();
+  Object.entries(request || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const normalized = String(value).trim();
+    if (!normalized) {
+      return;
+    }
+    searchParams.set(key, normalized);
+  });
+  const queryString = searchParams.toString();
+  return queryString ? `?${queryString}` : "";
+}
+
+async function fetchStudyRuns(request = {}) {
+  const payload = await requestJson(buildApiUrl(`/study-runs${buildQueryString(request)}`), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || buildLocalApiUnavailableMessage(),
+  });
+  if (!Array.isArray(payload?.runs)) {
+    throw new Error("The local data API returned an invalid study-runs payload.");
+  }
+  return payload;
+}
+
+async function fetchAssistantContract() {
+  const payload = await requestJson(buildApiUrl("/assistant/contract"), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load the assistant contract.",
+  });
+  if (
+    payload?.version !== "assistant-contract-v1" ||
+    !Array.isArray(payload?.contracts) ||
+    !Array.isArray(payload?.backendEndpoints) ||
+    !Array.isArray(payload?.hardStops)
+  ) {
+    throw new Error("The local data API returned an invalid assistant contract payload.");
+  }
+  return payload;
+}
+
+async function fetchAssistantContractBundle() {
+  const payload = await requestJson(buildApiUrl("/assistant/contract-bundle"), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load the assistant contract bundle.",
+  });
+  if (
+    payload?.version !== "assistant-contract-bundle-v1" ||
+    !payload?.contracts?.assistant ||
+    !payload?.contracts?.metricRegistry ||
+    !payload?.contracts?.studyCatalog ||
+    !payload?.contracts?.studyPlan
+  ) {
+    throw new Error("The local data API returned an invalid assistant contract bundle payload.");
+  }
+  return payload;
+}
+
+async function fetchAssistantReadiness(request = {}) {
+  const payload = await requestJson(buildApiUrl(`/assistant/readiness${buildQueryString(request)}`), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load assistant readiness.",
+  });
+  if (
+    payload?.version !== "assistant-readiness-v1" ||
+    !payload?.summary ||
+    !Array.isArray(payload?.checks)
+  ) {
+    throw new Error("The local data API returned an invalid assistant readiness payload.");
+  }
+  return payload;
+}
+
+async function fetchStudyRunBrief(request) {
+  const payload = await requestLocalApiJson("/assistant/study-run-brief", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load that assistant run brief.",
+  });
+  if (
+    !payload?.run?.runId ||
+    !payload?.handoff ||
+    !payload?.explanationBrief
+  ) {
+    throw new Error("The local data API returned an invalid assistant run brief payload.");
+  }
+  return payload;
+}
+
+async function dryRunAssistantStudyPlan(request) {
+  const payload = await requestLocalApiJson("/assistant/study-plan-dry-run", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not dry-run that assistant StudyPlan.",
+  });
+  if (
+    payload?.version !== "assistant-study-plan-dry-run-v1" ||
+    !payload?.readiness ||
+    !payload?.plannerResult ||
+    !payload?.plan ||
+    !payload?.validation ||
+    !payload?.preview ||
+    !payload?.execution
+  ) {
+    throw new Error("The local data API returned an invalid assistant StudyPlan dry-run payload.");
+  }
+  return payload;
+}
+
+async function liveDraftAssistantStudyPlan(request) {
+  const payload = await requestLocalApiJson("/assistant/study-plan-live-draft", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not live-draft that assistant StudyPlan.",
+  });
+  if (
+    payload?.version !== "assistant-study-plan-live-draft-v1" ||
+    payload?.provider !== "openai" ||
+    !payload?.readiness ||
+    !payload?.modelResult ||
+    !payload?.plan ||
+    !payload?.validation ||
+    !payload?.preview ||
+    !payload?.execution
+  ) {
+    throw new Error("The local data API returned an invalid assistant StudyPlan live-draft payload.");
+  }
+  return payload;
+}
+
+async function buildStudyFactoryProposal(request) {
+  const payload = await requestLocalApiJson("/study-factory/proposal", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not build that study proposal.",
+  });
+  if (
+    payload?.version !== "study-proposal-response-v1" ||
+    payload?.mode !== "read-only" ||
+    !payload?.proposal ||
+    !payload?.execution
+  ) {
+    throw new Error("The local data API returned an invalid study proposal payload.");
+  }
+  return payload;
+}
+
+async function draftStudyBuilderPlan(request) {
+  const payload = await requestLocalApiJson("/study-builder/plan", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not draft that StudyPlan.",
+  });
+  if (
+    payload?.version !== "study-builder-plan-response-v1" ||
+    !payload?.plannerResult ||
+    !payload?.plan ||
+    !payload?.preview
+  ) {
+    throw new Error("The local data API returned an invalid study-builder plan payload.");
+  }
+  return payload;
+}
+
+async function validateStudyBuilderPlan(request) {
+  const payload = await requestLocalApiJson("/study-builder/validate", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not validate that StudyPlan.",
+  });
+  if (
+    payload?.version !== "study-builder-validation-response-v1" ||
+    !["plan", "route"].includes(payload?.mode) ||
+    !payload?.validation ||
+    !payload?.preview
+  ) {
+    throw new Error("The local data API returned an invalid study-builder validation payload.");
+  }
+  return payload;
+}
+
+async function fetchStudyPlanRecipes(request = {}) {
+  const payload = await requestJson(buildApiUrl(`/study-builder/recipes${buildQueryString(request)}`), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load StudyPlan recipes.",
+  });
+  if (
+    payload?.version !== "study-plan-recipes-v1" ||
+    !Array.isArray(payload?.recipes)
+  ) {
+    throw new Error("The local data API returned an invalid StudyPlan recipe payload.");
+  }
+  return payload;
+}
+
+async function saveStudyPlanRecipe(request) {
+  const payload = await requestLocalApiJson("/study-builder/recipes/save", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not save that StudyPlan recipe.",
+  });
+  if (typeof payload?.ok !== "boolean" || !Array.isArray(payload?.recipes)) {
+    throw new Error("The local data API returned an invalid StudyPlan recipe save payload.");
+  }
+  return payload;
+}
+
+async function deleteStudyPlanRecipe(request) {
+  const payload = await requestLocalApiJson("/study-builder/recipes/delete", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not delete that StudyPlan recipe.",
+  });
+  if (typeof payload?.ok !== "boolean" || !Array.isArray(payload?.recipes)) {
+    throw new Error("The local data API returned an invalid StudyPlan recipe delete payload.");
+  }
+  return payload;
+}
+
+async function saveAutomationConfig(request) {
+  const payload = await requestLocalApiJson("/automations/save", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not save that automation.",
+  });
+  if (!payload?.automation || !payload?.state) {
+    throw new Error("The local data API returned an invalid automation save payload.");
+  }
+  return payload;
+}
+
+async function deleteAutomationConfig(request) {
+  const payload = await requestLocalApiJson("/automations/delete", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not delete that automation.",
+  });
+  if (!payload?.state) {
+    throw new Error("The local data API returned an invalid automation delete payload.");
+  }
+  return payload;
+}
+
+async function runAutomationNow(request) {
+  const payload = await requestLocalApiJson("/automations/run", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not run that automation.",
+  });
+  if (!payload?.automation || !payload?.state || !payload?.result) {
+    throw new Error("The local data API returned an invalid automation run payload.");
+  }
+  return payload;
+}
+
+async function recordStudyRunLedgerEntry(request) {
+  const payload = await requestLocalApiJson("/study-runs/record", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not record that study run.",
+  });
+  if (!payload?.run?.studyId || !payload?.run?.completedAt) {
+    throw new Error("The local data API returned an invalid study-run payload.");
+  }
+  return payload;
+}
+
 async function fetchIndexSeries(request) {
   const payload = await requestLocalApiJson("/yfinance/index-series", request, {
     onHttpError: (response, parsedPayload) =>
@@ -384,18 +670,37 @@ async function fetchOptionsValidation(request) {
 
 export {
   LOCAL_API_COMMAND,
+  buildStudyFactoryProposal,
   buildLocalApiUnavailableMessage,
+  deleteAutomationConfig,
+  deleteStudyPlanRecipe,
   discoverSymbols,
   describeFreshness,
+  dryRunAssistantStudyPlan,
+  draftStudyBuilderPlan,
+  fetchAssistantContract,
+  fetchAssistantContractBundle,
+  fetchAssistantReadiness,
+  fetchAutomationState,
   fetchInstrumentProfile,
   fetchIndexSeries,
   fetchOptionsScreenerHistory,
   fetchOptionsScreenerSnapshot,
   fetchOptionsValidation,
+  fetchRuntimeHealth,
+  fetchStudyPlanRecipes,
+  fetchStudyRunBrief,
+  fetchStudyRuns,
   fetchMonthlyStraddleSnapshot,
   getManifestDataset,
   getSnapshotFreshness,
   loadRememberedIndexCatalog,
   loadSyncManifest,
   loadSyncedSeries,
+  liveDraftAssistantStudyPlan,
+  recordStudyRunLedgerEntry,
+  runAutomationNow,
+  saveAutomationConfig,
+  saveStudyPlanRecipe,
+  validateStudyBuilderPlan,
 };

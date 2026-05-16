@@ -3,6 +3,7 @@ import {
   formatNumber,
   formatPercent,
 } from "../lib/format.js";
+import { buildSipMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderSipInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
@@ -69,6 +70,7 @@ function renderCohortTable(studyRun) {
 function renderSipSimulatorResults(studyRun) {
   const { summary } = studyRun;
   const fullWindow = summary.fullWindowCohort;
+  const metricPresentation = buildSipMetricPresentation();
 
   return `
     <div class="results-shell">
@@ -136,7 +138,7 @@ function renderSipSimulatorResults(studyRun) {
           <div>
             <p class="section-label">Cohort Read</p>
             <p class="summary-meta">
-              Each cohort starts in a different month and contributes until the same terminal market date.
+              Same terminal market date, different start months, and naturally different contribution counts.
             </p>
           </div>
         </div>
@@ -144,7 +146,7 @@ function renderSipSimulatorResults(studyRun) {
           ${renderCard({
             label: "Median Cohort XIRR",
             value: formatPercent(summary.medianXirr),
-            detail: `Middle cohort across ${formatNumber(summary.totalCohorts, 0)} eligible start months`,
+            detail: `${metricPresentation.cohortXirr.detail} across ${formatNumber(summary.totalCohorts, 0)} eligible start months`,
           })}
           ${renderCard({
             label: "Positive Cohorts",
@@ -152,17 +154,17 @@ function renderSipSimulatorResults(studyRun) {
             detail: `${formatNumber(summary.totalCohorts, 0)} cohorts met the minimum contribution count`,
           })}
           ${renderCard({
-            label: "Best Start Month",
+            label: "Best XIRR Cohort",
             value: summary.bestCohort?.startMonthLabel || "n/a",
             detail: summary.bestCohort
-              ? `XIRR ${formatPercent(summary.bestCohort.xirr)}`
+              ? `XIRR ${formatPercent(summary.bestCohort.xirr)} · ${formatNumber(summary.bestCohort.contributionCount, 0)} contributions`
               : "No cohort available",
           })}
           ${renderCard({
-            label: "Worst Start Month",
+            label: "Worst XIRR Cohort",
             value: summary.worstCohort?.startMonthLabel || "n/a",
             detail: summary.worstCohort
-              ? `XIRR ${formatPercent(summary.worstCohort.xirr)}`
+              ? `XIRR ${formatPercent(summary.worstCohort.xirr)} · ${formatNumber(summary.worstCohort.contributionCount, 0)} contributions`
               : "No cohort available",
           })}
           ${renderCard({
@@ -235,6 +237,9 @@ function renderSipSimulatorResults(studyRun) {
           <h3>Notes</h3>
           <p class="result-detail">
             SIP cohorts that start later naturally have fewer contributions than earlier cohorts.
+          </p>
+          <p class="result-detail">
+            Cohort XIRR rankings are same-terminal comparisons, not fixed-horizon start-month rankings.
           </p>
           <p class="result-detail">
             XIRR is based on dated monthly cash flows plus terminal portfolio value at the latest market date.

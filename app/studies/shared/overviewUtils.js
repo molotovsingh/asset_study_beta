@@ -13,6 +13,15 @@ function toInputDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function parseSnapshotRangeDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+}
+
 function buildDefaultStudyWindow(yearsBack = 5, baseDate = new Date()) {
   const endDate = new Date(
     baseDate.getFullYear(),
@@ -25,6 +34,40 @@ function buildDefaultStudyWindow(yearsBack = 5, baseDate = new Date()) {
   return {
     startDate,
     endDate,
+  };
+}
+
+function buildAvailableStudyWindow({
+  selection,
+  runtimeSnapshot = null,
+  yearsBack = 5,
+  fallbackBaseDate = new Date(),
+} = {}) {
+  const rangeSource = runtimeSnapshot?.range || selection?.range || null;
+  const availableStartDate = parseSnapshotRangeDate(rangeSource?.startDate);
+  const availableEndDate = parseSnapshotRangeDate(rangeSource?.endDate);
+
+  const endDate = availableEndDate
+    ? new Date(availableEndDate)
+    : new Date(
+        fallbackBaseDate.getFullYear(),
+        fallbackBaseDate.getMonth(),
+        fallbackBaseDate.getDate(),
+      );
+  const startDate = new Date(endDate);
+  startDate.setFullYear(startDate.getFullYear() - yearsBack);
+
+  if (availableStartDate && startDate < availableStartDate) {
+    startDate.setTime(availableStartDate.getTime());
+  }
+
+  return {
+    startDate,
+    endDate,
+    anchoredToAvailableEndDate: Boolean(availableEndDate),
+    clippedToAvailableStartDate:
+      Boolean(availableStartDate) &&
+      startDate.getTime() === availableStartDate.getTime(),
   };
 }
 
@@ -70,6 +113,7 @@ export {
   BUNDLED_INDEX_MANIFEST_SYNC_CONFIG,
   appendCoverageWarnings,
   appendSnapshotWarnings,
+  buildAvailableStudyWindow,
   buildDefaultStudyWindow,
   toInputDate,
 };

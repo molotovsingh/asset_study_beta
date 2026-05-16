@@ -1,3 +1,5 @@
+import { DRAWDOWN_MATERIALITY_THRESHOLD } from "./metricRegistry.js";
+
 function mean(values) {
   if (!values.length) {
     return null;
@@ -66,7 +68,7 @@ function closeEpisode({
   };
 }
 
-function buildDrawdownEpisodes(indexSeries) {
+function buildDrawdownEpisodes(indexSeries, materialityThreshold = DRAWDOWN_MATERIALITY_THRESHOLD) {
   if (indexSeries.length < 2) {
     return [];
   }
@@ -101,15 +103,17 @@ function buildDrawdownEpisodes(indexSeries) {
 
     const drawdownDepth = point.value / peakValue - 1;
     if (!openEpisode) {
-      openEpisode = {
-        peakDate,
-        peakIndex,
-        peakValue,
-        troughDate: point.date,
-        troughIndex: index,
-        troughValue: point.value,
-        maxDepth: drawdownDepth,
-      };
+      if (drawdownDepth <= -materialityThreshold) {
+        openEpisode = {
+          peakDate,
+          peakIndex,
+          peakValue,
+          troughDate: point.date,
+          troughIndex: index,
+          troughValue: point.value,
+          maxDepth: drawdownDepth,
+        };
+      }
       continue;
     }
 
@@ -145,7 +149,13 @@ function rankEpisodesByDepth(episodes) {
     }));
 }
 
-function buildStudySummary(indexSeries, underwaterSeries, episodes, episodesByDepth) {
+function buildStudySummary(
+  indexSeries,
+  underwaterSeries,
+  episodes,
+  episodesByDepth,
+  materialityThreshold = DRAWDOWN_MATERIALITY_THRESHOLD,
+) {
   const maxDrawdownEpisode = episodesByDepth[0] ?? null;
   const longestEpisode = episodes.reduce((best, episode) => {
     if (!best || episode.durationDays > best.durationDays) {
@@ -168,10 +178,14 @@ function buildStudySummary(indexSeries, underwaterSeries, episodes, episodesByDe
   const recoveryValues = episodes
     .map((episode) => episode.recoveryDays)
     .filter((value) => Number.isFinite(value));
-  const underwaterPoints = underwaterSeries.filter((point) => point.depth < 0).length;
+  const underwaterPoints = underwaterSeries.filter(
+    (point) => point.depth <= -materialityThreshold,
+  ).length;
   const recoveredEpisodes = episodes.filter((episode) => episode.recovered).length;
+  const latestRawDepth = underwaterSeries[underwaterSeries.length - 1]?.depth ?? 0;
 
   return {
+    materialityThreshold,
     observations: indexSeries.length,
     totalEpisodes: episodes.length,
     recoveredEpisodes,
@@ -180,7 +194,8 @@ function buildStudySummary(indexSeries, underwaterSeries, episodes, episodesByDe
     longestEpisode,
     longestRecovery,
     openEpisode,
-    latestDepth: underwaterSeries[underwaterSeries.length - 1]?.depth ?? 0,
+    latestDepth: latestRawDepth <= -materialityThreshold ? latestRawDepth : 0,
+    rawLatestDepth: latestRawDepth,
     timeUnderwaterRate:
       underwaterSeries.length > 0 ? underwaterPoints / underwaterSeries.length : null,
     averageEpisodeDepth: mean(depthValues),
@@ -198,13 +213,14 @@ function buildDrawdownStudy(indexSeries) {
   }
 
   const underwaterSeries = buildUnderwaterSeries(indexSeries);
-  const episodes = buildDrawdownEpisodes(indexSeries);
+  const episodes = buildDrawdownEpisodes(indexSeries, DRAWDOWN_MATERIALITY_THRESHOLD);
   const episodesByDepth = rankEpisodesByDepth(episodes);
   const summary = buildStudySummary(
     indexSeries,
     underwaterSeries,
     episodes,
     episodesByDepth,
+    DRAWDOWN_MATERIALITY_THRESHOLD,
   );
 
   return {
@@ -215,4 +231,4 @@ function buildDrawdownStudy(indexSeries) {
   };
 }
 
-export { buildDrawdownStudy };
+export { DRAWDOWN_MATERIALITY_THRESHOLD, buildDrawdownStudy };

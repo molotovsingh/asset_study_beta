@@ -150,8 +150,11 @@ function classifySample(count, minimum = 30) {
   return { tone: "Very Thin", toneId: "caution" };
 }
 
-function renderRiskInterpretation(metrics) {
-  const returnTone = classifyReturn(metrics.annualizedReturn);
+function renderRiskInterpretation(metrics, { metricPolicy = null } = {}) {
+  const canHeadlineAnnualized = Boolean(metricPolicy?.canHeadlineAnnualized);
+  const returnTone = classifyReturn(
+    canHeadlineAnnualized ? metrics.annualizedReturn : metrics.totalReturn,
+  );
   const volatilityTone = classifyVolatility(metrics.annualizedVolatility);
   const drawdownTone = classifyDrawdown(metrics.maxDrawdown);
   const ratioTone = classifyRatio(metrics.sharpeRatio);
@@ -161,7 +164,9 @@ function renderRiskInterpretation(metrics) {
       {
         label: "Return",
         ...returnTone,
-        text: `CAGR is ${formatPercent(metrics.annualizedReturn)} and total return is ${formatPercent(metrics.totalReturn)}. CAGR makes the start and end values comparable as an annualized path.`,
+        text: canHeadlineAnnualized
+          ? `CAGR is ${formatPercent(metrics.annualizedReturn)} and total return is ${formatPercent(metrics.totalReturn)}. The sample is deep enough for the annualized figure to speak loudly.`
+          : `Total return is ${formatPercent(metrics.totalReturn)}. The annualized pace is ${formatPercent(metrics.annualizedReturn)}, but it is secondary because this window has ${formatNumber(metrics.periodicObservations, 0)} return observations.`,
       },
       {
         label: "Volatility",
@@ -176,7 +181,7 @@ function renderRiskInterpretation(metrics) {
       {
         label: "Risk-Adjusted",
         ...ratioTone,
-        text: `Sharpe is ${formatNumber(metrics.sharpeRatio)} and Sortino is ${formatNumber(metrics.sortinoRatio)} using the selected risk-free rate. Positive values mean the sample cleared that hurdle after volatility or downside risk.`,
+        text: `Sharpe is ${formatNumber(metrics.sharpeRatio)} and Sortino is ${formatNumber(metrics.sortinoRatio)} using ${formatNumber(metrics.periodicObservations, 0)} return observations. Positive values mean the sample cleared the selected risk-free hurdle after volatility or downside risk.`,
       },
     ],
     footnote:
@@ -184,8 +189,16 @@ function renderRiskInterpretation(metrics) {
   });
 }
 
-function renderRelativeInterpretation({ relativeMetrics, assetLabel, benchmarkLabel }) {
-  const spreadTone = classifyReturn(relativeMetrics.cagrSpread);
+function renderRelativeInterpretation({
+  relativeMetrics,
+  assetLabel,
+  benchmarkLabel,
+  metricPolicy = null,
+}) {
+  const canHeadlineAnnualized = Boolean(metricPolicy?.canHeadlineAnnualized);
+  const spreadTone = classifyReturn(
+    canHeadlineAnnualized ? relativeMetrics.cagrSpread : relativeMetrics.relativeWealth,
+  );
   const trackingTone = classifyVolatility(relativeMetrics.trackingError);
   const correlationTone =
     Math.abs(relativeMetrics.correlation ?? 0) >= 0.8
@@ -201,9 +214,11 @@ function renderRelativeInterpretation({ relativeMetrics, assetLabel, benchmarkLa
       "Factual benchmark context from aligned log returns. It explains spread and sensitivity; it does not choose a winner.",
     items: [
       {
-        label: "Spread",
+        label: canHeadlineAnnualized ? "Spread" : "Relative Wealth",
         ...spreadTone,
-        text: `${assetLabel} CAGR is ${formatPercent(relativeMetrics.cagrSpread)} versus ${benchmarkLabel} over the shared window. Positive spread means the asset compounded faster in this sample.`,
+        text: canHeadlineAnnualized
+          ? `${assetLabel} CAGR spread is ${formatPercent(relativeMetrics.cagrSpread)} versus ${benchmarkLabel} over the shared window. Positive spread means the asset compounded faster in this sample.`
+          : `${assetLabel} relative wealth is ${formatPercent(relativeMetrics.relativeWealth)} versus ${benchmarkLabel}. CAGR spread is secondary because the overlap has ${formatNumber(relativeMetrics.overlapReturnObservations, 0)} aligned returns.`,
       },
       {
         label: "Fit",
@@ -213,7 +228,7 @@ function renderRelativeInterpretation({ relativeMetrics, assetLabel, benchmarkLa
       {
         label: "Active Risk",
         ...trackingTone,
-        text: `Tracking error is ${formatPercent(relativeMetrics.trackingError)}. This is the annualized volatility of the asset-minus-benchmark return stream.`,
+        text: `Tracking error is ${formatPercent(relativeMetrics.trackingError)} from ${formatNumber(relativeMetrics.overlapReturnObservations, 0)} aligned returns. Treat it as an annualized diagnostic, not a standalone verdict.`,
       },
       {
         label: "Hit Rate",

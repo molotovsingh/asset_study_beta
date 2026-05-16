@@ -17,6 +17,7 @@ import {
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
 import {
+  buildAvailableStudyWindow,
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
@@ -56,6 +57,7 @@ function replaceRollingReturnsRouteParams() {
 
 function mountRollingReturnsOverview(root) {
   const routeParamsApplied = readCommonIndexParams(rollingReturnsSession);
+  const routeHasExplicitWindow = routeParamsApplied.start || routeParamsApplied.end;
   if (routeParamsApplied.changed) {
     rollingReturnsSession.lastStudyRun = null;
   }
@@ -103,6 +105,8 @@ function mountRollingReturnsOverview(root) {
     loadBundledManifest,
     loadRememberedSymbols,
     updateIndexSummary,
+    getRuntimeSnapshot,
+    getBundledDatasetForSelection,
   } = runtime;
   const handleExportClick = createExportClickHandler({
     triggerSelector: "[data-rolling-export]",
@@ -125,6 +129,43 @@ function mountRollingReturnsOverview(root) {
       state.lastStudyRun = null;
     }
     replaceRollingReturnsRouteParams();
+  }
+
+  function applyAvailableWindow({ announce = false, force = false } = {}) {
+    if (!force && routeHasExplicitWindow) {
+      return false;
+    }
+
+    const selection = getCurrentSelection();
+    const manifestDataset = getBundledDatasetForSelection(selection);
+    const nextWindow = buildAvailableStudyWindow({
+      selection: manifestDataset
+        ? { ...selection, range: manifestDataset.range || selection.range }
+        : selection,
+      runtimeSnapshot: getRuntimeSnapshot(selection),
+    });
+    const nextStartValue = toInputDate(nextWindow.startDate);
+    const nextEndValue = toInputDate(nextWindow.endDate);
+
+    if (
+      startDateInput.value === nextStartValue &&
+      endDateInput.value === nextEndValue
+    ) {
+      return false;
+    }
+
+    startDateInput.value = nextStartValue;
+    endDateInput.value = nextEndValue;
+    persistFormState();
+    if (announce) {
+      setStatus(
+        nextWindow.anchoredToAvailableEndDate
+          ? "Loaded the last 5 available market years."
+          : "Loaded a trailing 5-year window.",
+        "info",
+      );
+    }
+    return true;
   }
 
   function handleResultsClick(event) {
@@ -206,13 +247,7 @@ function mountRollingReturnsOverview(root) {
   }
 
   function applyLastFiveYears() {
-    const end = new Date();
-    const start = new Date(end);
-    start.setFullYear(start.getFullYear() - 5);
-    startDateInput.value = toInputDate(start);
-    endDateInput.value = toInputDate(end);
-    persistFormState();
-    setStatus("Loaded a trailing 5-year window.", "info");
+    applyAvailableWindow({ announce: true, force: true });
   }
 
   function handleFormFieldChange() {
@@ -226,14 +261,23 @@ function mountRollingReturnsOverview(root) {
   resultsRoot.addEventListener("click", handleResultsClick);
 
   refreshSelectionUi();
-  loadBundledManifest();
-  loadRememberedSymbols();
+  loadBundledManifest().finally(() => {
+    if (!state.lastStudyRun) {
+      applyAvailableWindow();
+    }
+  });
+  loadRememberedSymbols().finally(() => {
+    if (!state.lastStudyRun) {
+      applyAvailableWindow();
+    }
+  });
 
   if (state.lastStudyRun) {
     renderStudyRunResults(resultsRoot, state.lastStudyRun);
     setStatus("Loaded the last completed rolling returns study.", "success");
   } else {
     updateIndexSummary();
+    applyAvailableWindow();
   }
 
   return () => {

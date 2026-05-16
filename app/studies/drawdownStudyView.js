@@ -4,6 +4,7 @@ import {
   formatNumber,
   formatPercent,
 } from "../lib/format.js";
+import { buildDrawdownMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderInterpretationPanel } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
@@ -26,8 +27,8 @@ function renderEpisodesTable(episodesByDepth) {
   if (!episodesByDepth.length) {
     return `
       <div class="empty-state visual-empty">
-        <h2>No drawdown episode formed.</h2>
-        <p>The active window stayed at or above prior peaks throughout this sample.</p>
+        <h2>No material drawdown episode formed.</h2>
+        <p>The active window never moved far enough below a prior peak to clear the study threshold.</p>
       </div>
     `;
   }
@@ -103,7 +104,7 @@ function renderDrawdownInterpretation(studyRun) {
           maxEpisode && maxEpisode.maxDepth <= -0.25 ? "caution" : "neutral",
         text: maxEpisode
           ? `Worst drawdown reached ${formatPercent(maxEpisode.maxDepth)} from ${formatDate(maxEpisode.peakDate)} to ${formatDate(maxEpisode.troughDate)}.`
-          : "No drawdown episode formed in this sample window.",
+          : "No material drawdown episode formed in this sample window.",
       },
       {
         label: "Duration",
@@ -122,7 +123,7 @@ function renderDrawdownInterpretation(studyRun) {
       {
         label: "Time Underwater",
         ...timeUnderwaterTone,
-        text: `The index stayed below prior peaks for ${formatPercent(summary.timeUnderwaterRate)} of observed dates.`,
+        text: `The index stayed at least ${formatPercent(summary.materialityThreshold)} below prior peaks for ${formatPercent(summary.timeUnderwaterRate)} of observed dates.`,
       },
       {
         label: "Current State",
@@ -141,6 +142,7 @@ function renderDrawdownStudyResults(studyRun) {
   const maxEpisode = summary.maxDrawdownEpisode;
   const longestEpisode = summary.longestEpisode;
   const longestRecovery = summary.longestRecovery;
+  const metricPresentation = buildDrawdownMetricPresentation({ summary });
 
   return `
     <div class="results-shell">
@@ -168,7 +170,7 @@ function renderDrawdownStudyResults(studyRun) {
           <div>
             <p class="section-label">Drawdown Snapshot</p>
             <p class="summary-meta">
-              Depth, duration, and recovery metrics for the active window.
+              Depth, duration, and recovery metrics for material drawdowns in the active window.
             </p>
           </div>
         </div>
@@ -201,19 +203,19 @@ function renderDrawdownStudyResults(studyRun) {
           ${renderCard({
             label: "Time Underwater",
             value: formatPercent(summary.timeUnderwaterRate),
-            detail: `${formatNumber(summary.observations, 0)} observations`,
+            detail: `${formatNumber(summary.observations, 0)} observations · ${formatPercent(summary.materialityThreshold)} threshold`,
           })}
           ${renderCard({
-            label: "Episodes",
+            label: metricPresentation.materialEpisodes.label,
             value: formatNumber(summary.totalEpisodes, 0),
-            detail: `${formatNumber(summary.recoveredEpisodes, 0)} recovered · ${formatNumber(summary.unrecoveredEpisodes, 0)} open`,
+            detail: `${formatNumber(summary.recoveredEpisodes, 0)} recovered · ${formatNumber(summary.unrecoveredEpisodes, 0)} open · ${metricPresentation.materialEpisodes.detail}`,
           })}
           ${renderCard({
             label: "Latest Depth",
             value: formatPercent(summary.latestDepth),
             detail: summary.openEpisode
               ? "Current drawdown has not recovered yet"
-              : "Latest point is at/above prior peak",
+              : "Latest point is at/above the material threshold",
           })}
         </div>
       </section>
@@ -224,7 +226,7 @@ function renderDrawdownStudyResults(studyRun) {
           <div>
             <p class="section-label">Ranked Episodes</p>
             <p class="summary-meta">
-              Ranked by max depth from worst to shallowest drawdown.
+              Ranked by max depth from worst to shallowest material drawdown.
             </p>
           </div>
         </div>
@@ -247,6 +249,9 @@ function renderDrawdownStudyResults(studyRun) {
             )}
           </p>
           <p class="result-detail">Method: ${studyRun.methodLabel}</p>
+          <p class="result-detail">
+            Materiality threshold: ${formatPercent(summary.materialityThreshold)} below the prior peak
+          </p>
         </div>
         <div class="detail-block">
           <h3>Distribution</h3>

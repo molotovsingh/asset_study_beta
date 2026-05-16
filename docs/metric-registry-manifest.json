@@ -1,0 +1,225 @@
+{
+  "version": "metric-registry-v1",
+  "purpose": "Cross-study metric governance for display, export, and assistant-generated study behavior.",
+  "statuses": {
+    "headline": "Primary user-facing truth for the study context. Safe to summarize first.",
+    "diagnostic": "Useful supporting evidence. Show sample size, caveat, or calculation context.",
+    "suppressed": "Do not display or export as a metric value until the required evidence threshold is met."
+  },
+  "thresholds": {
+    "minimumAnnualizedCalendarDays": 365,
+    "minimumDailyReturnObservations": 200,
+    "minimumCrediblePercentileHistory": 20,
+    "drawdownMaterialityThreshold": 0.001
+  },
+  "issueSeverities": [
+    "error",
+    "warning"
+  ],
+  "issueCodes": [
+    "metric.domain_mismatch",
+    "metric.export_unsafe",
+    "metric.headline_needs_context",
+    "metric.headline_unsafe",
+    "metric.id_required",
+    "metric.label_mismatch",
+    "metric.status_invalid",
+    "metric.status_mismatch",
+    "metric.unknown"
+  ],
+  "rules": [
+    {
+      "id": "risk.total_return",
+      "label": "Total Return",
+      "domains": [
+        "risk-adjusted-return"
+      ],
+      "defaultStatus": "headline",
+      "headlineWhen": "Always safe as the primary period-return truth.",
+      "diagnosticWhen": "Can move to diagnostic when a full annualized return clears headline thresholds.",
+      "suppressedWhen": "Never suppressed when the period return is computable.",
+      "exportBehavior": "Exportable with the same label used in the study view."
+    },
+    {
+      "id": "risk.annualized_return",
+      "label": "CAGR / Annualized Pace",
+      "domains": [
+        "risk-adjusted-return"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Calendar window is at least 365 days and has at least 200 return observations.",
+      "diagnosticWhen": "Window or return sample is thin; label as Annualized Pace instead of CAGR.",
+      "suppressedWhen": "Never suppressed when computable, but must not headline below thresholds.",
+      "exportBehavior": "Export as CAGR only when headline-eligible; otherwise export as Annualized Pace."
+    },
+    {
+      "id": "risk.calmar_ratio",
+      "label": "Calmar Ratio",
+      "domains": [
+        "risk-adjusted-return"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Do not headline by default; it depends on annualized return.",
+      "diagnosticWhen": "Annualized return clears headline thresholds.",
+      "suppressedWhen": "Use Return / Max DD instead when annualized return is too fragile.",
+      "exportBehavior": "Export as Calmar Ratio only when annualized return is headline-eligible."
+    },
+    {
+      "id": "risk.return_drawdown_ratio",
+      "label": "Return / Max DD",
+      "domains": [
+        "risk-adjusted-return"
+      ],
+      "defaultStatus": "headline",
+      "headlineWhen": "Use on short or thin windows instead of Calmar.",
+      "diagnosticWhen": "Usually replaced by Calmar once annualized return clears thresholds.",
+      "suppressedWhen": "Suppressed when total return or max drawdown is unavailable.",
+      "exportBehavior": "Export only when Calmar is not appropriate."
+    },
+    {
+      "id": "risk.volatility",
+      "label": "Volatility",
+      "domains": [
+        "risk-adjusted-return"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Do not headline by default; it is distribution context, not return outcome.",
+      "diagnosticWhen": "Always show with return-observation count when computable.",
+      "suppressedWhen": "Suppressed when return observations are unavailable.",
+      "exportBehavior": "Export with sample-count note."
+    },
+    {
+      "id": "risk.sharpe_ratio",
+      "label": "Sharpe Ratio",
+      "domains": [
+        "risk-adjusted-return"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Do not headline by default because annualized ratios imply precision.",
+      "diagnosticWhen": "Show with return-observation count and risk-free-rate context.",
+      "suppressedWhen": "Suppressed when volatility or excess return cannot be computed.",
+      "exportBehavior": "Export with sample-count note."
+    },
+    {
+      "id": "risk.sortino_ratio",
+      "label": "Sortino Ratio",
+      "domains": [
+        "risk-adjusted-return"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Do not headline by default because annualized downside ratios imply precision.",
+      "diagnosticWhen": "Show with return-observation count and downside-deviation context.",
+      "suppressedWhen": "Suppressed when downside deviation or excess return cannot be computed.",
+      "exportBehavior": "Export with sample-count note."
+    },
+    {
+      "id": "relative.relative_wealth",
+      "label": "Relative Wealth",
+      "domains": [
+        "relative-performance"
+      ],
+      "defaultStatus": "headline",
+      "headlineWhen": "Always safe as terminal wealth difference across the overlap.",
+      "diagnosticWhen": "Rarely diagnostic; it is the primary relative-performance truth.",
+      "suppressedWhen": "Suppressed only when aligned overlap cannot be computed.",
+      "exportBehavior": "Always exportable with overlap context."
+    },
+    {
+      "id": "relative.active_return",
+      "label": "Active Return",
+      "domains": [
+        "relative-performance"
+      ],
+      "defaultStatus": "headline",
+      "headlineWhen": "Safe as asset total return minus benchmark total return across the overlap.",
+      "diagnosticWhen": "Can support relative wealth when a view has limited headline space.",
+      "suppressedWhen": "Suppressed only when aligned overlap cannot be computed.",
+      "exportBehavior": "Always exportable with overlap context."
+    },
+    {
+      "id": "relative.annualized_spread",
+      "label": "CAGR Spread / Annualized Pace Spread",
+      "domains": [
+        "relative-performance"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Overlap is at least 365 days and has at least 200 aligned return observations.",
+      "diagnosticWhen": "Overlap is short or thin; label as Annualized Pace Spread.",
+      "suppressedWhen": "Suppressed only when aligned annualized returns cannot be computed.",
+      "exportBehavior": "Export with the label selected by the annualization policy."
+    },
+    {
+      "id": "options.historical_percentile",
+      "label": "Historical Percentile",
+      "domains": [
+        "monthly-straddle",
+        "options-screener"
+      ],
+      "defaultStatus": "suppressed",
+      "headlineWhen": "Do not headline by default; percentiles are context metrics.",
+      "diagnosticWhen": "At least 20 comparable history observations exist.",
+      "suppressedWhen": "Fewer than 20 comparable history observations exist.",
+      "exportBehavior": "Export blank values while suppressed; export percentile values only after depth clears."
+    },
+    {
+      "id": "seasonality.sample_depth",
+      "label": "Sample Depth",
+      "domains": [
+        "seasonality"
+      ],
+      "defaultStatus": "headline",
+      "headlineWhen": "Use monthly row count and bucket depth as the primary confidence read.",
+      "diagnosticWhen": "Never demote below years observed for thin samples.",
+      "suppressedWhen": "Suppressed only when no monthly rows exist.",
+      "exportBehavior": "Export monthly rows and bucket-depth fields."
+    },
+    {
+      "id": "seasonality.years_observed",
+      "label": "Years Observed",
+      "domains": [
+        "seasonality"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Do not headline by default because partial years can overstate sample depth.",
+      "diagnosticWhen": "Use as context beside bucket observations.",
+      "suppressedWhen": "Suppressed only when unavailable.",
+      "exportBehavior": "Exportable as context, not as the primary confidence headline."
+    },
+    {
+      "id": "drawdown.material_episodes",
+      "label": "Material Drawdowns",
+      "domains": [
+        "drawdown-study"
+      ],
+      "defaultStatus": "headline",
+      "headlineWhen": "Episode count uses the materiality threshold to avoid microscopic noise.",
+      "diagnosticWhen": "Raw underwater path remains diagnostic context.",
+      "suppressedWhen": "Suppressed only when the series cannot form drawdown episodes.",
+      "exportBehavior": "Export threshold and material episode counts together."
+    },
+    {
+      "id": "sip.cohort_xirr",
+      "label": "Cohort XIRR",
+      "domains": [
+        "sip-simulator"
+      ],
+      "defaultStatus": "diagnostic",
+      "headlineWhen": "Do not headline alone when cohorts have different contribution counts.",
+      "diagnosticWhen": "Use with terminal value and visible contribution count.",
+      "suppressedWhen": "Suppressed only when cash flows cannot form XIRR.",
+      "exportBehavior": "Export with same-terminal cohort comparison note."
+    },
+    {
+      "id": "lumpsum_vs_sip.terminal_wealth",
+      "label": "Terminal Wealth",
+      "domains": [
+        "lumpsum-vs-sip"
+      ],
+      "defaultStatus": "headline",
+      "headlineWhen": "Always the win criterion for lumpsum versus SIP cohorts.",
+      "diagnosticWhen": "CAGR and XIRR remain diagnostic because capital timing differs.",
+      "suppressedWhen": "Suppressed only when cohort terminal values cannot be computed.",
+      "exportBehavior": "Export win criterion and return-rate caveat together."
+    }
+  ]
+}

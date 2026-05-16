@@ -1,0 +1,358 @@
+{
+  "version": "study-plan-v1",
+  "purpose": "Deterministic contract for AI-generated study route proposals before execution.",
+  "requiredFields": [
+    "version",
+    "studyId",
+    "requiresConfirmation"
+  ],
+  "optionalFields": [
+    "viewId",
+    "params",
+    "metricProposals"
+  ],
+  "issueSeverities": [
+    "error",
+    "warning"
+  ],
+  "issueCodes": [
+    "confirmation.required",
+    "date.invalid",
+    "date.partial",
+    "date.range_invalid",
+    "metric.policy_error",
+    "metric.policy_warning",
+    "metric_proposals.invalid",
+    "numeric.invalid",
+    "param.unsupported",
+    "params.invalid",
+    "plan.not_object",
+    "study.unknown",
+    "version.invalid",
+    "view.defaulted",
+    "view.unsupported"
+  ],
+  "paramDefinitions": {
+    "subject": {
+      "label": "Subject",
+      "type": "text",
+      "description": "Asset, index, dataset, or symbol query used by index-style studies."
+    },
+    "start": {
+      "label": "Start Date",
+      "type": "date",
+      "format": "YYYY-MM-DD",
+      "description": "Requested start date. Actual loaded coverage may be clipped by available data."
+    },
+    "end": {
+      "label": "End Date",
+      "type": "date",
+      "format": "YYYY-MM-DD",
+      "description": "Requested end date. Actual loaded coverage may be clipped by available data."
+    },
+    "rf": {
+      "label": "Risk-Free Rate",
+      "type": "percent",
+      "min": 0,
+      "max": 100,
+      "description": "Annual risk-free rate percentage."
+    },
+    "demo": {
+      "label": "Demo Data",
+      "type": "boolean",
+      "description": "Whether to use built-in demo data instead of resolved market data."
+    },
+    "benchmark": {
+      "label": "Benchmark",
+      "type": "text",
+      "description": "Benchmark dataset or symbol for relative comparison."
+    },
+    "basis": {
+      "label": "Comparison Basis",
+      "type": "enum",
+      "allowedValues": [
+        "local",
+        "common"
+      ],
+      "description": "Whether to compare in local currencies or a common base currency."
+    },
+    "baseCurrency": {
+      "label": "Base Currency",
+      "type": "currency-code",
+      "description": "Three-letter target currency for common-currency comparison."
+    },
+    "market": {
+      "label": "Market",
+      "type": "catalog-id",
+      "description": "Sector snapshot market preset id."
+    },
+    "h": {
+      "label": "Horizon",
+      "type": "integer",
+      "description": "Study-specific horizon parameter."
+    },
+    "metric": {
+      "label": "Metric",
+      "type": "catalog-id",
+      "description": "Study-specific metric key."
+    },
+    "dte": {
+      "label": "Minimum DTE",
+      "type": "integer",
+      "min": 7,
+      "max": 365,
+      "description": "Minimum option days to expiry."
+    },
+    "count": {
+      "label": "Contract Count",
+      "type": "integer",
+      "min": 1,
+      "max": 8,
+      "description": "Number of option expiries/contracts to inspect."
+    },
+    "u": {
+      "label": "Universe",
+      "type": "catalog-id",
+      "description": "Options screener or validation universe id."
+    },
+    "bias": {
+      "label": "Bias",
+      "type": "enum",
+      "allowedValues": [
+        "rich",
+        "cheap"
+      ],
+      "description": "Options screener volatility bias."
+    },
+    "advice": {
+      "label": "Advice Filter",
+      "type": "catalog-id",
+      "description": "Options screener candidate/advice filter."
+    },
+    "preset": {
+      "label": "Preset",
+      "type": "catalog-id",
+      "description": "Options trade idea preset id."
+    },
+    "sort": {
+      "label": "Sort",
+      "type": "catalog-id",
+      "description": "Options screener sort key."
+    },
+    "group": {
+      "label": "Group",
+      "type": "catalog-id",
+      "description": "Options validation grouping key."
+    },
+    "partial": {
+      "label": "Include Partial Months",
+      "type": "boolean",
+      "description": "Whether seasonality should include partial boundary months."
+    },
+    "contribution": {
+      "label": "Monthly Contribution",
+      "type": "number",
+      "minExclusive": 0,
+      "description": "Monthly SIP contribution amount."
+    },
+    "total": {
+      "label": "Total Investment",
+      "type": "number",
+      "minExclusive": 0,
+      "description": "Total investment amount for lumpsum versus SIP comparison."
+    },
+    "horizon": {
+      "label": "Horizon Years",
+      "type": "number",
+      "minExclusive": 0,
+      "description": "Comparison horizon in years."
+    }
+  },
+  "confirmationPreviewFields": [
+    "ok",
+    "canRun",
+    "studyTitle",
+    "viewLabel",
+    "routeHash",
+    "paramItems",
+    "errors",
+    "warnings",
+    "issues",
+    "metricErrors",
+    "metricWarnings"
+  ],
+  "routeConversionFields": [
+    "ok",
+    "input",
+    "normalizedRouteHash",
+    "rawPlan",
+    "normalizedPlan",
+    "routeHash",
+    "issues",
+    "errors",
+    "warnings"
+  ],
+  "routeInputFormats": [
+    "#studyId/viewId?param=value",
+    "studyId/viewId?param=value",
+    "/studyId/viewId?param=value",
+    "http://127.0.0.1:8000/#studyId/viewId?param=value"
+  ],
+  "routeParamRules": {
+    "risk-adjusted-return": {
+      "overview": [
+        "demo",
+        "end",
+        "rf",
+        "start",
+        "subject"
+      ],
+      "relative": [
+        "baseCurrency",
+        "basis",
+        "benchmark",
+        "end",
+        "rf",
+        "start",
+        "subject"
+      ],
+      "visuals": [
+        "end",
+        "start",
+        "subject"
+      ]
+    },
+    "sector-snapshot": {
+      "overview": [
+        "h",
+        "market",
+        "metric",
+        "rf"
+      ],
+      "visuals": [
+        "h",
+        "market",
+        "metric",
+        "rf"
+      ]
+    },
+    "monthly-straddle": {
+      "overview": [
+        "count",
+        "dte",
+        "subject"
+      ],
+      "visuals": [
+        "count",
+        "dte",
+        "subject"
+      ]
+    },
+    "options-screener": {
+      "overview": [
+        "advice",
+        "bias",
+        "dte",
+        "preset",
+        "sort",
+        "u"
+      ],
+      "visuals": [
+        "advice",
+        "bias",
+        "dte",
+        "preset",
+        "sort",
+        "u"
+      ],
+      "archive": [
+        "advice",
+        "bias",
+        "dte",
+        "preset",
+        "sort",
+        "u"
+      ]
+    },
+    "options-validation": {
+      "overview": [
+        "group",
+        "h",
+        "u"
+      ],
+      "visuals": [
+        "group",
+        "h",
+        "u"
+      ]
+    },
+    "seasonality": {
+      "overview": [
+        "end",
+        "partial",
+        "start",
+        "subject"
+      ],
+      "visuals": [
+        "end",
+        "partial",
+        "start",
+        "subject"
+      ]
+    },
+    "rolling-returns": {
+      "overview": [
+        "end",
+        "start",
+        "subject"
+      ],
+      "visuals": [
+        "end",
+        "start",
+        "subject"
+      ]
+    },
+    "sip-simulator": {
+      "overview": [
+        "contribution",
+        "end",
+        "start",
+        "subject"
+      ],
+      "visuals": [
+        "contribution",
+        "end",
+        "start",
+        "subject"
+      ]
+    },
+    "lumpsum-vs-sip": {
+      "overview": [
+        "end",
+        "horizon",
+        "start",
+        "subject",
+        "total"
+      ],
+      "visuals": [
+        "end",
+        "horizon",
+        "start",
+        "subject",
+        "total"
+      ]
+    },
+    "drawdown-study": {
+      "overview": [
+        "end",
+        "start",
+        "subject"
+      ],
+      "visuals": [
+        "end",
+        "start",
+        "subject"
+      ]
+    }
+  }
+}

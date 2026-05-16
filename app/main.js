@@ -1,7 +1,21 @@
 import { studyRegistry, getStudyById } from "./studies/registry.js";
 import {
+  deleteAutomationConfig,
+  deleteStudyPlanRecipe,
   discoverSymbols,
+  draftStudyBuilderPlan,
+  fetchAssistantReadiness,
+  fetchAutomationState,
+  fetchRuntimeHealth,
+  fetchStudyPlanRecipes,
+  fetchStudyRunBrief,
+  fetchStudyRuns,
   loadRememberedIndexCatalog,
+  recordStudyRunLedgerEntry,
+  runAutomationNow,
+  saveAutomationConfig,
+  saveStudyPlanRecipe,
+  validateStudyBuilderPlan,
 } from "./lib/syncedData.js";
 import {
   getActiveSubjectQuery,
@@ -13,7 +27,15 @@ import {
   mergeSelectionSuggestions,
 } from "./studies/shared/indexSelection.js";
 import {
+  chooseAutoResolvedSuggestion,
+  isExplicitMarketSymbol,
+  normalizeDiscoveryText,
+  parseManualSelectionInput,
+  shouldSearchRemoteSymbols,
+} from "./lib/symbolDiscovery.js";
+import {
   getRecentRuns,
+  mergeStudyRuns,
   subscribeRunHistory,
 } from "./studies/shared/runHistory.js";
 import {
@@ -21,9 +43,22 @@ import {
   getDefaultStudyViewId,
   getStudyViews,
   getStudyViewById,
-  parseStudyViewHash,
   renderStudyShell,
 } from "./studies/studyShell.js";
+import { getStudyKickerLabel } from "./studies/shared/studyOrdinal.js";
+import {
+  DEFAULT_SETTINGS_SECTION,
+  STUDY_BUILDER_SETTINGS_SECTION,
+  buildSettingsRouteHash,
+  isRecognizedSettingsRoute,
+  parseAppRouteHash,
+} from "./appRoute.js";
+import {
+  mountAutomationSettingsPage,
+  renderAutomationSidebarSummary,
+} from "./settings/automationSettings.js";
+import { mountStudyRunHistorySettingsPage } from "./settings/studyRunHistorySettings.js";
+import { mountStudyBuilderSettingsPage } from "./settings/studyBuilderSettings.js";
 
 const studySelect = document.querySelector("#study-select");
 const studyMeta = document.querySelector("#study-meta");
@@ -33,14 +68,19 @@ const activeSubjectForm = document.querySelector("#active-subject-form");
 const activeSubjectInput = document.querySelector("#active-subject-input");
 const activeSubjectStatus = document.querySelector("#active-subject-status");
 const activeSubjectResults = document.querySelector("#active-subject-results");
+const automationSidebarSummaryRoot = document.querySelector("#automation-sidebar-summary");
 
-let unmountCurrentStudy = null;
+let unmountCurrentView = null;
 let activeSubjectSuggestions = [];
 let activeSubjectSuggestionQuery = "";
 let activeSubjectRememberedCatalog = [];
 let activeSubjectRememberedCatalogPromise = null;
 let activeSubjectDiscoveryTimer = null;
 let activeSubjectDiscoveryToken = 0;
+let automationState = null;
+let automationRuntimeHealth = null;
+let automationStatusMessage = "";
+const automationSubscribers = new Set();
 
 const HTML_ESCAPE_MAP = {
   "&": "&amp;",
@@ -52,22 +92,6 @@ const HTML_ESCAPE_MAP = {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (match) => HTML_ESCAPE_MAP[match]);
-}
-
-function normalizeDiscoveryText(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-function isLikelyDirectSymbol(query) {
-  const trimmed = String(query || "").trim();
-  if (!trimmed) {
-    return false;
-  }
-
-  return /[.=^]/.test(trimmed) || /^[A-Z0-9.-]{1,18}$/.test(trimmed);
 }
 
 function clearActiveSubjectSuggestions() {
@@ -192,33 +216,6 @@ function combineActiveSubjectSuggestions(localSuggestions, remoteSuggestions) {
     .slice(0, 8);
 }
 
-function chooseAutoResolvedSuggestion(query, suggestions) {
-  if (!suggestions.length) {
-    return null;
-  }
-
-  const trimmedQuery = String(query || "").trim();
-  const [topSuggestion, nextSuggestion] = suggestions;
-  const topScore = Number(topSuggestion.matchScore || 0);
-  const nextScore = Number(nextSuggestion?.matchScore || 0);
-  const isProviderSuggestion = topSuggestion.kind === "provider";
-
-  if (!isProviderSuggestion && topScore >= 210) {
-    return topSuggestion;
-  }
-
-  if (
-    !isProviderSuggestion &&
-    trimmedQuery.length >= 4 &&
-    topScore >= 180 &&
-    topScore - nextScore >= 15
-  ) {
-    return topSuggestion;
-  }
-
-  return null;
-}
-
 async function refreshActiveSubjectSuggestions({
   query = activeSubjectInput.value,
   includeRemote = true,
@@ -235,6 +232,7 @@ async function refreshActiveSubjectSuggestions({
   await ensureActiveSubjectCatalog();
   const localSuggestions = buildLocalActiveSubjectSuggestions(trimmedQuery);
   let combinedSuggestions = localSuggestions;
+  let providerWarning = "";
 
   if (showLoading) {
     renderActiveSubjectStatus(
@@ -245,7 +243,7 @@ async function refreshActiveSubjectSuggestions({
   }
 
   const shouldSearchRemote =
-    includeRemote && trimmedQuery.length >= 2 && !isLikelyDirectSymbol(trimmedQuery);
+    includeRemote && shouldSearchRemoteSymbols(trimmedQuery);
   if (shouldSearchRemote) {
     const requestToken = ++activeSubjectDiscoveryToken;
     try {
@@ -264,21 +262,40 @@ async function refreshActiveSubjectSuggestions({
         localSuggestions,
         Array.isArray(payload.results) ? payload.results : [],
       );
-      if (payload.warning) {
-        renderActiveSubjectStatus(payload.warning);
-      }
+      providerWarning = String(payload.warning || "").trim();
     } catch (error) {
-      renderActiveSubjectStatus(error?.message || "Could not search symbol matches.");
+      providerWarning =
+        error?.message || "Could not search symbol matches.";
     }
   }
 
   activeSubjectSuggestions = combinedSuggestions;
   renderActiveSubjectSuggestions();
-  if (!combinedSuggestions.length) {
-    renderActiveSubjectStatus("No symbol matches found yet.");
-  } else if (!showLoading) {
+  if (combinedSuggestions.length) {
     renderActiveSubjectStatus("");
+    return combinedSuggestions;
   }
+
+  const manualSelectionInput = parseManualSelectionInput(trimmedQuery);
+
+  if (providerWarning && !isExplicitMarketSymbol(trimmedQuery) && !manualSelectionInput) {
+    renderActiveSubjectStatus(providerWarning);
+    return combinedSuggestions;
+  }
+
+  if (manualSelectionInput) {
+    renderActiveSubjectStatus(
+      `Press Enter to use ${manualSelectionInput.label} (${manualSelectionInput.symbol}) as a local manual entry.`,
+    );
+    return combinedSuggestions;
+  }
+
+  if (isExplicitMarketSymbol(trimmedQuery)) {
+    renderActiveSubjectStatus("Press Enter to try the raw symbol.");
+    return combinedSuggestions;
+  }
+
+  renderActiveSubjectStatus("No symbol matches found yet.");
   return combinedSuggestions;
 }
 
@@ -349,6 +366,16 @@ function renderStudyMeta(study, activeView) {
   `;
 }
 
+function syncStudyKickers(root, studyId) {
+  if (!root || !studyId) {
+    return;
+  }
+  const kickerLabel = getStudyKickerLabel(studyId);
+  root.querySelectorAll(".study-kicker").forEach((node) => {
+    node.textContent = kickerLabel;
+  });
+}
+
 function renderActiveSubjectControl() {
   activeSubjectInput.value = getActiveSubjectQuery();
 }
@@ -364,16 +391,20 @@ function applyActiveSubjectQuery(nextSubject) {
   clearActiveSubjectSuggestions();
 
   const route = parseRouteHash();
-  const study = getStudyById(route.studyId) || studyRegistry[0] || null;
+  const study =
+    route.kind === "study"
+      ? getStudyById(route.studyId) || studyRegistry[0] || null
+      : getStudyById(studySelect.value) || studyRegistry[0] || null;
   if (!study) {
     return;
   }
 
   const activeView = getStudyViewById(
     study,
-    route.viewId || getDefaultStudyViewId(study),
+    route.kind === "study" ? route.viewId || getDefaultStudyViewId(study) : getDefaultStudyViewId(study),
   );
-  const nextParams = new URLSearchParams(route.params);
+  const nextParams =
+    route.kind === "study" ? new URLSearchParams(route.params) : new URLSearchParams();
   nextParams.set("subject", nextSubject);
   const targetHash = buildStudyViewHash(study.id, activeView.id, nextParams);
 
@@ -382,7 +413,7 @@ function applyActiveSubjectQuery(nextSubject) {
     return;
   }
 
-  mountStudyRoute();
+  mountCurrentRoute();
 }
 
 async function applyActiveSubjectFromSidebar() {
@@ -390,11 +421,6 @@ async function applyActiveSubjectFromSidebar() {
   if (!nextSubject) {
     activeSubjectInput.value = getActiveSubjectQuery();
     clearActiveSubjectSuggestions();
-    return;
-  }
-
-  if (isLikelyDirectSymbol(nextSubject)) {
-    applyActiveSubjectQuery(nextSubject);
     return;
   }
 
@@ -426,7 +452,7 @@ async function applyActiveSubjectFromSidebar() {
 }
 
 function parseRouteHash() {
-  return parseStudyViewHash();
+  return parseAppRouteHash();
 }
 
 function formatHistoryTimestamp(value) {
@@ -447,7 +473,7 @@ function renderRunHistory() {
   const runs = getRecentRuns();
   if (!runs.length) {
     runHistoryRoot.innerHTML = `
-      <p class="summary-meta">Completed studies will appear here.</p>
+      <p class="summary-meta">Completed local study runs will appear here.</p>
     `;
     return;
   }
@@ -461,8 +487,11 @@ function renderRunHistory() {
               <span class="run-history-main">${escapeHtml(run.selectionLabel)}</span>
               <span class="run-history-meta">${escapeHtml(run.studyTitle)} · ${escapeHtml(formatHistoryTimestamp(run.completedAt))}</span>
               ${
-                run.requestedStartDate && run.requestedEndDate
-                  ? `<span class="run-history-meta">${escapeHtml(run.requestedStartDate)} to ${escapeHtml(run.requestedEndDate)}</span>`
+                (run.actualStartDate && run.actualEndDate) ||
+                (run.requestedStartDate && run.requestedEndDate)
+                  ? `<span class="run-history-meta">${escapeHtml(run.actualStartDate || run.requestedStartDate)} to ${escapeHtml(run.actualEndDate || run.requestedEndDate)}</span>`
+                  : run.detailLabel
+                    ? `<span class="run-history-meta">${escapeHtml(run.detailLabel)}</span>`
                   : ""
               }
             </button>
@@ -471,6 +500,174 @@ function renderRunHistory() {
         .join("")}
     </div>
   `;
+}
+
+function renderSettingsMeta(section = DEFAULT_SETTINGS_SECTION) {
+  const metaBySection = {
+    automations: {
+      currentViewLabel: "Automations",
+      summaryText:
+        "Configure app-level maintenance runs and inspect runtime health outside the study flow.",
+      inputText:
+        "Automation timing, local universe ids, options collector scope, and health thresholds.",
+      supportPills: `
+        <span class="meta-pill ready">Automations</span>
+        <span class="meta-pill ready">Runtime Health</span>
+      `,
+    },
+    history: {
+      currentViewLabel: "Run History",
+      summaryText:
+        "Inspect the durable backend ledger for completed study runs, recorded windows, summary metrics, and evidence links.",
+      inputText:
+        "Study filters, run status, result limits, and recorded run metadata.",
+      supportPills: `
+        <span class="meta-pill ready">Durable Ledger</span>
+        <span class="meta-pill ready">Run Summaries</span>
+        <span class="meta-pill ready">Evidence Links</span>
+      `,
+    },
+    [STUDY_BUILDER_SETTINGS_SECTION]: {
+      currentViewLabel: "Study Builder",
+      summaryText:
+        "Validate assistant-generated StudyPlan JSON and preview the route handoff before execution.",
+      inputText:
+        "StudyPlan JSON, route params, deterministic validation issues, and confirmation preview fields.",
+      supportPills: `
+        <span class="meta-pill ready">StudyPlan v1</span>
+        <span class="meta-pill ready">Validation Issues</span>
+        <span class="meta-pill ready">Route Preview</span>
+      `,
+    },
+  };
+  const meta = metaBySection[section] || metaBySection[DEFAULT_SETTINGS_SECTION];
+  studyMeta.innerHTML = `
+    <div class="meta-row">
+      <p class="meta-label">Summary</p>
+      <p>${meta.summaryText}</p>
+    </div>
+    <div class="meta-row">
+      <p class="meta-label">Inputs</p>
+      <p>${meta.inputText}</p>
+    </div>
+    <div class="meta-row">
+      <p class="meta-label">Current View</p>
+      <p>${meta.currentViewLabel}</p>
+    </div>
+    <div class="meta-row">
+      <p class="meta-label">Supports</p>
+      <div class="meta-pill-row">
+        ${meta.supportPills}
+      </div>
+    </div>
+  `;
+}
+
+function setAutomationStatusMessage(message = "") {
+  automationStatusMessage = String(message || "");
+  notifyAutomationSubscribers();
+}
+
+function subscribeAutomationState(listener) {
+  automationSubscribers.add(listener);
+  return () => {
+    automationSubscribers.delete(listener);
+  };
+}
+
+function renderSidebarAutomationSummary() {
+  if (!automationSidebarSummaryRoot) {
+    return;
+  }
+  automationSidebarSummaryRoot.innerHTML = renderAutomationSidebarSummary(
+    automationState,
+    automationRuntimeHealth,
+  );
+}
+
+function notifyAutomationSubscribers() {
+  renderSidebarAutomationSummary();
+  automationSubscribers.forEach((listener) => {
+    listener({
+      automationState,
+      automationRuntimeHealth,
+      automationStatusMessage,
+    });
+  });
+}
+
+async function refreshAutomationData(statusMessage = "") {
+  if (statusMessage) {
+    automationStatusMessage = statusMessage;
+    notifyAutomationSubscribers();
+  }
+  try {
+    const [nextAutomationState, nextRuntimeHealth] = await Promise.all([
+      fetchAutomationState(),
+      fetchRuntimeHealth(),
+    ]);
+    automationState = nextAutomationState;
+    automationRuntimeHealth = nextRuntimeHealth;
+    if (statusMessage) {
+      automationStatusMessage = "";
+    }
+    notifyAutomationSubscribers();
+    return {
+      state: automationState,
+      runtimeHealth: automationRuntimeHealth,
+    };
+  } catch (error) {
+    automationStatusMessage =
+      error?.message || "Could not load automation state.";
+    notifyAutomationSubscribers();
+    throw error;
+  }
+}
+
+async function hydrateDurableRunHistory() {
+  try {
+    const payload = await fetchStudyRuns();
+    if (Array.isArray(payload.runs) && payload.runs.length) {
+      mergeStudyRuns(payload.runs);
+      return;
+    }
+
+    const localRuns = getRecentRuns();
+    if (!localRuns.length) {
+      return;
+    }
+
+    await Promise.allSettled(
+      localRuns.map((run) => recordStudyRunLedgerEntry(run)),
+    );
+
+    const refreshedPayload = await fetchStudyRuns();
+    mergeStudyRuns(refreshedPayload.runs);
+  } catch (error) {
+    // Local recents still work without the backend ledger. Keep startup quiet.
+  }
+}
+
+async function saveAutomation(payload) {
+  const response = await saveAutomationConfig(payload);
+  automationState = response.state;
+  notifyAutomationSubscribers();
+  return response;
+}
+
+async function runAutomation(automationId) {
+  const response = await runAutomationNow({ automationId });
+  automationState = response.state;
+  automationRuntimeHealth = response.result?.runtimeHealth || automationRuntimeHealth;
+  notifyAutomationSubscribers();
+  return response;
+}
+
+async function deleteAutomation(automationId) {
+  const response = await deleteAutomationConfig({ automationId });
+  automationState = response.state;
+  notifyAutomationSubscribers();
+  return response;
 }
 
 function handleRunHistoryClick(event) {
@@ -484,18 +681,28 @@ function handleRunHistoryClick(event) {
     return;
   }
 
+  if (run.routeHash) {
+    if (window.location.hash !== run.routeHash) {
+      window.location.hash = run.routeHash;
+      return;
+    }
+
+    mountCurrentRoute();
+    return;
+  }
+
   setActiveSubjectQuery(run.subjectQuery);
   const targetHash = buildStudyViewHash(run.studyId, "overview", {
     subject: run.subjectQuery,
-    start: run.requestedStartDate,
-    end: run.requestedEndDate,
+    start: run.actualStartDate || run.requestedStartDate,
+    end: run.actualEndDate || run.requestedEndDate,
   });
   if (window.location.hash !== targetHash) {
     window.location.hash = targetHash;
     return;
   }
 
-  mountStudyRoute();
+  mountCurrentRoute();
 }
 
 async function writeClipboardText(text) {
@@ -540,8 +747,14 @@ function handleStudyRootClick(event) {
   copyCurrentStudyLink(copyLinkTrigger);
 }
 
-function mountStudyRoute() {
-  const route = parseRouteHash();
+function unmountWorkspaceView() {
+  if (typeof unmountCurrentView === "function") {
+    unmountCurrentView();
+  }
+  unmountCurrentView = null;
+}
+
+function mountStudyRoute(route) {
   const study = getStudyById(route.studyId) || studyRegistry[0] || null;
 
   if (!study) {
@@ -559,16 +772,78 @@ function mountStudyRoute() {
     window.history.replaceState(null, "", targetHash);
   }
 
-  if (typeof unmountCurrentStudy === "function") {
-    unmountCurrentStudy();
-  }
+  unmountWorkspaceView();
 
   studySelect.value = study.id;
   renderStudyMeta(study, activeView);
   studyRoot.innerHTML = renderStudyShell(study, activeView.id, route.params);
 
   const viewRoot = studyRoot.querySelector("#study-view-root");
-  unmountCurrentStudy = activeView.mount(viewRoot);
+  unmountCurrentView = activeView.mount(viewRoot);
+  syncStudyKickers(viewRoot, study.id);
+}
+
+function mountSettingsRoute(route) {
+  const targetHash = buildSettingsRouteHash(route.section || DEFAULT_SETTINGS_SECTION, route.params);
+  if (!isRecognizedSettingsRoute(route) || window.location.hash !== targetHash) {
+    window.history.replaceState(null, "", targetHash);
+  }
+
+  unmountWorkspaceView();
+  renderSettingsMeta(route.section);
+  studyRoot.innerHTML = "";
+  try {
+    if (route.section === "history") {
+      unmountCurrentView = mountStudyRunHistorySettingsPage(studyRoot, {
+        initialParams: route.params,
+        fetchStudyRunBrief,
+        fetchStudyRuns,
+      });
+      return;
+    }
+
+    if (route.section === STUDY_BUILDER_SETTINGS_SECTION) {
+      unmountCurrentView = mountStudyBuilderSettingsPage(studyRoot, {
+        deleteStudyPlanRecipe,
+        draftStudyBuilderPlan,
+        fetchAssistantReadiness,
+        fetchStudyPlanRecipes,
+        saveStudyPlanRecipe,
+        validateStudyBuilderPlan,
+      });
+      return;
+    }
+
+    unmountCurrentView = mountAutomationSettingsPage(studyRoot, {
+      getAutomationState: () => automationState,
+      getRuntimeHealth: () => automationRuntimeHealth,
+      getStatusMessage: () => automationStatusMessage,
+      setStatusMessage: setAutomationStatusMessage,
+      subscribe: subscribeAutomationState,
+      refreshAutomationData,
+      saveAutomation,
+      runAutomation,
+      deleteAutomation,
+    });
+  } catch (error) {
+    studyRoot.innerHTML = `
+      <section class="card settings-card">
+        <p class="meta-label">Settings Error</p>
+        <h2>${escapeHtml(route.section === "history" ? "Run History" : route.section === STUDY_BUILDER_SETTINGS_SECTION ? "Study Builder" : "Automations")} could not load.</h2>
+        <p class="summary-meta">${escapeHtml(error?.message || "Unknown settings error.")}</p>
+      </section>
+    `;
+    unmountCurrentView = null;
+  }
+}
+
+function mountCurrentRoute() {
+  const route = parseRouteHash();
+  if (route.kind === "settings") {
+    mountSettingsRoute(route);
+    return;
+  }
+  mountStudyRoute(route);
 }
 
 function populateStudySelect() {
@@ -594,7 +869,7 @@ studySelect.addEventListener("change", (event) => {
     return;
   }
 
-  mountStudyRoute();
+  mountCurrentRoute();
 });
 runHistoryRoot.addEventListener("click", handleRunHistoryClick);
 studyRoot.addEventListener("click", handleStudyRootClick);
@@ -638,12 +913,16 @@ activeSubjectResults?.addEventListener("click", (event) => {
   applyActiveSubjectQuery(subjectQuery);
 });
 
-window.addEventListener("hashchange", mountStudyRoute);
+window.addEventListener("hashchange", mountCurrentRoute);
 subscribeActiveSubject(() => {
   renderActiveSubjectControl();
   clearActiveSubjectSuggestions();
   renderActiveSubjectStatus("");
   const route = parseRouteHash();
+  if (route.kind === "settings") {
+    renderSettingsMeta(route.section);
+    return;
+  }
   const study = getStudyById(route.studyId) || studyRegistry[0] || null;
   if (!study) {
     return;
@@ -660,4 +939,7 @@ subscribeRunHistory(renderRunHistory);
 populateStudySelect();
 renderActiveSubjectControl();
 renderRunHistory();
-mountStudyRoute();
+renderSidebarAutomationSummary();
+void hydrateDurableRunHistory();
+void refreshAutomationData();
+mountCurrentRoute();

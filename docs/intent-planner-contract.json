@@ -1,0 +1,198 @@
+{
+  "version": "intent-planner-v1",
+  "purpose": "Deterministic planning harness that maps simple user intents into study-plan-v1 drafts without AI calls.",
+  "outputFields": [
+    "version",
+    "intent",
+    "templateId",
+    "templateLabel",
+    "confidence",
+    "plan",
+    "preview",
+    "diagnostics"
+  ],
+  "diagnosticCodes": [
+    "intent.benchmark_defaulted",
+    "intent.date_defaulted",
+    "intent.empty",
+    "intent.subject_defaulted",
+    "intent.template_defaulted"
+  ],
+  "confidenceValues": [
+    "draft",
+    "needs-review",
+    "blocked"
+  ],
+  "hardLimits": [
+    "Planner output is only a draft.",
+    "StudyPlan validation remains authoritative.",
+    "Route handoff still requires the confirmation preview.",
+    "Unknown subjects are defaulted or surfaced as diagnostics; they are not provider-verified here."
+  ],
+  "templateRules": [
+    {
+      "id": "risk-relative",
+      "label": "Risk relative comparison",
+      "studyId": "risk-adjusted-return",
+      "viewId": "relative",
+      "keywords": [
+        "compare",
+        "versus",
+        " vs ",
+        "against",
+        "relative",
+        "benchmark"
+      ]
+    },
+    {
+      "id": "options-validation",
+      "label": "Options validation evidence",
+      "studyId": "options-validation",
+      "viewId": "overview",
+      "keywords": [
+        "validation",
+        "evidence",
+        "matured",
+        "beat implied"
+      ]
+    },
+    {
+      "id": "options-screener",
+      "label": "Options screener",
+      "studyId": "options-screener",
+      "viewId": "overview",
+      "keywords": [
+        "options screener",
+        "vrp",
+        "cheap vol",
+        "rich vol",
+        "sell vega",
+        "buy gamma"
+      ]
+    },
+    {
+      "id": "monthly-straddle",
+      "label": "Monthly straddle",
+      "studyId": "monthly-straddle",
+      "viewId": "overview",
+      "keywords": [
+        "straddle",
+        "implied move",
+        "option chain",
+        "front month"
+      ]
+    },
+    {
+      "id": "sector-snapshot",
+      "label": "Sector snapshot",
+      "studyId": "sector-snapshot",
+      "viewId": "overview",
+      "keywords": [
+        "sector",
+        "sectors",
+        "industry"
+      ]
+    },
+    {
+      "id": "lumpsum-vs-sip",
+      "label": "Lumpsum versus SIP",
+      "studyId": "lumpsum-vs-sip",
+      "viewId": "overview",
+      "keywords": [
+        "lumpsum",
+        "lump sum",
+        "versus sip",
+        "vs sip"
+      ]
+    },
+    {
+      "id": "sip-simulator",
+      "label": "SIP simulator",
+      "studyId": "sip-simulator",
+      "viewId": "overview",
+      "keywords": [
+        "sip",
+        "monthly contribution",
+        "installment"
+      ]
+    },
+    {
+      "id": "rolling-returns",
+      "label": "Rolling returns",
+      "studyId": "rolling-returns",
+      "viewId": "overview",
+      "keywords": [
+        "rolling",
+        "rolling return"
+      ]
+    },
+    {
+      "id": "seasonality",
+      "label": "Seasonality",
+      "studyId": "seasonality",
+      "viewId": "overview",
+      "keywords": [
+        "seasonality",
+        "month",
+        "monthly pattern",
+        "best month"
+      ]
+    },
+    {
+      "id": "drawdown-study",
+      "label": "Drawdown study",
+      "studyId": "drawdown-study",
+      "viewId": "overview",
+      "keywords": [
+        "drawdown",
+        "underwater",
+        "recovery"
+      ]
+    },
+    {
+      "id": "risk-overview",
+      "label": "Risk overview",
+      "studyId": "risk-adjusted-return",
+      "viewId": "overview",
+      "keywords": [
+        "risk",
+        "sharpe",
+        "sortino",
+        "return",
+        "cagr"
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "id": "compare-risk-relative",
+      "intent": "Compare Nifty 50 against Sensex from 2021 to 2024",
+      "expectedStudyId": "risk-adjusted-return",
+      "expectedViewId": "relative"
+    },
+    {
+      "id": "screen-options-vrp",
+      "intent": "Run the options screener for rich vol VRP opportunities",
+      "expectedStudyId": "options-screener",
+      "expectedViewId": "overview"
+    },
+    {
+      "id": "validate-options-evidence",
+      "intent": "Validate options evidence by candidate bucket over 10 days",
+      "expectedStudyId": "options-validation",
+      "expectedViewId": "overview"
+    },
+    {
+      "id": "inspect-front-straddle",
+      "intent": "Show AAPL front month straddle implied move",
+      "expectedStudyId": "monthly-straddle",
+      "expectedViewId": "overview"
+    },
+    {
+      "id": "review-drawdown",
+      "intent": "Show TSLA drawdown recovery",
+      "expectedStudyId": "drawdown-study",
+      "expectedViewId": "overview"
+    }
+  ]
+}
