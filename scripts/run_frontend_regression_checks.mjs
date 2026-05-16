@@ -863,6 +863,33 @@ async function testAssistantApiHelpers() {
       "assistant contract bundle helper should call the backend bundle endpoint with GET semantics",
     );
 
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "assistant-contract-bundle-v1",
+          contracts: {
+            assistant: { version: "wrong-assistant-contract-v1" },
+            metricRegistry: { rules: [] },
+            studyCatalog: { studies: [] },
+            studyPlan: { version: "study-plan-v1" },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidBundleContractMessage = "";
+    try {
+      await fetchAssistantContractBundle();
+    } catch (error) {
+      invalidBundleContractMessage = error?.message || "";
+    }
+    assert(
+      invalidBundleContractMessage.includes("invalid assistant contract bundle payload"),
+      "assistant contract bundle helper should reject wrong nested assistant contract versions",
+    );
+
     requests.length = 0;
     globalThis.fetch = async (url, init = {}) => {
       requests.push({ url: String(url), init });
@@ -1038,6 +1065,35 @@ async function testAssistantApiHelpers() {
       "assistant dry-run helper should reject executing success payloads",
     );
 
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "assistant-study-plan-dry-run-v1",
+          mode: "intent",
+          intent: "Compare Nifty 50 against Sensex",
+          readiness: { version: "assistant-readiness-v1", status: "ok" },
+          plannerResult: { version: "wrong-planner-v1" },
+          plan: { version: "study-plan-v1" },
+          validation: { ok: true },
+          preview: { canRun: true },
+          execution: { executed: false },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidDryRunNestedMessage = "";
+    try {
+      await dryRunAssistantStudyPlan({ intent: "Compare Nifty 50 against Sensex" });
+    } catch (error) {
+      invalidDryRunNestedMessage = error?.message || "";
+    }
+    assert(
+      invalidDryRunNestedMessage.includes("invalid assistant StudyPlan dry-run payload"),
+      "assistant dry-run helper should reject wrong nested planner versions",
+    );
+
     requests.length = 0;
     globalThis.fetch = async (url, init = {}) => {
       requests.push({ url: String(url), init });
@@ -1104,6 +1160,37 @@ async function testAssistantApiHelpers() {
       "assistant live-draft helper should reject executing success payloads",
     );
 
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "assistant-study-plan-live-draft-v1",
+          provider: "openai",
+          model: "gpt-test",
+          mode: "intent",
+          intent: "Compare Nifty 50 against Sensex",
+          readiness: { version: "assistant-readiness-v1", status: "ok" },
+          modelResult: { responseId: "resp_test", parsedJson: true },
+          plan: { version: "wrong-study-plan-v1" },
+          validation: { ok: true },
+          preview: { canRun: true },
+          execution: { executed: false },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidLiveDraftPlanMessage = "";
+    try {
+      await liveDraftAssistantStudyPlan({ intent: "Compare Nifty 50 against Sensex" });
+    } catch (error) {
+      invalidLiveDraftPlanMessage = error?.message || "";
+    }
+    assert(
+      invalidLiveDraftPlanMessage.includes("invalid assistant StudyPlan live-draft payload"),
+      "assistant live-draft helper should reject wrong nested StudyPlan versions",
+    );
+
     requests.length = 0;
     globalThis.fetch = async (url, init = {}) => {
       requests.push({ url: String(url), init });
@@ -1161,6 +1248,35 @@ async function testAssistantApiHelpers() {
     assert(
       generatingProposalMessage.includes("invalid study proposal payload"),
       "study-factory proposal helper should reject generated-code success payloads",
+    );
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "study-proposal-response-v1",
+          mode: "read-only",
+          proposal: {
+            version: "wrong-study-proposal-v1",
+            feasibility: { status: "needs-evidence-archive" },
+          },
+          execution: { executed: false, generatedCode: false },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidProposalVersionMessage = "";
+    try {
+      await buildStudyFactoryProposal({
+        idea: "Can RBI policy headlines move bank index volatility?",
+      });
+    } catch (error) {
+      invalidProposalVersionMessage = error?.message || "";
+    }
+    assert(
+      invalidProposalVersionMessage.includes("invalid study proposal payload"),
+      "study-factory proposal helper should reject wrong nested proposal versions",
     );
 
     requests.length = 0;
@@ -1301,6 +1417,29 @@ async function testAssistantApiHelpers() {
         requests[0].url.endsWith("/api/study-builder/recipes?limit=10") &&
         !requests[0].init.method,
       "study-plan recipe helper should GET backend recipes with query params",
+    );
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "wrong-study-plan-recipes-v1",
+          limit: 50,
+          recipes: [],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidRecipeVersionMessage = "";
+    try {
+      await fetchStudyPlanRecipes({ limit: 10 });
+    } catch (error) {
+      invalidRecipeVersionMessage = error?.message || "";
+    }
+    assert(
+      invalidRecipeVersionMessage.includes("invalid StudyPlan recipe payload"),
+      "study-plan recipe helper should reject wrong recipe contract versions",
     );
 
     requests.length = 0;
