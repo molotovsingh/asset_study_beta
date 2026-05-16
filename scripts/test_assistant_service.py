@@ -180,16 +180,12 @@ def test_assistant_contract_bundle_payload():
     payload = assistant_service.build_assistant_contract_bundle_payload({})
     assert_equal(payload["version"], "assistant-contract-bundle-v1", "assistant contract bundle version")
     contracts = payload["contracts"]
-    assert_equal(
-        contracts["assistant"]["version"],
-        "assistant-contract-v1",
-        "bundle should include assistant contract",
-    )
-    assert_equal(
-        contracts["studyPlan"]["version"],
-        "study-plan-v1",
-        "bundle should include StudyPlan contract",
-    )
+    for key, expected_version in assistant_service.REQUIRED_CONTRACT_BUNDLE_VERSIONS.items():
+        assert_equal(
+            contracts[key]["version"],
+            expected_version,
+            f"bundle should include {key} contract version",
+        )
     assert_true(
         isinstance(contracts["metricRegistry"]["rules"], list),
         "bundle should include metric registry rules",
@@ -201,28 +197,35 @@ def test_assistant_contract_bundle_payload():
 
 
 def test_assistant_contract_bundle_rejects_wrong_nested_versions():
-    original_bridge = assistant_service._run_node_json_bridge
-
-    def wrong_bundle_bridge(_command, *, input_text=None, bridge_label="Assistant contract bridge"):
+    def build_bundle_contracts(wrong_key: str) -> dict:
         return {
-            "version": "assistant-contract-bundle-v1",
-            "contracts": {
-                "assistant": {"version": "wrong-assistant-contract-v1"},
-                "metricRegistry": {"rules": []},
-                "studyCatalog": {"studies": []},
-                "studyPlan": {"version": "study-plan-v1"},
-            },
+            key: {"version": f"wrong-{version}" if key == wrong_key else version}
+            for key, version in assistant_service.REQUIRED_CONTRACT_BUNDLE_VERSIONS.items()
         }
 
-    assistant_service._run_node_json_bridge = wrong_bundle_bridge
-    try:
-        assert_raises(
-            RuntimeError,
-            lambda: assistant_service.build_assistant_contract_bundle_payload({}),
-            "bundle payload should reject wrong nested assistant contract version",
-        )
-    finally:
-        assistant_service._run_node_json_bridge = original_bridge
+    for wrong_key in assistant_service.REQUIRED_CONTRACT_BUNDLE_VERSIONS:
+        original_bridge = assistant_service._run_node_json_bridge
+
+        def wrong_bundle_bridge(
+            _command,
+            *,
+            input_text=None,
+            bridge_label="Assistant contract bridge",
+        ):
+            return {
+                "version": "assistant-contract-bundle-v1",
+                "contracts": build_bundle_contracts(wrong_key),
+            }
+
+        assistant_service._run_node_json_bridge = wrong_bundle_bridge
+        try:
+            assert_raises(
+                RuntimeError,
+                lambda: assistant_service.build_assistant_contract_bundle_payload({}),
+                f"bundle payload should reject wrong nested {wrong_key} contract version",
+            )
+        finally:
+            assistant_service._run_node_json_bridge = original_bridge
 
 
 def test_assistant_readiness_payload_is_keyless_and_route_aware():
