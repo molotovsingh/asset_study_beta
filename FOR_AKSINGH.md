@@ -419,6 +419,21 @@ Run one combined maintenance pass suitable for cron or another external schedule
 python3 scripts/run_data_maintenance.py --max-attention-symbols 0 --max-sync-errors 0
 ```
 
+## A Fresh Automation Lesson
+
+Fixing the GitHub Action was only half the job. After the workflow finally ran,
+the snapshots moved from stale April data to May data, and that exposed two
+useful truths:
+
+- Seasonality had a no-lookahead bug: a study ending inside a month could be
+  influenced by observations after the requested end date.
+- A few frontend regression checks had hard-coded monthly counts that only
+  matched the old snapshot window.
+
+The engineering lesson is simple: when automation refreshes real data, rerun
+the product tests against the refreshed data, not just against the code change.
+Fresh data is often the best reviewer.
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:
