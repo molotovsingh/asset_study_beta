@@ -299,6 +299,55 @@ def test_assistant_study_plan_live_draft_validates_model_plan():
     assert_true(openai_call.called, "live draft should call the OpenAI bridge")
 
 
+def test_assistant_study_plan_live_draft_accepts_fenced_multiline_json():
+    fake_response = {
+        "id": "resp_test_fenced",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": """```json
+{
+  "version": "study-plan-v1",
+  "studyId": "risk-adjusted-return",
+  "viewId": "overview",
+  "params": {
+    "subject": "Nifty 50"
+  },
+  "requiresConfirmation": true
+}
+```""",
+                    }
+                ],
+            }
+        ],
+    }
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key", "OPENAI_MODEL": "gpt-test"}, clear=False), patch.object(
+        assistant_service,
+        "_call_openai_responses_api",
+        return_value=fake_response,
+    ):
+        payload = assistant_service.build_assistant_study_plan_live_draft_payload(
+            {"intent": "Run risk overview for Nifty 50"}
+        )
+
+    assert_equal(
+        payload["modelResult"]["responseId"],
+        "resp_test_fenced",
+        "fenced response id should be preserved",
+    )
+    assert_equal(
+        payload["plan"]["studyId"],
+        "risk-adjusted-return",
+        "fenced multiline JSON should parse into a StudyPlan",
+    )
+    assert_equal(payload["validation"]["ok"], True, "fenced StudyPlan should validate")
+    assert_equal(payload["execution"]["executed"], False, "fenced live draft must not execute")
+
+
 def test_assistant_study_plan_live_draft_requires_key():
     with patch.dict("os.environ", {"OPENAI_API_KEY": ""}, clear=False):
         assert_raises(
@@ -482,6 +531,7 @@ def main():
     test_assistant_study_plan_dry_run_is_keyless_and_non_executing()
     test_assistant_study_plan_dry_run_rejects_missing_intent()
     test_assistant_study_plan_live_draft_validates_model_plan()
+    test_assistant_study_plan_live_draft_accepts_fenced_multiline_json()
     test_assistant_study_plan_live_draft_requires_key()
     test_invalid_and_unknown_run_ids()
     test_failed_run_blocks_result_conclusions()
