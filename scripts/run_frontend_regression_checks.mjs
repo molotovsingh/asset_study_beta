@@ -1187,6 +1187,30 @@ async function testAssistantApiHelpers() {
       "study-builder draft helper should POST intent to the backend planner endpoint",
     );
 
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "study-builder-plan-response-v1",
+          plannerResult: { version: "wrong-planner-v1" },
+          plan: { version: "study-plan-v1" },
+          preview: { canRun: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidDraftContractMessage = "";
+    try {
+      await draftStudyBuilderPlan({ intent: "Compare Nifty 50 against Sensex" });
+    } catch (error) {
+      invalidDraftContractMessage = error?.message || "";
+    }
+    assert(
+      invalidDraftContractMessage.includes("invalid study-builder plan payload"),
+      "study-builder draft helper should reject wrong nested planner versions",
+    );
+
     requests.length = 0;
     globalThis.fetch = async (url, init = {}) => {
       requests.push({ url: String(url), init });
@@ -1211,6 +1235,33 @@ async function testAssistantApiHelpers() {
         requests[0].url.endsWith("/api/study-builder/validate") &&
         JSON.parse(requests[0].init.body).routeHash.includes("drawdown-study"),
       "study-builder validation helper should POST plans or route hashes to the backend validator endpoint",
+    );
+
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          version: "study-builder-validation-response-v1",
+          mode: "plan",
+          validation: {
+            ok: true,
+            normalizedPlan: { version: "wrong-study-plan-v1" },
+          },
+          preview: { canRun: true },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidValidationContractMessage = "";
+    try {
+      await validateStudyBuilderPlan({ plan: { version: "study-plan-v1" } });
+    } catch (error) {
+      invalidValidationContractMessage = error?.message || "";
+    }
+    assert(
+      invalidValidationContractMessage.includes("invalid study-builder validation payload"),
+      "study-builder validation helper should reject wrong nested StudyPlan versions",
     );
 
     globalThis.fetch = async () =>
