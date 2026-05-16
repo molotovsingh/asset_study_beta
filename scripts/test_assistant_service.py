@@ -157,6 +157,31 @@ def test_assistant_contract_bundle_payload():
     )
 
 
+def test_assistant_contract_bundle_rejects_wrong_nested_versions():
+    original_bridge = assistant_service._run_node_json_bridge
+
+    def wrong_bundle_bridge(_command, *, input_text=None, bridge_label="Assistant contract bridge"):
+        return {
+            "version": "assistant-contract-bundle-v1",
+            "contracts": {
+                "assistant": {"version": "wrong-assistant-contract-v1"},
+                "metricRegistry": {"rules": []},
+                "studyCatalog": {"studies": []},
+                "studyPlan": {"version": "study-plan-v1"},
+            },
+        }
+
+    assistant_service._run_node_json_bridge = wrong_bundle_bridge
+    try:
+        assert_raises(
+            RuntimeError,
+            lambda: assistant_service.build_assistant_contract_bundle_payload({}),
+            "bundle payload should reject wrong nested assistant contract version",
+        )
+    finally:
+        assistant_service._run_node_json_bridge = original_bridge
+
+
 def test_assistant_readiness_payload_is_keyless_and_route_aware():
     payload = assistant_service.build_assistant_readiness_payload({"artifactChecks": "false"})
     assert_equal(payload["version"], "assistant-readiness-v1", "assistant readiness version")
@@ -452,6 +477,7 @@ def main():
     test_successful_run_brief_payload()
     test_assistant_contract_payload()
     test_assistant_contract_bundle_payload()
+    test_assistant_contract_bundle_rejects_wrong_nested_versions()
     test_assistant_readiness_payload_is_keyless_and_route_aware()
     test_assistant_study_plan_dry_run_is_keyless_and_non_executing()
     test_assistant_study_plan_dry_run_rejects_missing_intent()
