@@ -11,7 +11,8 @@ This PR is a broad checkpoint. The stabilization goal is not to add more product
 ## Current Status
 
 - GitHub Actions `Validate Repo` is green on the PR branch.
-- The PR remains draft until the live smoke checklist below is completed.
+- Live smoke completed on 2026-05-16 against `http://127.0.0.1:8000`.
+- The PR remains draft until packet review decides whether the broad checkpoint can be merged as-is.
 - The packet review map lives at `docs/review/2026-05-15-autonomous-slice-map.md`.
 - No live AI call is required for this stabilization pass.
 
@@ -68,7 +69,7 @@ Smoke these routes:
 - `#options-validation/overview`
 - `#settings/automations`
 - `#settings/study-builder`
-- `#settings/run-history`
+- `#settings/history`
 
 Required observations:
 
@@ -80,6 +81,25 @@ Required observations:
 - Study Builder dry-run stays non-executing.
 - Study Factory proposal endpoint stays read-only if called manually.
 - Run History shows durable ledger controls without requiring UI scraping.
+
+## Live Smoke Result
+
+Status: passed on 2026-05-16.
+
+Observed routes:
+
+- `#risk-adjusted-return/overview?subject=Nifty+50` rendered the Risk-Adjusted Return study overview.
+- `#monthly-straddle/overview?subject=AAPL` rendered Monthly Straddle and exposed `Run Snapshot`.
+- `#options-screener/overview` rendered Options Screener and exposed `Run Screener`.
+- `#options-validation/overview` rendered Options Validation and exposed `Load Validation`.
+- `#settings/automations` rendered the settings automation form and configured jobs panel.
+- `#settings/study-builder` rendered the Study Builder settings page, accepted an intent, produced a risk-adjusted-return relative route preview, and remained non-executing.
+- `#settings/history` rendered the durable Run History settings page and ledger filters.
+- `POST /api/study-factory/proposal` returned `study-proposal-response-v1` with `execution.executed = false`, `generatedCode = false`, and `fetchedExternalData = false`.
+
+Correction made during smoke:
+
+- The first checklist draft used `#settings/run-history`; the actual route model uses `#settings/history`. The checklist above now matches the implemented route.
 
 ## If CI Fails
 
