@@ -445,8 +445,8 @@ async function draftStudyBuilderPlan(request) {
   });
   if (
     payload?.version !== "study-builder-plan-response-v1" ||
-    !payload?.plannerResult ||
-    !payload?.plan ||
+    payload?.plannerResult?.version !== "intent-planner-v1" ||
+    payload?.plan?.version !== "study-plan-v1" ||
     !payload?.preview
   ) {
     throw new Error("The local data API returned an invalid study-builder plan payload.");
@@ -463,7 +463,15 @@ async function validateStudyBuilderPlan(request) {
     payload?.version !== "study-builder-validation-response-v1" ||
     !["plan", "route"].includes(payload?.mode) ||
     !payload?.validation ||
-    !payload?.preview
+    !payload?.preview ||
+    (
+      payload?.validation?.normalizedPlan &&
+      payload.validation.normalizedPlan.version !== "study-plan-v1"
+    ) ||
+    (
+      payload?.normalizedPlan &&
+      payload.normalizedPlan.version !== "study-plan-v1"
+    )
   ) {
     throw new Error("The local data API returned an invalid study-builder validation payload.");
   }

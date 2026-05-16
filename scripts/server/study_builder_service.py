@@ -24,6 +24,8 @@ STUDY_BUILDER_BRIDGE_PATH = SCRIPTS_DIR / "build_study_builder_payload.mjs"
 STUDY_BUILDER_BRIDGE_TIMEOUT_SECONDS = 10
 STUDY_PLAN_RECIPE_VERSION = "study-plan-recipes-v1"
 STUDY_PLAN_RECIPE_LIMIT = 50
+STUDY_PLAN_VERSION = "study-plan-v1"
+INTENT_PLANNER_VERSION = "intent-planner-v1"
 
 
 def _require_request_object(request: dict | None) -> dict:
@@ -117,7 +119,9 @@ def build_study_builder_plan_payload(request: dict | None) -> dict:
     if (
         payload.get("version") != "study-builder-plan-response-v1"
         or not isinstance(payload.get("plannerResult"), dict)
+        or payload["plannerResult"].get("version") != INTENT_PLANNER_VERSION
         or not isinstance(payload.get("plan"), dict)
+        or payload["plan"].get("version") != STUDY_PLAN_VERSION
         or not isinstance(payload.get("preview"), dict)
     ):
         raise RuntimeError("Study builder contract bridge returned an incomplete plan payload.")
@@ -131,6 +135,14 @@ def build_study_builder_validation_payload(request: dict | None) -> dict:
         or payload.get("mode") not in {"plan", "route"}
         or not isinstance(payload.get("validation"), dict)
         or not isinstance(payload.get("preview"), dict)
+        or (
+            isinstance(payload["validation"].get("normalizedPlan"), dict)
+            and payload["validation"]["normalizedPlan"].get("version") != STUDY_PLAN_VERSION
+        )
+        or (
+            isinstance(payload.get("normalizedPlan"), dict)
+            and payload["normalizedPlan"].get("version") != STUDY_PLAN_VERSION
+        )
     ):
         raise RuntimeError(
             "Study builder contract bridge returned an incomplete validation payload."

@@ -119,6 +119,55 @@ def test_study_builder_service_rejects_non_object_requests():
     )
 
 
+def test_study_builder_rejects_wrong_nested_contract_versions():
+    original_bridge = study_builder_service._run_study_builder_bridge
+
+    def wrong_plan_bridge(mode, _request):
+        if mode == "plan":
+            return {
+                "version": "study-builder-plan-response-v1",
+                "plannerResult": {"version": "wrong-planner-v1"},
+                "plan": {"version": "study-plan-v1"},
+                "preview": {},
+            }
+        return {}
+
+    study_builder_service._run_study_builder_bridge = wrong_plan_bridge
+    try:
+        assert_raises(
+            RuntimeError,
+            lambda: study_builder_service.build_study_builder_plan_payload({"intent": "risk"}),
+            "plan payload should reject wrong nested planner version",
+        )
+    finally:
+        study_builder_service._run_study_builder_bridge = original_bridge
+
+    def wrong_validation_bridge(mode, _request):
+        if mode == "validate":
+            return {
+                "version": "study-builder-validation-response-v1",
+                "mode": "plan",
+                "validation": {
+                    "ok": True,
+                    "normalizedPlan": {"version": "wrong-study-plan-v1"},
+                },
+                "preview": {},
+            }
+        return {}
+
+    study_builder_service._run_study_builder_bridge = wrong_validation_bridge
+    try:
+        assert_raises(
+            RuntimeError,
+            lambda: study_builder_service.build_study_builder_validation_payload(
+                {"plan": {"version": "study-plan-v1"}}
+            ),
+            "validation payload should reject wrong nested StudyPlan version",
+        )
+    finally:
+        study_builder_service._run_study_builder_bridge = original_bridge
+
+
 def test_study_plan_recipe_backend_round_trip():
     plan = {
         "version": "study-plan-v1",
@@ -198,6 +247,7 @@ def main():
     test_study_builder_plan_payload_drafts_route_safe_plan()
     test_study_builder_validation_payload_validates_plan_and_routes()
     test_study_builder_service_rejects_non_object_requests()
+    test_study_builder_rejects_wrong_nested_contract_versions()
     test_study_plan_recipe_backend_round_trip()
     test_study_builder_bridge_failure_and_timeout_are_bad_gateway_class_errors()
     print("ok study builder service")
