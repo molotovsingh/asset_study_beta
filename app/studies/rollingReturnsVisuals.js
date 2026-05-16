@@ -9,7 +9,9 @@ import {
   exportRollingReturnsXls,
 } from "../lib/rollingReturnsExport.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
 
+const STUDY_KICKER_LABEL = getStudyKickerLabel("rolling-returns");
 const OVERVIEW_HASH = "#rolling-returns/overview";
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 248;
@@ -309,7 +311,7 @@ function renderVisualsShell(studyRun) {
     <div class="visuals-shell rolling-returns-visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 03</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Rolling Returns Visuals</h2>
           <p class="summary-meta">
             Read the full-period CAGR first, then compare how different rolling horizons behaved through time.

@@ -8,6 +8,9 @@ import { buildDrawdownMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderInterpretationPanel } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("drawdown-study");
 
 function renderCard({ label, value, detail }) {
   return `
@@ -276,7 +279,7 @@ function drawdownStudyTemplate(defaultStartDate, defaultEndDate) {
     <div class="study-layout">
       <div class="study-header">
         <div class="study-copy">
-          <p class="study-kicker">Study 06</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Drawdown Study</h2>
           <p>
             Examine peak-to-trough declines, recovery durations, and how often the index stayed underwater.

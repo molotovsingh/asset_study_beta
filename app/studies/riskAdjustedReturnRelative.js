@@ -16,6 +16,9 @@ import {
 import { createIndexStudyOverviewRuntime } from "./shared/indexStudyOverviewRuntime.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
 import { renderRelativeInterpretation } from "./shared/interpretation.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("risk-adjusted-return");
 import { renderWarnings } from "./shared/resultsViewShared.js";
 import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
 
@@ -352,7 +355,7 @@ function relativeTemplate({
     <div class="study-layout relative-layout">
       <div class="study-header">
         <div class="study-copy">
-          <p class="study-kicker">Study 01</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Relative Performance</h2>
           <p>
             Compare the last completed study run against any other dataset or symbol using exact shared dates.

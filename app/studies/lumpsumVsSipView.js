@@ -8,6 +8,9 @@ import { buildLumpsumVsSipMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderLumpsumVsSipInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("lumpsum-vs-sip");
 
 function renderCard({ label, value, detail }) {
   return `
@@ -271,7 +274,7 @@ function lumpsumVsSipTemplate(
     <div class="study-layout">
       <div class="study-header">
         <div class="study-copy">
-          <p class="study-kicker">Study 05</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Lumpsum vs SIP</h2>
           <p>
             Compare whether the same capital historically did better when invested upfront or spread monthly.

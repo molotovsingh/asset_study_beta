@@ -9,7 +9,9 @@ import {
   exportSipSimulatorXls,
 } from "../lib/sipSimulatorExport.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
 
+const STUDY_KICKER_LABEL = getStudyKickerLabel("sip-simulator");
 const OVERVIEW_HASH = "#sip-simulator/overview";
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 248;
@@ -289,7 +291,7 @@ function mountSipSimulatorVisuals(root, session) {
   if (!studyRun) {
     root.innerHTML = `
       <section class="card visual-empty">
-        <p class="study-kicker">Study 04</p>
+        <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
         <h2>No SIP simulation is loaded yet.</h2>
         <p>
           Run the overview first so the visuals view has a cohort panel to draw.
@@ -320,7 +322,7 @@ function mountSipSimulatorVisuals(root, session) {
       <section class="card visual-card">
         <div class="visual-card-head">
           <div>
-            <p class="study-kicker">Study 04</p>
+            <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
             <h2>SIP Simulator Visuals</h2>
             <p>
               Compare cohort XIRR and wealth drift across historical SIP start months.

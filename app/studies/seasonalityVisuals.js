@@ -8,7 +8,9 @@ import {
   exportSeasonalityXls,
 } from "../lib/seasonalityExport.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
 
+const STUDY_KICKER_LABEL = getStudyKickerLabel("seasonality");
 const OVERVIEW_HASH = "#seasonality/overview";
 
 function formatConfidenceBand(bucket) {
@@ -197,7 +199,7 @@ function renderVisualsShell(studyRun) {
     <div class="visuals-shell seasonality-visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 02</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Seasonality Visuals</h2>
           <p class="summary-meta">
             Read the month-of-year pattern as one heatmap first, then check return, consistency, band width, and volatility by bucket.

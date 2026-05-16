@@ -1,4 +1,7 @@
 import { formatDate, formatNumber, formatPercent } from "../lib/format.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("options-validation");
 
 function buildOverviewHash(studyRun) {
   const params = new URLSearchParams({
@@ -299,7 +302,7 @@ function renderVisualsShell(studyRun) {
     <div class="visuals-shell options-validation-visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 11</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Options Validation Visuals</h2>
           <p class="summary-meta">
             ${studyRun.universe.label} · ${studyRun.groupDefinition.label} groups · ${studyRun.horizonLabel} forward horizon

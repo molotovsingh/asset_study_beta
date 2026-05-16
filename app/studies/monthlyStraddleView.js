@@ -3,6 +3,9 @@ import { MIN_CREDIBLE_PERCENTILE_HISTORY } from "../lib/monthlyStraddle.js";
 import { buildHistoricalPercentileMetric } from "../lib/metricRegistry.js";
 import { renderInterpretationPanel } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("monthly-straddle");
 
 function formatPrice(value) {
   return Number.isFinite(value) ? formatNumber(value, 2) : "n/a";
@@ -369,7 +372,7 @@ function monthlyStraddleTemplate({
     <div class="card-shell">
       <section class="card intro-card">
         <div>
-          <p class="study-kicker">Study 08</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Monthly Straddle Snapshot</h2>
           <p class="summary-meta">
             Live ATM straddle-implied move, annualized IV, and IV/HV pricing context for the next standard monthly contracts.

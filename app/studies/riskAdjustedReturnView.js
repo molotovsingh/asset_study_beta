@@ -11,6 +11,9 @@ import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderRiskInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
 import { renderSelectionDetails } from "./shared/selectionSummaryView.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("risk-adjusted-return");
 
 const RESULT_TAB_DEFINITIONS = [
   {
@@ -319,7 +322,7 @@ function studyTemplate(defaultStartDate, defaultEndDate) {
     <div class="study-layout">
       <div class="study-header">
         <div class="study-copy">
-          <p class="study-kicker">Study 01</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Risk-Adjusted Return</h2>
           <p>
             Compare return, risk, and drawdown for the active asset.
