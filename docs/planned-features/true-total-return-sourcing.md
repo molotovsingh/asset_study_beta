@@ -14,6 +14,30 @@ The remaining decision is not a coding task. It is a product and data-source pol
 - Assistant explanation seeds and briefs preserve the warning text: price data used as a TRI proxy must not be treated as true total-return evidence.
 - The correct current behavior is to warn clearly, not pretend the proxy is solved.
 
+## Current Guardrails Already In Place
+
+These are not the final sourcing policy. They are the safety rails that prevent the app from overstating current evidence while the policy remains undecided.
+
+| Guardrail | Where It Lives | What It Prevents |
+| --- | --- | --- |
+| Return-basis normalization | `app/studies/shared/returnBasis.js` | Price data cannot claim `total_return` when source and target series types differ. |
+| Index-study warning injection | `app/studies/shared/indexStudyPipeline.js` | Proxy datasets carry explicit warnings into study results. |
+| Selection display caveat | `app/studies/shared/selectionSummaryView.js` | Users see the return-basis label and proxy warning near the selected asset. |
+| Durable warning ledger | `scripts/runtime_store_runs.py` | Warning messages are preserved and deduplicated when runs are written. |
+| Assistant explanation caveats | `app/studyBuilder/studyRunExplanation.js` and `app/studyBuilder/studyRunExplanationBrief.js` | Future assistant prose must repeat proxy warnings instead of converting them into conclusions. |
+| Snapshot validation | `scripts/validate_yfinance_snapshots.py` | Bundled yfinance snapshots and manifests must agree on return basis. |
+
+Regression coverage currently lives in:
+
+- `scripts/test_yfinance_sync_idempotence.py`
+- `scripts/test_symbol_discovery.mjs`
+- `scripts/test_study_run_service.py`
+- `scripts/test_assistant_service.py`
+- `scripts/test_study_builder.mjs`
+- `scripts/run_frontend_regression_checks.mjs`
+
+The next true-TRI implementation should add tests, not weaken these. In particular, any true source must prove why `returnBasis: "total_return"` is justified.
+
 ## Decision Required
 
 The product owner needs to choose the app's true total-return policy before implementation continues.
@@ -105,4 +129,3 @@ This decision is cleared when the repo can answer, for any index-style run:
 - whether the source is approved for that claim
 - whether the run result is true total-return evidence, price-return evidence, or proxy evidence
 - what warning must be carried into the durable ledger and assistant brief
-
