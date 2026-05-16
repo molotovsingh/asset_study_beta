@@ -20,6 +20,8 @@ CONTRACT_BRIDGE_PATH = SCRIPTS_DIR / "build_study_run_assistant_payload.mjs"
 ASSISTANT_CONTRACT_BRIDGE_PATH = SCRIPTS_DIR / "export_assistant_contract.mjs"
 ASSISTANT_CONTRACT_BUNDLE_BRIDGE_PATH = SCRIPTS_DIR / "build_assistant_contract_bundle.mjs"
 CONTRACT_BRIDGE_TIMEOUT_SECONDS = 10
+ASSISTANT_CONTRACT_VERSION = "assistant-contract-v1"
+ASSISTANT_CONTRACT_BUNDLE_VERSION = "assistant-contract-bundle-v1"
 ASSISTANT_READINESS_VERSION = "assistant-readiness-v1"
 ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION = "assistant-study-plan-dry-run-v1"
 ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION = "assistant-study-plan-live-draft-v1"
@@ -302,7 +304,7 @@ def build_assistant_contract_payload(_request: dict | None = None) -> dict:
         bridge_label="Assistant contract manifest bridge",
     )
     if (
-        payload.get("version") != "assistant-contract-v1"
+        payload.get("version") != ASSISTANT_CONTRACT_VERSION
         or not isinstance(payload.get("contracts"), list)
         or not isinstance(payload.get("backendEndpoints"), list)
         or not isinstance(payload.get("hardStops"), list)
@@ -318,7 +320,7 @@ def build_assistant_contract_bundle_payload(_request: dict | None = None) -> dic
     )
     contracts = payload.get("contracts")
     if (
-        payload.get("version") != "assistant-contract-bundle-v1"
+        payload.get("version") != ASSISTANT_CONTRACT_BUNDLE_VERSION
         or not isinstance(contracts, dict)
         or not isinstance(contracts.get("assistant"), dict)
         or not isinstance(contracts.get("metricRegistry"), dict)
@@ -343,7 +345,7 @@ def build_assistant_readiness_payload(request: dict | None = None) -> dict:
                 "assistant-contract",
                 "Assistant contract bridge",
                 ok=True,
-                detail="assistant-contract-v1 loaded from JS source.",
+                detail=f"{ASSISTANT_CONTRACT_VERSION} loaded from JS source.",
                 metadata={"version": assistant_contract.get("version")},
             )
         )
@@ -364,7 +366,7 @@ def build_assistant_readiness_payload(request: dict | None = None) -> dict:
                 "assistant-contract-bundle",
                 "Assistant contract bundle bridge",
                 ok=True,
-                detail="assistant-contract-bundle-v1 loaded from JS source.",
+                detail=f"{ASSISTANT_CONTRACT_BUNDLE_VERSION} loaded from JS source.",
                 metadata={"version": contract_bundle.get("version")},
             )
         )

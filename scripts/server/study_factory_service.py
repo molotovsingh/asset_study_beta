@@ -7,6 +7,8 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 STUDY_PROPOSAL_BRIDGE_PATH = SCRIPTS_DIR / "build_study_proposal_payload.mjs"
 STUDY_PROPOSAL_BRIDGE_TIMEOUT_SECONDS = 10
+STUDY_PROPOSAL_RESPONSE_VERSION = "study-proposal-response-v1"
+STUDY_PROPOSAL_VERSION = "study-proposal-v1"
 
 
 def _require_request_object(request: dict | None) -> dict:
@@ -59,9 +61,10 @@ def build_study_proposal_payload(request: dict | None) -> dict:
     _require_idea(request)
     payload = _run_study_proposal_bridge(request)
     if (
-        payload.get("version") != "study-proposal-response-v1"
+        payload.get("version") != STUDY_PROPOSAL_RESPONSE_VERSION
         or payload.get("mode") != "read-only"
         or not isinstance(payload.get("proposal"), dict)
+        or payload["proposal"].get("version") != STUDY_PROPOSAL_VERSION
         or not isinstance(payload.get("execution"), dict)
     ):
         raise RuntimeError("Study proposal bridge returned an incomplete payload.")

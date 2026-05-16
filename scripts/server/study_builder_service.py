@@ -22,6 +22,8 @@ except ModuleNotFoundError:
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 STUDY_BUILDER_BRIDGE_PATH = SCRIPTS_DIR / "build_study_builder_payload.mjs"
 STUDY_BUILDER_BRIDGE_TIMEOUT_SECONDS = 10
+STUDY_BUILDER_PLAN_RESPONSE_VERSION = "study-builder-plan-response-v1"
+STUDY_BUILDER_VALIDATION_RESPONSE_VERSION = "study-builder-validation-response-v1"
 STUDY_PLAN_RECIPE_VERSION = "study-plan-recipes-v1"
 STUDY_PLAN_RECIPE_LIMIT = 50
 STUDY_PLAN_VERSION = "study-plan-v1"
@@ -117,7 +119,7 @@ def _run_study_builder_bridge(mode: str, request: dict) -> dict:
 def build_study_builder_plan_payload(request: dict | None) -> dict:
     payload = _run_study_builder_bridge("plan", _require_request_object(request))
     if (
-        payload.get("version") != "study-builder-plan-response-v1"
+        payload.get("version") != STUDY_BUILDER_PLAN_RESPONSE_VERSION
         or not isinstance(payload.get("plannerResult"), dict)
         or payload["plannerResult"].get("version") != INTENT_PLANNER_VERSION
         or not isinstance(payload.get("plan"), dict)
@@ -131,7 +133,7 @@ def build_study_builder_plan_payload(request: dict | None) -> dict:
 def build_study_builder_validation_payload(request: dict | None) -> dict:
     payload = _run_study_builder_bridge("validate", _require_request_object(request))
     if (
-        payload.get("version") != "study-builder-validation-response-v1"
+        payload.get("version") != STUDY_BUILDER_VALIDATION_RESPONSE_VERSION
         or payload.get("mode") not in {"plan", "route"}
         or not isinstance(payload.get("validation"), dict)
         or not isinstance(payload.get("preview"), dict)

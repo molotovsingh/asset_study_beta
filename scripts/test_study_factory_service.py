@@ -78,6 +78,28 @@ def test_study_factory_rejects_invalid_requests():
     )
 
 
+def test_study_factory_rejects_wrong_nested_contract_versions():
+    original_bridge = study_factory_service._run_study_proposal_bridge
+
+    def wrong_proposal_bridge(_request):
+        return {
+            "version": "study-proposal-response-v1",
+            "mode": "read-only",
+            "proposal": {"version": "wrong-study-proposal-v1"},
+            "execution": {"executed": False, "generatedCode": False},
+        }
+
+    study_factory_service._run_study_proposal_bridge = wrong_proposal_bridge
+    try:
+        assert_raises(
+            RuntimeError,
+            lambda: study_factory_service.build_study_proposal_payload({"idea": "risk"}),
+            "proposal payload should reject wrong nested proposal version",
+        )
+    finally:
+        study_factory_service._run_study_proposal_bridge = original_bridge
+
+
 def test_study_factory_bridge_failure_and_timeout_are_bad_gateway_class_errors():
     original_bridge_path = study_factory_service.STUDY_PROPOSAL_BRIDGE_PATH
     study_factory_service.STUDY_PROPOSAL_BRIDGE_PATH = original_bridge_path.with_name(
@@ -113,6 +135,7 @@ def main():
     test_study_factory_proposal_payload_existing_study()
     test_study_factory_proposal_payload_news_tool_gap()
     test_study_factory_rejects_invalid_requests()
+    test_study_factory_rejects_wrong_nested_contract_versions()
     test_study_factory_bridge_failure_and_timeout_are_bad_gateway_class_errors()
     print("ok study factory service")
 
