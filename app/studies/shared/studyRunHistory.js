@@ -71,22 +71,23 @@ function createLinkItem({
   };
 }
 
-function normalizeWarningMessages(warnings) {
-  if (!Array.isArray(warnings)) {
-    return [];
-  }
-
+function normalizeWarningMessages(...warningSets) {
   const seen = new Set();
-  return warnings
-    .map((warning) => String(warning || "").trim())
-    .filter(Boolean)
-    .filter((warning) => {
-      if (seen.has(warning)) {
-        return false;
+  const messages = [];
+  warningSets.forEach((warnings) => {
+    if (!Array.isArray(warnings)) {
+      return;
+    }
+    warnings.forEach((warning) => {
+      const message = String(warning || "").trim();
+      if (!message || seen.has(message)) {
+        return;
       }
-      seen.add(warning);
-      return true;
+      seen.add(message);
+      messages.push(message);
     });
+  });
+  return messages;
 }
 
 function recordLocalStudyRun({
@@ -107,6 +108,7 @@ function recordLocalStudyRun({
   links = [],
   status = "success",
   warnings = [],
+  warningMessages: explicitWarningMessages = [],
   warningCount = null,
   errorMessage = "",
   runKind = "analysis",
@@ -119,12 +121,25 @@ function recordLocalStudyRun({
     return false;
   }
 
-  const warningMessages = normalizeWarningMessages(warnings);
-  const normalizedWarningCount = Number.isFinite(Number(warningCount))
+  const safeResolvedParams =
+    resolvedParams && typeof resolvedParams === "object" && !Array.isArray(resolvedParams)
+      ? resolvedParams
+      : {};
+  const warningMessages = normalizeWarningMessages(
+    warnings,
+    explicitWarningMessages,
+    safeResolvedParams.warningMessages,
+    safeResolvedParams.warnings,
+  );
+  const explicitWarningCount = Number.isFinite(Number(warningCount))
     ? Math.max(0, Math.trunc(Number(warningCount)))
-    : warningMessages.length;
+    : 0;
+  const normalizedWarningCount = Math.max(
+    explicitWarningCount,
+    warningMessages.length,
+  );
   const normalizedResolvedParams = {
-    ...resolvedParams,
+    ...safeResolvedParams,
     ...(warningMessages.length ? { warningMessages } : {}),
   };
 
