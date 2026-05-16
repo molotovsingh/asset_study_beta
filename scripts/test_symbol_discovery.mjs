@@ -57,6 +57,19 @@ function testBuiltInDiscovery() {
     compactNifty[0].label === "Nifty 50",
     "compact discovery should match spacing-insensitive labels and aliases",
   );
+  assert(
+    compactNifty[0].returnBasis === "price",
+    "price-index suggestions should expose price return basis",
+  );
+
+  const niftyTri = discoverSelectionSuggestions("nifty50 tri", suggestions, {
+    limit: 5,
+  });
+  assert(niftyTri.length >= 1, "nifty50 tri should produce a local suggestion");
+  assert(
+    niftyTri[0].returnBasis === "proxy",
+    "TRI proxy suggestions should expose proxy return basis",
+  );
 
   const broad500 = discoverSelectionSuggestions("nifty 500", suggestions, {
     limit: 5,

@@ -16,6 +16,7 @@ const baseIndexCatalog = [
       datasetId: "nifty-50",
       symbol: "^NSEI",
       sourceSeriesType: "Price",
+      returnBasis: "price",
     },
   },
   {
@@ -33,6 +34,7 @@ const baseIndexCatalog = [
       datasetId: "nifty-50-tri",
       symbol: "^NSEI",
       sourceSeriesType: "Price",
+      returnBasis: "proxy",
       note: "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
     },
   },
@@ -74,6 +76,7 @@ const baseIndexCatalog = [
       datasetId: "nifty-bank",
       symbol: "^NSEBANK",
       sourceSeriesType: "Price",
+      returnBasis: "price",
     },
   },
   {
@@ -150,6 +153,7 @@ const baseIndexCatalog = [
       datasetId: "sensex",
       symbol: "^BSESN",
       sourceSeriesType: "Price",
+      returnBasis: "price",
     },
   },
   {
@@ -167,6 +171,7 @@ const baseIndexCatalog = [
       datasetId: "sensex-tri",
       symbol: "^BSESN",
       sourceSeriesType: "Price",
+      returnBasis: "proxy",
       note: "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
     },
   },

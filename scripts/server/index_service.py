@@ -8,12 +8,14 @@ try:
     from sync_yfinance import (
         load_yfinance,
         normalize_points,
+        normalize_return_basis,
         resolve_ticker_currency,
     )
 except ModuleNotFoundError:
     from scripts.sync_yfinance import (
         load_yfinance,
         normalize_points,
+        normalize_return_basis,
         resolve_ticker_currency,
     )
 
@@ -552,6 +554,11 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
         or raw_snapshot.get("sourceSeriesType")
         or target_series_type
     ).strip() or target_series_type
+    return_basis = normalize_return_basis(
+        request.get("returnBasis") or raw_snapshot.get("returnBasis"),
+        target_series_type=target_series_type,
+        source_series_type=source_series_type,
+    )
     provider_name = provider_display_name(raw_snapshot.get("provider"))
     family = (request.get("family") or "Ad hoc").strip() or "Ad hoc"
     source_url = (request.get("sourceUrl") or build_symbol_source_url(symbol)).strip()
@@ -574,6 +581,7 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
         "currency": raw_snapshot.get("currency"),
         "targetSeriesType": target_series_type,
         "sourceSeriesType": source_series_type,
+        "returnBasis": return_basis,
         "providerName": provider_name,
         "family": family,
         "sourceUrl": source_url,

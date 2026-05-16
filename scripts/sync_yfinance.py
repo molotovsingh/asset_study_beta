@@ -19,11 +19,48 @@ class DatasetConfig:
     symbol: str
     target_series_type: str
     source_series_type: str
+    return_basis: str | None = None
     currency: str | None = None
     note: str | None = None
     provider_name: str = "Yahoo Finance"
     family: str = "Custom"
     source_url: str | None = None
+
+
+RETURN_BASIS_PRICE = "price"
+RETURN_BASIS_TOTAL_RETURN = "total_return"
+RETURN_BASIS_PROXY = "proxy"
+RETURN_BASIS_VALUES = {
+    RETURN_BASIS_PRICE,
+    RETURN_BASIS_TOTAL_RETURN,
+    RETURN_BASIS_PROXY,
+}
+
+
+def derive_return_basis(target_series_type: str, source_series_type: str) -> str:
+    target = str(target_series_type or "").strip().lower()
+    source = str(source_series_type or "").strip().lower()
+
+    if target and source and target != source:
+        return RETURN_BASIS_PROXY
+    if target in {"tri", "total_return", "total return"}:
+        return RETURN_BASIS_TOTAL_RETURN
+    return RETURN_BASIS_PRICE
+
+
+def normalize_return_basis(
+    value: str | None,
+    *,
+    target_series_type: str,
+    source_series_type: str,
+) -> str:
+    normalized = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not normalized:
+        return derive_return_basis(target_series_type, source_series_type)
+    if normalized not in RETURN_BASIS_VALUES:
+        allowed = ", ".join(sorted(RETURN_BASIS_VALUES))
+        raise RuntimeError(f"returnBasis must be one of: {allowed}")
+    return normalized
 
 
 DATASETS: dict[str, DatasetConfig] = {
@@ -33,6 +70,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^NSEI",
         target_series_type="Price",
         source_series_type="Price",
+        return_basis=RETURN_BASIS_PRICE,
         currency="INR",
         provider_name="NSE Indices",
         family="Broad Market",
@@ -44,6 +82,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^NSEI",
         target_series_type="TRI",
         source_series_type="Price",
+        return_basis=RETURN_BASIS_PROXY,
         currency="INR",
         note="Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
         provider_name="NSE Indices",
@@ -56,6 +95,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^BSESN",
         target_series_type="Price",
         source_series_type="Price",
+        return_basis=RETURN_BASIS_PRICE,
         currency="INR",
         provider_name="BSE",
         family="Broad Market",
@@ -67,6 +107,7 @@ DATASETS: dict[str, DatasetConfig] = {
         symbol="^BSESN",
         target_series_type="TRI",
         source_series_type="Price",
+        return_basis=RETURN_BASIS_PROXY,
         currency="INR",
         note="Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
         provider_name="BSE",
@@ -175,6 +216,11 @@ def dataset_from_dict(raw: dict) -> DatasetConfig:
 
     target_series_type = str(raw.get("targetSeriesType") or "Price").strip() or "Price"
     source_series_type = str(raw.get("sourceSeriesType") or target_series_type).strip() or target_series_type
+    return_basis = normalize_return_basis(
+        raw.get("returnBasis"),
+        target_series_type=target_series_type,
+        source_series_type=source_series_type,
+    )
     currency = str(raw.get("currency") or "").strip().upper() or None
     provider_name = str(raw.get("providerName") or "Yahoo Finance").strip() or "Yahoo Finance"
     family = str(raw.get("family") or "Custom").strip() or "Custom"
@@ -189,6 +235,7 @@ def dataset_from_dict(raw: dict) -> DatasetConfig:
         symbol=symbol,
         target_series_type=target_series_type,
         source_series_type=source_series_type,
+        return_basis=return_basis,
         currency=currency,
         note=note,
         provider_name=provider_name,
@@ -352,6 +399,11 @@ def build_snapshot(
         "currency": currency or config.currency,
         "targetSeriesType": config.target_series_type,
         "sourceSeriesType": config.source_series_type,
+        "returnBasis": normalize_return_basis(
+            config.return_basis,
+            target_series_type=config.target_series_type,
+            source_series_type=config.source_series_type,
+        ),
         "providerName": config.provider_name,
         "family": config.family,
         "sourceUrl": config.source_url or build_yahoo_quote_url(config.symbol),
@@ -421,6 +473,7 @@ def build_manifest_entry(snapshot: dict, output_path: Path, output_root: Path) -
         "currency": snapshot.get("currency"),
         "targetSeriesType": snapshot["targetSeriesType"],
         "sourceSeriesType": snapshot["sourceSeriesType"],
+        "returnBasis": snapshot["returnBasis"],
         "providerName": snapshot.get("providerName"),
         "family": snapshot.get("family"),
         "sourceUrl": snapshot.get("sourceUrl"),

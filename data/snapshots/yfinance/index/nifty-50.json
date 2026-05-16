@@ -7,6 +7,7 @@
   "currency": "INR",
   "targetSeriesType": "Price",
   "sourceSeriesType": "Price",
+  "returnBasis": "price",
   "providerName": "NSE Indices",
   "family": "Broad Market",
   "sourceUrl": "https://www.niftyindices.com/reports/historical-data",

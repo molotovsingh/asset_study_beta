@@ -224,6 +224,7 @@ function buildIndexProviderSummary(studyRun) {
     symbol: selection.symbol || null,
     targetSeriesType: selection.targetSeriesType || null,
     sourceSeriesType: selection.sourceSeriesType || null,
+    returnBasis: selection.returnBasis || null,
   };
 }
 

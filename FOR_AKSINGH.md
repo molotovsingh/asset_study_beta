@@ -444,6 +444,14 @@ and make sure only one writer is allowed to push that refreshed data at a time.
 Fresh data is often the best reviewer, but concurrent fresh-data writers are
 how automation becomes flaky.
 
+The newest data-quality seam is `returnBasis`. `targetSeriesType` says what the
+dataset is trying to represent, such as TRI. `sourceSeriesType` says what was
+actually loaded. `returnBasis` turns that into a simple contract the app and a
+future assistant can reason about: `price`, `total_return`, or `proxy`. That is
+the difference between a bottle label and the lab test. The current Nifty/Sensex
+TRI bootstrap files are explicitly `proxy`, so long-term wealth studies can warn
+users instead of quietly treating price-only data as dividend-inclusive evidence.
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:

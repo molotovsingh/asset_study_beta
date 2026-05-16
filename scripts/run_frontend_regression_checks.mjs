@@ -2084,6 +2084,8 @@ function buildSelection(snapshot, currency = "INR") {
     symbol: snapshot.symbol,
     providerName: snapshot.providerName,
     targetSeriesType: snapshot.targetSeriesType,
+    sourceSeriesType: snapshot.sourceSeriesType,
+    returnBasis: snapshot.returnBasis,
     currency,
   };
 }
@@ -3129,6 +3131,10 @@ async function runExportRegressionChecks() {
   assert(
     workbookXml.includes("Annualized Log Return"),
     "risk-adjusted workbook should include Annualized Log Return",
+  );
+  assert(
+    workbookXml.includes("Return Basis") && workbookXml.includes("price"),
+    "risk-adjusted workbook should include the selection return basis",
   );
   assert(
     workbookXml.includes("Period Risk-Free Log Return"),

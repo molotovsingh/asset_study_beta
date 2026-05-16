@@ -377,6 +377,7 @@ function buildSummarySheetRows(payload) {
     [createCell("Symbol"), createCell(payload.selection?.symbol ?? "")],
     [createCell("Provider"), createCell(payload.selection?.providerName ?? "")],
     [createCell("Series Type"), createCell(payload.selection?.targetSeriesType ?? "")],
+    [createCell("Return Basis"), createCell(payload.selection?.returnBasis ?? "")],
     [createCell("Method"), createCell(payload.methodLabel)],
     [createCell("Periodic Return Mode"), createCell("Log returns for volatility and distribution metrics")],
     [createCell("Requested Start"), createCell(payload.requestedStartDate, "date")],

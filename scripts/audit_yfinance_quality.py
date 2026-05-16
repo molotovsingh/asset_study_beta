@@ -9,6 +9,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from sync_yfinance import RETURN_BASIS_PROXY, derive_return_basis
+
 
 DEFAULT_OUTPUT_ROOT = "data/snapshots"
 DEFAULT_MAX_MARKET_LAG_DAYS = 5
@@ -37,6 +39,7 @@ class DatasetAudit:
     dataset_id: str
     label: str
     symbol: str
+    return_basis: str
     observations: int
     start_date: str
     end_date: str
@@ -188,6 +191,12 @@ def audit_snapshot(
     dataset_id = str(snapshot.get("datasetId") or "").strip()
     label = str(snapshot.get("label") or dataset_id).strip() or dataset_id
     symbol = str(snapshot.get("symbol") or "").strip()
+    target_series_type = str(snapshot.get("targetSeriesType") or "").strip()
+    source_series_type = str(snapshot.get("sourceSeriesType") or target_series_type).strip()
+    return_basis = (
+        str(snapshot.get("returnBasis") or "").strip().lower().replace("-", "_").replace(" ", "_")
+        or derive_return_basis(target_series_type, source_series_type)
+    )
     raw_points = snapshot.get("points") or []
 
     if len(raw_points) < 2:
@@ -281,8 +290,21 @@ def audit_snapshot(
     findings.extend(summarize_gap_findings(dataset_id, gaps, max_gap_days))
     findings.extend(summarize_outlier_findings(dataset_id, moves, max_abs_daily_return))
 
+    if return_basis == RETURN_BASIS_PROXY:
+        findings.append(
+            Finding(
+                severity="warn",
+                dataset_id=dataset_id,
+                kind="return-basis",
+                message=(
+                    f"Dataset targets {target_series_type or 'unknown'} but is backed by "
+                    f"{source_series_type or 'unknown'} data; do not treat it as true total-return evidence."
+                ),
+            ),
+        )
+
     note = str(snapshot.get("note") or "").strip()
-    if note:
+    if note and return_basis != RETURN_BASIS_PROXY:
         findings.append(
             Finding(
                 severity="warn",
@@ -296,6 +318,7 @@ def audit_snapshot(
         dataset_id=dataset_id,
         label=label,
         symbol=symbol,
+        return_basis=return_basis,
         observations=len(points),
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat(),
@@ -367,6 +390,7 @@ def print_audit_report(audits: list[DatasetAudit], reference_date: date, output_
                     status,
                     audit.dataset_id,
                     f"symbol={audit.symbol}",
+                    f"basis={audit.return_basis}",
                     f"obs={audit.observations}",
                     f"start={audit.start_date}",
                     f"end={audit.end_date}",

@@ -8,6 +8,11 @@ import {
   getSnapshotFreshness,
 } from "../../lib/syncedData.js";
 import { renderInstrumentProfile } from "./instrumentProfileView.js";
+import {
+  buildReturnBasisWarning,
+  getReturnBasisLabel,
+  normalizeReturnBasis,
+} from "./returnBasis.js";
 
 function renderFreshnessDetails(snapshot, prefixLabel, extraMeta = "") {
   const freshness = getSnapshotFreshness(snapshot);
@@ -63,6 +68,11 @@ function renderSelectionDetails(
     runtimeSnapshot?.targetSeriesType || selection.targetSeriesType;
   const sourceSeriesType =
     runtimeSnapshot?.sourceSeriesType || selection.sourceSeriesType;
+  const returnBasis = normalizeReturnBasis({
+    returnBasis: runtimeSnapshot?.returnBasis || selection.returnBasis,
+    targetSeriesType,
+    sourceSeriesType,
+  });
   const note = runtimeSnapshot?.note || selection.note || null;
   const sourceLabel =
     selection.kind === "builtin"
@@ -128,10 +138,14 @@ function renderSelectionDetails(
     runtimeMeta = `<p class="summary-meta">Bundled snapshot is ready to load.</p>`;
   }
 
-  const proxyWarning =
-    sourceSeriesType && sourceSeriesType !== targetSeriesType
-      ? `<p class="summary-meta">Bootstrap uses <span class="mono">${sourceSeriesType}</span> data as a proxy for <span class="mono">${targetSeriesType}</span>.</p>`
-      : "";
+  const proxyWarningMessage = buildReturnBasisWarning({
+    returnBasis,
+    targetSeriesType,
+    sourceSeriesType,
+  });
+  const proxyWarning = proxyWarningMessage
+    ? `<p class="summary-meta">${proxyWarningMessage}</p>`
+    : "";
 
   return `
     <div class="note-box selection-panel">
@@ -143,6 +157,7 @@ function renderSelectionDetails(
         <div class="selection-chip-row">
           <span class="selection-chip">${family}</span>
           <span class="selection-chip">${targetSeriesType}</span>
+          <span class="selection-chip">${getReturnBasisLabel(returnBasis)}</span>
           ${currency ? `<span class="selection-chip">${currency}</span>` : ""}
         </div>
       </div>
