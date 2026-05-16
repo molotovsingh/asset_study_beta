@@ -84,4 +84,8 @@ done
 
 "$PYTHON_BIN" scripts/sync_yfinance.py "${SYNC_ARGS[@]}"
 "$PYTHON_BIN" scripts/validate_yfinance_snapshots.py "${VALIDATE_ARGS[@]}"
-"$PYTHON_BIN" scripts/audit_yfinance_quality.py "${AUDIT_ARGS[@]}"
+if ((${#AUDIT_ARGS[@]})); then
+  "$PYTHON_BIN" scripts/audit_yfinance_quality.py "${AUDIT_ARGS[@]}"
+else
+  "$PYTHON_BIN" scripts/audit_yfinance_quality.py
+fi

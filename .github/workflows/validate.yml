@@ -42,6 +42,7 @@ jobs:
           python3 scripts/test_dev_server_provider_preference.py
           python3 scripts/test_finnhub_search_helpers.py
           python3 scripts/test_refresh_yfinance_wrapper.py
+          python3 scripts/test_yfinance_sync_idempotence.py
           python3 scripts/test_automation_service.py
           python3 scripts/test_maintenance_service.py
           python3 scripts/test_market_collector.py

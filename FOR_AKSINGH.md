@@ -429,6 +429,8 @@ useful truths:
   influenced by observations after the requested end date.
 - A few frontend regression checks had hard-coded monthly counts that only
   matched the old snapshot window.
+- The snapshot sync itself needed idempotence: if market data did not change,
+  rerunning automation should not create a timestamp-only commit.
 
 The engineering lesson is simple: when automation refreshes real data, rerun
 the product tests against the refreshed data, not just against the code change.

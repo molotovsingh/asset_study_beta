@@ -16,16 +16,12 @@ def assert_equal(actual, expected, message):
         raise AssertionError(f"{message}: expected {expected!r}, got {actual!r}")
 
 
-def test_refresh_wrapper_uses_configured_python_and_routes_args():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-        fake_python = temp_path / "fake-python"
-        call_log = temp_path / "calls.jsonl"
-        output_root = temp_path / "snapshots"
-        config_path = temp_path / "datasets.json"
+def write_fake_python(temp_path: Path) -> tuple[Path, Path]:
+    fake_python = temp_path / "fake-python"
+    call_log = temp_path / "calls.jsonl"
 
-        fake_python.write_text(
-            """#!/usr/bin/env python3
+    fake_python.write_text(
+        """#!/usr/bin/env python3
 import json
 import os
 import sys
@@ -33,17 +29,44 @@ import sys
 with open(os.environ["ASSET_STUDY_FAKE_PYTHON_LOG"], "a", encoding="utf-8") as handle:
     handle.write(json.dumps(sys.argv[1:]) + "\\n")
 """,
-            encoding="utf-8",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    return fake_python, call_log
+
+
+def run_refresh_wrapper(args: list[str], fake_python: Path, call_log: Path):
+    env = dict(os.environ)
+    env["ASSET_STUDY_PYTHON_BIN"] = str(fake_python)
+    env["ASSET_STUDY_FAKE_PYTHON_LOG"] = str(call_log)
+
+    result = subprocess.run(
+        [str(REPO_ROOT / "scripts" / "refresh_yfinance.sh"), *args],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            f"refresh_yfinance.sh failed with {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
         )
-        fake_python.chmod(0o755)
 
-        env = dict(os.environ)
-        env["ASSET_STUDY_PYTHON_BIN"] = str(fake_python)
-        env["ASSET_STUDY_FAKE_PYTHON_LOG"] = str(call_log)
+    return [json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()]
 
-        result = subprocess.run(
+
+def test_refresh_wrapper_uses_configured_python_and_routes_args():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        fake_python, call_log = write_fake_python(temp_path)
+        output_root = temp_path / "snapshots"
+        config_path = temp_path / "datasets.json"
+
+        calls = run_refresh_wrapper(
             [
-                str(REPO_ROOT / "scripts" / "refresh_yfinance.sh"),
                 "--period",
                 "5y",
                 "--config-path",
@@ -51,20 +74,10 @@ with open(os.environ["ASSET_STUDY_FAKE_PYTHON_LOG"], "a", encoding="utf-8") as h
                 "--output-root",
                 str(output_root),
             ],
-            cwd=REPO_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+            fake_python,
+            call_log,
         )
-        if result.returncode != 0:
-            raise AssertionError(
-                f"refresh_yfinance.sh failed with {result.returncode}\n"
-                f"stdout:\n{result.stdout}\n"
-                f"stderr:\n{result.stderr}"
-            )
 
-        calls = [json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()]
         assert_equal(
             calls,
             [
@@ -95,8 +108,31 @@ with open(os.environ["ASSET_STUDY_FAKE_PYTHON_LOG"], "a", encoding="utf-8") as h
         )
 
 
+def test_refresh_wrapper_allows_empty_audit_args():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        fake_python, call_log = write_fake_python(temp_path)
+
+        calls = run_refresh_wrapper(
+            ["--period", "5y"],
+            fake_python,
+            call_log,
+        )
+
+        assert_equal(
+            calls,
+            [
+                ["scripts/sync_yfinance.py", "--period", "5y"],
+                ["scripts/validate_yfinance_snapshots.py", "--require-all-configured"],
+                ["scripts/audit_yfinance_quality.py"],
+            ],
+            "refresh wrapper should call audit without expanding an empty args array",
+        )
+
+
 def main():
     test_refresh_wrapper_uses_configured_python_and_routes_args()
+    test_refresh_wrapper_allows_empty_audit_args()
     print("ok refresh yfinance wrapper")
 
 

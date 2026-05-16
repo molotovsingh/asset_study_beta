@@ -366,9 +366,49 @@ def build_snapshot(
     }
 
 
+def strip_generated_at(value):
+    if isinstance(value, dict):
+        return {
+            key: strip_generated_at(item)
+            for key, item in value.items()
+            if key != "generatedAt"
+        }
+
+    if isinstance(value, list):
+        return [strip_generated_at(item) for item in value]
+
+    return value
+
+
+def load_json_if_exists(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+
+def preserve_generated_at_when_unchanged(path: Path, payload: dict) -> dict:
+    existing = load_json_if_exists(path)
+    if not existing:
+        return payload
+
+    if strip_generated_at(existing) != strip_generated_at(payload):
+        return payload
+
+    existing_generated_at = existing.get("generatedAt")
+    if existing_generated_at:
+        return {**payload, "generatedAt": existing_generated_at}
+
+    return payload
+
+
 def write_snapshot(output_root: Path, config: DatasetConfig, snapshot: dict) -> Path:
     output_path = output_root / "yfinance" / "index" / f"{config.dataset_id}.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot = preserve_generated_at_when_unchanged(output_path, snapshot)
     output_path.write_text(f"{json.dumps(snapshot, indent=2)}\n", encoding="utf-8")
     return output_path
 
@@ -392,14 +432,15 @@ def build_manifest_entry(snapshot: dict, output_path: Path, output_root: Path) -
 
 
 def write_manifest(output_root: Path, entries: list[dict]) -> Path:
+    manifest_path = output_root / "yfinance" / "index" / "manifest.json"
     manifest = {
         "provider": "yfinance",
         "datasetType": "index",
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "datasets": sorted(entries, key=lambda entry: entry["datasetId"]),
     }
-    manifest_path = output_root / "yfinance" / "index" / "manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest = preserve_generated_at_when_unchanged(manifest_path, manifest)
     manifest_path.write_text(f"{json.dumps(manifest, indent=2)}\n", encoding="utf-8")
     return manifest_path
 
