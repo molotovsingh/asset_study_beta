@@ -231,22 +231,26 @@ function normalizeSnapshotRefs(refs) {
 
 function normalizeWarningMessages(run) {
   const resolvedParams = isPlainObject(run?.resolvedParams) ? run.resolvedParams : {};
-  const candidates = Array.isArray(resolvedParams.warningMessages)
-    ? resolvedParams.warningMessages
-    : Array.isArray(resolvedParams.warnings)
-      ? resolvedParams.warnings
-      : [];
   const seen = new Set();
-  return candidates
-    .map(cleanText)
-    .filter(Boolean)
-    .filter((warning) => {
+  const messages = [];
+  [
+    resolvedParams.warningMessages,
+    resolvedParams.warnings,
+    run?.warningMessages,
+    run?.warnings,
+  ].forEach((candidates) => {
+    if (!Array.isArray(candidates)) {
+      return;
+    }
+    candidates.map(cleanText).filter(Boolean).forEach((warning) => {
       if (seen.has(warning)) {
-        return false;
+        return;
       }
       seen.add(warning);
-      return true;
+      messages.push(warning);
     });
+  });
+  return messages;
 }
 
 function sentenceFromPrefix(prefix, text) {

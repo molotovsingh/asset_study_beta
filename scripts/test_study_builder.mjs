@@ -480,6 +480,24 @@ function runStudyBuilderChecks() {
       "Recorded warning(s): Loaded data is marked as a Price proxy for TRI.",
     "study-run explanation warning bullets should not add duplicate punctuation",
   );
+  const topLevelWarningSeed = buildStudyRunExplanationSeed({
+    runId: 43,
+    studyId: "risk-adjusted-return",
+    studyTitle: "Risk-Adjusted Return",
+    selectionLabel: "Nifty 50",
+    subjectQuery: "Nifty 50",
+    status: "success",
+    warningMessages: ["Top-level warning.", "Top-level warning.", ""],
+    warningCount: 0,
+  });
+  assert(
+    topLevelWarningSeed.run.warningCount === 1 &&
+      topLevelWarningSeed.run.warningMessages.length === 1 &&
+      topLevelWarningSeed.explanationBullets.includes(
+        "Recorded warning(s): Top-level warning.",
+      ),
+    "study-run explanation seed should normalize top-level warning messages defensively",
+  );
   const serializedExplanationSeed = serializeStudyRunExplanationSeed({
     runId: 42,
     studyId: "risk-adjusted-return",
