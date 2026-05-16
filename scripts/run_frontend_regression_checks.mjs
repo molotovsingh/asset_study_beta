@@ -954,6 +954,29 @@ async function testAssistantApiHelpers() {
       "assistant brief helper should reject incomplete success payloads",
     );
 
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          run: { runId: 12 },
+          handoff: { version: "wrong-handoff-version" },
+          explanationBrief: { version: "study-run-explanation-brief-v1" },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    let invalidVersionMessage = "";
+    try {
+      await fetchStudyRunBrief({ runId: 12 });
+    } catch (error) {
+      invalidVersionMessage = error?.message || "";
+    }
+    assert(
+      invalidVersionMessage.includes("invalid assistant run brief payload"),
+      "assistant brief helper should reject wrong contract versions",
+    );
+
     requests.length = 0;
     globalThis.fetch = async (url, init = {}) => {
       requests.push({ url: String(url), init });
