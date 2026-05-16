@@ -384,6 +384,15 @@ Audit yfinance snapshot quality:
 python3 scripts/audit_yfinance_quality.py
 ```
 
+Refresh committed yfinance snapshots:
+
+```bash
+./scripts/refresh_yfinance.sh --period 5y
+```
+
+That wrapper now prefers the project `.venv`, but falls back to the Python on
+`PATH` so GitHub Actions can use the interpreter prepared by `actions/setup-python`.
+
 Run the focused persistence and evidence checks after store-layer changes:
 
 ```bash
