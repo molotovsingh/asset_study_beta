@@ -434,10 +434,15 @@ useful truths:
 - The sync workflow now runs frontend regressions before committing refreshed
   snapshots because bot-pushed data commits do not reliably get a second
   push-triggered validation pass.
+- The sync workflow is serialized with GitHub Actions concurrency so two
+  scheduled/manual refreshes do not race each other while rewriting and pushing
+  the same snapshot files.
 
 The engineering lesson is simple: when automation refreshes real data, rerun
-the product tests against the refreshed data, not just against the code change.
-Fresh data is often the best reviewer.
+the product tests against the refreshed data, not just against the code change,
+and make sure only one writer is allowed to push that refreshed data at a time.
+Fresh data is often the best reviewer, but concurrent fresh-data writers are
+how automation becomes flaky.
 
 ## The Most Important Architectural Lesson
 
