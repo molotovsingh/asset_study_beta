@@ -26,6 +26,8 @@ ASSISTANT_READINESS_VERSION = "assistant-readiness-v1"
 ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION = "assistant-study-plan-dry-run-v1"
 ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION = "assistant-study-plan-live-draft-v1"
 STUDY_PLAN_VERSION = "study-plan-v1"
+STUDY_RUN_HANDOFF_VERSION = "study-run-handoff-v1"
+STUDY_RUN_EXPLANATION_BRIEF_VERSION = "study-run-explanation-brief-v1"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_OPENAI_STUDY_PLANNER_MODEL = "gpt-4.1-mini"
 REQUIRED_CONTRACT_BUNDLE_KEYS = [
@@ -280,7 +282,12 @@ def _build_contract_payload(run: dict) -> dict:
 
     handoff = payload.get("handoff")
     explanation_brief = payload.get("explanationBrief")
-    if not isinstance(handoff, dict) or not isinstance(explanation_brief, dict):
+    if (
+        not isinstance(handoff, dict)
+        or handoff.get("version") != STUDY_RUN_HANDOFF_VERSION
+        or not isinstance(explanation_brief, dict)
+        or explanation_brief.get("version") != STUDY_RUN_EXPLANATION_BRIEF_VERSION
+    ):
         raise RuntimeError("Assistant contract bridge returned an incomplete payload.")
     return payload
 
