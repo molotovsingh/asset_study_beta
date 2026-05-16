@@ -1,9 +1,22 @@
+import { ASSISTANT_CONTRACT_VERSION } from "../studyBuilder/assistantContract.js";
 import {
   STUDY_BUILDER_PLAN_RESPONSE_VERSION,
   STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
 } from "../studyBuilder/studyBuilderApiContract.js";
 import { INTENT_PLANNER_VERSION } from "../studyBuilder/intentPlanner.js";
 import { STUDY_PLAN_VERSION } from "../studyBuilder/studyPlan.js";
+import { STUDY_PLAN_RECIPE_STORAGE_VERSION } from "../studyBuilder/studyPlanRecipes.js";
+import { STUDY_RUN_EXPLANATION_BRIEF_VERSION } from "../studyBuilder/studyRunExplanationBrief.js";
+import { STUDY_RUN_HANDOFF_VERSION } from "../studyBuilder/studyRunHandoff.js";
+import {
+  STUDY_PROPOSAL_RESPONSE_VERSION,
+  STUDY_PROPOSAL_VERSION,
+} from "../studyFactory/studyProposal.js";
+
+const ASSISTANT_CONTRACT_BUNDLE_VERSION = "assistant-contract-bundle-v1";
+const ASSISTANT_READINESS_VERSION = "assistant-readiness-v1";
+const ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION = "assistant-study-plan-dry-run-v1";
+const ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION = "assistant-study-plan-live-draft-v1";
 
 const LOCAL_API_COMMAND = "./.venv/bin/python scripts/dev_server.py --port 8000";
 
@@ -330,7 +343,7 @@ async function fetchAssistantContract() {
       parsedPayload?.error || "The local data API could not load the assistant contract.",
   });
   if (
-    payload?.version !== "assistant-contract-v1" ||
+    payload?.version !== ASSISTANT_CONTRACT_VERSION ||
     !Array.isArray(payload?.contracts) ||
     !Array.isArray(payload?.backendEndpoints) ||
     !Array.isArray(payload?.hardStops)
@@ -347,11 +360,11 @@ async function fetchAssistantContractBundle() {
       parsedPayload?.error || "The local data API could not load the assistant contract bundle.",
   });
   if (
-    payload?.version !== "assistant-contract-bundle-v1" ||
-    !payload?.contracts?.assistant ||
+    payload?.version !== ASSISTANT_CONTRACT_BUNDLE_VERSION ||
+    payload?.contracts?.assistant?.version !== ASSISTANT_CONTRACT_VERSION ||
     !payload?.contracts?.metricRegistry ||
     !payload?.contracts?.studyCatalog ||
-    !payload?.contracts?.studyPlan
+    payload?.contracts?.studyPlan?.version !== STUDY_PLAN_VERSION
   ) {
     throw new Error("The local data API returned an invalid assistant contract bundle payload.");
   }
@@ -365,7 +378,7 @@ async function fetchAssistantReadiness(request = {}) {
       parsedPayload?.error || "The local data API could not load assistant readiness.",
   });
   if (
-    payload?.version !== "assistant-readiness-v1" ||
+    payload?.version !== ASSISTANT_READINESS_VERSION ||
     !payload?.summary ||
     !Array.isArray(payload?.checks)
   ) {
@@ -381,8 +394,8 @@ async function fetchStudyRunBrief(request) {
   });
   if (
     !payload?.run?.runId ||
-    payload?.handoff?.version !== "study-run-handoff-v1" ||
-    payload?.explanationBrief?.version !== "study-run-explanation-brief-v1"
+    payload?.handoff?.version !== STUDY_RUN_HANDOFF_VERSION ||
+    payload?.explanationBrief?.version !== STUDY_RUN_EXPLANATION_BRIEF_VERSION
   ) {
     throw new Error("The local data API returned an invalid assistant run brief payload.");
   }
@@ -395,10 +408,10 @@ async function dryRunAssistantStudyPlan(request) {
       parsedPayload?.error || "The local data API could not dry-run that assistant StudyPlan.",
   });
   if (
-    payload?.version !== "assistant-study-plan-dry-run-v1" ||
-    !payload?.readiness ||
-    !payload?.plannerResult ||
-    !payload?.plan ||
+    payload?.version !== ASSISTANT_STUDY_PLAN_DRY_RUN_VERSION ||
+    payload?.readiness?.version !== ASSISTANT_READINESS_VERSION ||
+    payload?.plannerResult?.version !== INTENT_PLANNER_VERSION ||
+    payload?.plan?.version !== STUDY_PLAN_VERSION ||
     !payload?.validation ||
     !payload?.preview ||
     payload?.execution?.executed !== false
@@ -414,11 +427,11 @@ async function liveDraftAssistantStudyPlan(request) {
       parsedPayload?.error || "The local data API could not live-draft that assistant StudyPlan.",
   });
   if (
-    payload?.version !== "assistant-study-plan-live-draft-v1" ||
+    payload?.version !== ASSISTANT_STUDY_PLAN_LIVE_DRAFT_VERSION ||
     payload?.provider !== "openai" ||
-    !payload?.readiness ||
+    payload?.readiness?.version !== ASSISTANT_READINESS_VERSION ||
     !payload?.modelResult ||
-    !payload?.plan ||
+    payload?.plan?.version !== STUDY_PLAN_VERSION ||
     !payload?.validation ||
     !payload?.preview ||
     payload?.execution?.executed !== false
@@ -434,9 +447,9 @@ async function buildStudyFactoryProposal(request) {
       parsedPayload?.error || "The local data API could not build that study proposal.",
   });
   if (
-    payload?.version !== "study-proposal-response-v1" ||
+    payload?.version !== STUDY_PROPOSAL_RESPONSE_VERSION ||
     payload?.mode !== "read-only" ||
-    !payload?.proposal ||
+    payload?.proposal?.version !== STUDY_PROPOSAL_VERSION ||
     payload?.execution?.executed !== false ||
     payload?.execution?.generatedCode !== false
   ) {
@@ -492,7 +505,7 @@ async function fetchStudyPlanRecipes(request = {}) {
       parsedPayload?.error || "The local data API could not load StudyPlan recipes.",
   });
   if (
-    payload?.version !== "study-plan-recipes-v1" ||
+    payload?.version !== STUDY_PLAN_RECIPE_STORAGE_VERSION ||
     !Array.isArray(payload?.recipes)
   ) {
     throw new Error("The local data API returned an invalid StudyPlan recipe payload.");
