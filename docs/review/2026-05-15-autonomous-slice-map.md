@@ -180,6 +180,7 @@ python3 scripts/check_assistant_readiness.py
 python3 scripts/run_assistant_live_planner_smoke.py --env-file /path/to/.env
 python3 scripts/test_study_builder_service.py
 python3 scripts/test_study_factory_service.py
+python3 scripts/test_live_app_smoke.py
 python3 scripts/test_route_dispatch.py
 node scripts/test_study_builder.mjs
 node scripts/test_study_factory.mjs
@@ -220,6 +221,7 @@ python3 scripts/test_assistant_service.py
 python3 scripts/check_assistant_readiness.py
 python3 scripts/test_study_builder_service.py
 python3 scripts/test_study_factory_service.py
+python3 scripts/test_live_app_smoke.py
 python3 scripts/test_route_dispatch.py
 python3 scripts/test_study_run_service.py
 python3 scripts/test_options_evidence.py

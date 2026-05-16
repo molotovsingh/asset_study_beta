@@ -213,6 +213,12 @@ Run the frontend-side calculator and export regressions with:
 node scripts/run_frontend_regression_checks.mjs
 ```
 
+Run the local server smoke when route/API wiring changed:
+
+```bash
+python3 scripts/test_live_app_smoke.py
+```
+
 Inspect the local runtime-store health for stale symbols, recent collection runs,
 and open options evidence:
 

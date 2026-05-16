@@ -96,6 +96,7 @@ Observed routes:
 - `#settings/study-builder` rendered the Study Builder settings page, accepted an intent, produced a risk-adjusted-return relative route preview, and remained non-executing.
 - `#settings/history` rendered the durable Run History settings page and ledger filters.
 - `POST /api/study-factory/proposal` returned `study-proposal-response-v1` with `execution.executed = false`, `generatedCode = false`, and `fetchedExternalData = false`.
+- `python3 scripts/test_live_app_smoke.py` now provides a repeatable server-level smoke for the same route/API boundary.
 
 Correction made during smoke:
 
