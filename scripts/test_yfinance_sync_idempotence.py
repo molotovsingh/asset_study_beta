@@ -66,8 +66,46 @@ def test_repeated_snapshot_writes_preserve_existing_generated_at():
         )
 
 
+def test_snapshot_and_manifest_include_return_basis():
+    config = DatasetConfig(
+        dataset_id="demo-tri",
+        label="Demo TRI",
+        symbol="^DEMO",
+        target_series_type="TRI",
+        source_series_type="Price",
+        currency="USD",
+    )
+    points = [
+        ["2026-05-14", 100.0],
+        ["2026-05-15", 101.0],
+    ]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_root = Path(temp_dir)
+        snapshot = build_snapshot(config, points, "USD")
+        snapshot_path = write_snapshot(output_root, config, snapshot)
+        manifest_path = write_manifest(
+            output_root,
+            collect_manifest_entries(output_root, {config.dataset_id: config}),
+        )
+
+        written_snapshot = snapshot_path.read_text(encoding="utf-8")
+        written_manifest = manifest_path.read_text(encoding="utf-8")
+        assert_equal(
+            '"returnBasis": "proxy"' in written_snapshot,
+            True,
+            "TRI backed by price data should be marked as a proxy in the snapshot",
+        )
+        assert_equal(
+            '"returnBasis": "proxy"' in written_manifest,
+            True,
+            "TRI backed by price data should be marked as a proxy in the manifest",
+        )
+
+
 def main():
     test_repeated_snapshot_writes_preserve_existing_generated_at()
+    test_snapshot_and_manifest_include_return_basis()
     print("ok yfinance sync idempotence")
 
 

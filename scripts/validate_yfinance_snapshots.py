@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from sync_yfinance import load_all_datasets
+from sync_yfinance import normalize_return_basis
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,6 +94,15 @@ def validate_snapshot(snapshot_path: Path, config, manifest_entry: dict) -> None
         snapshot["sourceSeriesType"] == config.source_series_type,
         f"{dataset_id}: snapshot sourceSeriesType mismatch",
     )
+    expected_return_basis = normalize_return_basis(
+        config.return_basis,
+        target_series_type=config.target_series_type,
+        source_series_type=config.source_series_type,
+    )
+    expect(
+        snapshot.get("returnBasis") == expected_return_basis,
+        f"{dataset_id}: snapshot returnBasis mismatch",
+    )
     expect(snapshot.get("note") == config.note, f"{dataset_id}: snapshot note mismatch")
     expect(
         snapshot.get("providerName") == config.provider_name,
@@ -128,6 +138,10 @@ def validate_snapshot(snapshot_path: Path, config, manifest_entry: dict) -> None
     expect(
         manifest_entry["sourceSeriesType"] == snapshot["sourceSeriesType"],
         f"{dataset_id}: manifest sourceSeriesType mismatch",
+    )
+    expect(
+        manifest_entry.get("returnBasis") == snapshot.get("returnBasis"),
+        f"{dataset_id}: manifest returnBasis mismatch",
     )
     expect(
         manifest_entry.get("providerName") == snapshot.get("providerName"),

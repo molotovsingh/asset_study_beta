@@ -3,6 +3,7 @@ import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
 } from "./overviewUtils.js";
+import { buildReturnBasisWarning } from "./returnBasis.js";
 
 function buildIndexStudyMethodLabel(snapshot) {
   return snapshot.cache
@@ -31,10 +32,13 @@ async function prepareIndexStudySeries({
   appendCoverageWarnings(filteredSeries, start, end, warnings);
   appendSnapshotWarnings(snapshot, warnings);
 
-  if (snapshot.sourceSeriesType !== selection.targetSeriesType) {
-    warnings.push(
-      `Loaded data currently uses ${snapshot.sourceSeriesType} series as a bootstrap proxy for ${selection.targetSeriesType}.`,
-    );
+  const returnBasisWarning = buildReturnBasisWarning({
+    returnBasis: snapshot.returnBasis || selection.returnBasis,
+    targetSeriesType: snapshot.targetSeriesType || selection.targetSeriesType,
+    sourceSeriesType: snapshot.sourceSeriesType || selection.sourceSeriesType,
+  });
+  if (returnBasisWarning) {
+    warnings.push(returnBasisWarning);
   }
 
   if (snapshot.note) {

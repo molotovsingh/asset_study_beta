@@ -251,7 +251,11 @@ refresh and commit snapshots automatically on weekdays or by manual dispatch.
 The sync script now retries transient symbol failures and also writes
 `data/snapshots/yfinance/index/manifest.json` so the repo has a compact index of
 what was pulled, when it was generated, and which snapshot path each dataset
-uses.
+uses. Snapshot metadata also carries a `returnBasis` field:
+
+- `price`: price-index or tradable price history.
+- `total_return`: true total-return history.
+- `proxy`: a requested total-return series is currently backed by price data.
 
 Ad hoc backend-fetched symbols are local-only convenience data. Use the snapshot
 tooling when you want a dataset to become part of the bundled repo catalog.
@@ -296,7 +300,9 @@ it does not shrink the stored universe.
   indexes, and manual `Label | SYMBOL` entries, but it is still not a full
   market-security master.
 - `Nifty 50 TRI` and `S&P BSE Sensex TRI` currently use price index proxies from
-  Yahoo Finance, not true TRI series.
+  Yahoo Finance, not true TRI series. They are marked `returnBasis: "proxy"` so
+  the app and future assistant flows do not over-read them as investor wealth
+  evidence.
 - Risk-free rate is entered manually for now, typically using an RBI reference.
 
 ## Adding another study

@@ -1,5 +1,6 @@
 import { getRunnableIndexCatalog } from "../../catalog/indexCatalog.js";
 import { parseManualSelectionInput } from "../../lib/symbolDiscovery.js";
+import { normalizeReturnBasis } from "./returnBasis.js";
 
 function buildYahooQuoteUrl(symbol) {
   return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`;
@@ -40,6 +41,11 @@ function buildSelectionSubjectQuery(selection) {
 
 function buildBuiltInSelection(entry, bundledDataset = null) {
   const symbol = entry.sync?.symbol || entry.symbol || "";
+  const targetSeriesType = entry.seriesType;
+  const sourceSeriesType =
+    bundledDataset?.sourceSeriesType ||
+    entry.sync?.sourceSeriesType ||
+    entry.seriesType;
   return {
     kind: "builtin",
     id: entry.id,
@@ -48,11 +54,14 @@ function buildBuiltInSelection(entry, bundledDataset = null) {
     currency: bundledDataset?.currency || entry.currency || null,
     providerName: entry.provider,
     family: entry.family,
-    targetSeriesType: entry.seriesType,
-    sourceSeriesType:
-      bundledDataset?.sourceSeriesType ||
-      entry.sync?.sourceSeriesType ||
-      entry.seriesType,
+    targetSeriesType,
+    sourceSeriesType,
+    returnBasis: normalizeReturnBasis({
+      returnBasis:
+        bundledDataset?.returnBasis || entry.sync?.returnBasis || entry.returnBasis,
+      targetSeriesType,
+      sourceSeriesType,
+    }),
     sourceUrl: bundledDataset?.sourceUrl || entry.sourceUrl,
     note: bundledDataset?.note || entry.sync?.note || entry.note || null,
     aliases: entry.aliases || [],
@@ -64,6 +73,8 @@ function buildBuiltInSelection(entry, bundledDataset = null) {
 }
 
 function buildBundledSelection(entry) {
+  const targetSeriesType = entry.targetSeriesType || "Price";
+  const sourceSeriesType = entry.sourceSeriesType || targetSeriesType;
   return {
     kind: "bundled",
     id: entry.datasetId,
@@ -72,9 +83,13 @@ function buildBundledSelection(entry) {
     currency: entry.currency || null,
     providerName: entry.providerName || "Yahoo Finance",
     family: entry.family || "Bundled",
-    targetSeriesType: entry.targetSeriesType || "Price",
-    sourceSeriesType:
-      entry.sourceSeriesType || entry.targetSeriesType || "Price",
+    targetSeriesType,
+    sourceSeriesType,
+    returnBasis: normalizeReturnBasis({
+      returnBasis: entry.returnBasis,
+      targetSeriesType,
+      sourceSeriesType,
+    }),
     sourceUrl: entry.sourceUrl || buildYahooQuoteUrl(entry.symbol),
     note: entry.note || null,
     aliases: [],
@@ -85,14 +100,20 @@ function buildBundledSelection(entry) {
       datasetType: "index",
       datasetId: entry.datasetId,
       symbol: entry.symbol,
-      sourceSeriesType:
-        entry.sourceSeriesType || entry.targetSeriesType || "Price",
+      sourceSeriesType,
+      returnBasis: normalizeReturnBasis({
+        returnBasis: entry.returnBasis,
+        targetSeriesType,
+        sourceSeriesType,
+      }),
     },
     path: entry.path || null,
   };
 }
 
 function buildRememberedSelection(entry) {
+  const targetSeriesType = entry.targetSeriesType || "Price";
+  const sourceSeriesType = entry.sourceSeriesType || targetSeriesType;
   return {
     kind: "remembered",
     id: entry.datasetId || entry.symbol,
@@ -101,9 +122,13 @@ function buildRememberedSelection(entry) {
     currency: entry.currency || null,
     providerName: entry.providerName || "Yahoo Finance",
     family: entry.family || "Remembered",
-    targetSeriesType: entry.targetSeriesType || "Price",
-    sourceSeriesType:
-      entry.sourceSeriesType || entry.targetSeriesType || "Price",
+    targetSeriesType,
+    sourceSeriesType,
+    returnBasis: normalizeReturnBasis({
+      returnBasis: entry.returnBasis,
+      targetSeriesType,
+      sourceSeriesType,
+    }),
     sourceUrl: entry.sourceUrl || buildYahooQuoteUrl(entry.symbol),
     note: entry.note || null,
     aliases: [],
@@ -129,6 +154,7 @@ function buildAdHocSelection(rawValue, { label = null } = {}) {
     family: isManualEntry ? "Manual" : "Ad hoc",
     targetSeriesType: "Price",
     sourceSeriesType: "Price",
+    returnBasis: "price",
     sourceUrl: buildYahooQuoteUrl(symbol),
     note: isManualEntry
       ? "Manual symbol entry. This label is stored locally after the first successful load."
@@ -323,6 +349,9 @@ function discoverSelectionSuggestions(query, suggestions, { limit = 8 } = {}) {
         subjectQuery: buildSelectionSubjectQuery(entry),
         providerName: entry.providerName || "Yahoo Finance",
         family: entry.family || null,
+        targetSeriesType: entry.targetSeriesType || null,
+        sourceSeriesType: entry.sourceSeriesType || null,
+        returnBasis: entry.returnBasis || null,
         note: entry.note || null,
         matchKind: scored.matchKind,
         matchScore: scored.score,
@@ -481,6 +510,7 @@ function buildSeriesRequest(selection) {
     family: selection.family,
     targetSeriesType: selection.targetSeriesType,
     sourceSeriesType: selection.sourceSeriesType,
+    returnBasis: selection.returnBasis,
     sourceUrl: selection.sourceUrl,
     note: selection.note,
     remember: selection.kind !== "builtin" && selection.kind !== "bundled",
