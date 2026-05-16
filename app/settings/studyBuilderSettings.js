@@ -10,6 +10,10 @@ import {
   loadStudyPlanRecipes as loadLocalStudyPlanRecipes,
   saveStudyPlanRecipe as saveLocalStudyPlanRecipe,
 } from "../studyBuilder/studyPlanRecipes.js";
+import {
+  STUDY_BUILDER_PLAN_RESPONSE_VERSION,
+  STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
+} from "../studyBuilder/studyBuilderApiContract.js";
 import { draftStudyPlanFromIntent } from "../studyBuilder/intentPlanner.js";
 import { escapeHtml, formatSettingsTimestamp, renderSettingsSectionNav } from "./shared.js";
 
@@ -30,9 +34,6 @@ const EXAMPLE_STUDY_PLAN = {
   },
   requiresConfirmation: true,
 };
-
-const STUDY_BUILDER_PLAN_RESPONSE_VERSION = "study-builder-plan-response-v1";
-const STUDY_BUILDER_VALIDATION_RESPONSE_VERSION = "study-builder-validation-response-v1";
 
 function formatJson(value) {
   return JSON.stringify(value, null, 2);

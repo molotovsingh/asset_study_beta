@@ -1,3 +1,10 @@
+import {
+  STUDY_BUILDER_PLAN_RESPONSE_VERSION,
+  STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
+} from "../studyBuilder/studyBuilderApiContract.js";
+import { INTENT_PLANNER_VERSION } from "../studyBuilder/intentPlanner.js";
+import { STUDY_PLAN_VERSION } from "../studyBuilder/studyPlan.js";
+
 const LOCAL_API_COMMAND = "./.venv/bin/python scripts/dev_server.py --port 8000";
 
 function buildApiUrl(pathname) {
@@ -444,9 +451,9 @@ async function draftStudyBuilderPlan(request) {
       parsedPayload?.error || "The local data API could not draft that StudyPlan.",
   });
   if (
-    payload?.version !== "study-builder-plan-response-v1" ||
-    payload?.plannerResult?.version !== "intent-planner-v1" ||
-    payload?.plan?.version !== "study-plan-v1" ||
+    payload?.version !== STUDY_BUILDER_PLAN_RESPONSE_VERSION ||
+    payload?.plannerResult?.version !== INTENT_PLANNER_VERSION ||
+    payload?.plan?.version !== STUDY_PLAN_VERSION ||
     !payload?.preview
   ) {
     throw new Error("The local data API returned an invalid study-builder plan payload.");
@@ -460,17 +467,17 @@ async function validateStudyBuilderPlan(request) {
       parsedPayload?.error || "The local data API could not validate that StudyPlan.",
   });
   if (
-    payload?.version !== "study-builder-validation-response-v1" ||
+    payload?.version !== STUDY_BUILDER_VALIDATION_RESPONSE_VERSION ||
     !["plan", "route"].includes(payload?.mode) ||
     !payload?.validation ||
     !payload?.preview ||
     (
       payload?.validation?.normalizedPlan &&
-      payload.validation.normalizedPlan.version !== "study-plan-v1"
+      payload.validation.normalizedPlan.version !== STUDY_PLAN_VERSION
     ) ||
     (
       payload?.normalizedPlan &&
-      payload.normalizedPlan.version !== "study-plan-v1"
+      payload.normalizedPlan.version !== STUDY_PLAN_VERSION
     )
   ) {
     throw new Error("The local data API returned an invalid study-builder validation payload.");
