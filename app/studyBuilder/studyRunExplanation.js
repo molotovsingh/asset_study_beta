@@ -249,6 +249,16 @@ function normalizeWarningMessages(run) {
     });
 }
 
+function sentenceFromPrefix(prefix, text) {
+  const cleanedText = cleanText(text);
+  if (!cleanedText) {
+    return `${prefix}.`;
+  }
+  return /[.!?]$/.test(cleanedText)
+    ? `${prefix}: ${cleanedText}`
+    : `${prefix}: ${cleanedText}.`;
+}
+
 function hasAnnualizedMetric(summaryItems) {
   return summaryItems.some((item) => {
     const haystack = `${item.summaryKey} ${item.label}`.toLowerCase();
@@ -338,7 +348,12 @@ function buildExplanationBullets({ runSummary, window, summaryItems, evidence })
   }
 
   if (runSummary.warningMessages.length) {
-    bullets.push(`Recorded warning(s): ${runSummary.warningMessages.slice(0, 3).join("; ")}.`);
+    bullets.push(
+      sentenceFromPrefix(
+        "Recorded warning(s)",
+        runSummary.warningMessages.slice(0, 3).join("; "),
+      ),
+    );
   }
 
   if (evidence.linkCount || evidence.snapshotRefCount) {

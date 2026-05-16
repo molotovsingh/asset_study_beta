@@ -385,7 +385,7 @@
             "Run 102 recorded Risk-Adjusted Return for Nifty 50.",
             "Effective window: 2026-01-02 to 2026-04-08.",
             "Recorded summaries: CAGR 42.0%.",
-            "Recorded warning(s): Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence..",
+            "Recorded warning(s): Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence.",
             "Evidence recorded: 1 link(s), 1 snapshot reference(s)."
           ]
         },
@@ -456,7 +456,7 @@
           "Run 102 recorded Risk-Adjusted Return for Nifty 50.",
           "Effective window: 2026-01-02 to 2026-04-08.",
           "Recorded summaries: CAGR 42.0%.",
-          "Recorded warning(s): Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence..",
+          "Recorded warning(s): Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence.",
           "Evidence recorded: 1 link(s), 1 snapshot reference(s)."
         ],
         "requiredCaveats": [
