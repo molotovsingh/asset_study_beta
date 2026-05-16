@@ -409,6 +409,12 @@ function mountOptionsScreenerOverview(root) {
             sortOrder: 0,
           }),
         ],
+        warnings: [
+          ...studyRun.failures.map(
+            (failure) => `${failure.symbol || "Unknown"}: ${failure.error || "Screener fetch failed."}`,
+          ),
+          ...(studyRun.storageWarning ? [studyRun.storageWarning] : []),
+        ],
         warningCount: studyRun.failures.length + (studyRun.storageWarning ? 1 : 0),
         completedAt: studyRun.exportedAt?.toISOString?.() || new Date().toISOString(),
       });

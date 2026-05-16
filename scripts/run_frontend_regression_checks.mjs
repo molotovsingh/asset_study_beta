@@ -25,6 +25,7 @@ import {
   mountStudyBuilderSettingsPage,
   renderStudyBuilderSettingsPage,
 } from "../app/settings/studyBuilderSettings.js";
+import { recordLocalStudyRun } from "../app/studies/shared/studyRunHistory.js";
 import { buildStudyPlanConfirmationPreview } from "../app/studyBuilder/studyPlan.js";
 import { STUDY_PLAN_RECIPE_STORAGE_KEY } from "../app/studyBuilder/studyPlanRecipes.js";
 import {
@@ -242,7 +243,7 @@ function testActiveSubjectStore() {
   console.log("ok active subject");
 }
 
-function testRunHistoryStore() {
+async function testRunHistoryStore() {
   clearRunHistory();
   let observedRunCount = null;
   const unsubscribe = subscribeRunHistory((runs) => {
@@ -326,6 +327,47 @@ function testRunHistoryStore() {
   assert(
     getRecentRuns().length === MAX_RUN_HISTORY_ITEMS,
     "run history should cap retained runs",
+  );
+
+  clearRunHistory();
+  const originalFetch = globalThis.fetch;
+  let capturedLedgerRequest = null;
+  let resolveLedgerRequest;
+  const ledgerRequestSeen = new Promise((resolve) => {
+    resolveLedgerRequest = resolve;
+  });
+  globalThis.fetch = async (_url, requestInit = {}) => {
+    capturedLedgerRequest = JSON.parse(requestInit.body || "{}");
+    resolveLedgerRequest();
+    return new Response(
+      JSON.stringify({
+        run: {
+          studyId: capturedLedgerRequest.studyId,
+          completedAt: capturedLedgerRequest.completedAt,
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  };
+  assert(
+    recordLocalStudyRun({
+      study: { id: "risk-adjusted-return", title: "Risk-Adjusted Return" },
+      subjectQuery: "Nifty 50",
+      selectionLabel: "Nifty 50",
+      resolvedParams: { warnings: 1 },
+      warnings: ["Loaded data is marked as a Price proxy for TRI."],
+      completedAt: "2026-04-10T10:30:00.000Z",
+    }) === true,
+    "local study-run recording should accept warning messages",
+  );
+  await ledgerRequestSeen;
+  globalThis.fetch = originalFetch;
+  assert(
+    capturedLedgerRequest.resolvedParams.warningMessages[0].includes("proxy for TRI"),
+    "durable ledger request should preserve warning message text in resolved params",
   );
 
   unsubscribe();
@@ -3185,7 +3227,7 @@ async function main() {
   assertionCount += runMetricRegistryChecks();
   assertionCount += runStudyBuilderChecks();
   runSymbolDiscoveryChecks();
-  testRunHistoryStore();
+  await testRunHistoryStore();
   testAvailableStudyWindow();
   testStudyKickerLabels();
   testShareableInputUrls();

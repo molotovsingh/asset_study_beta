@@ -71,6 +71,24 @@ function createLinkItem({
   };
 }
 
+function normalizeWarningMessages(warnings) {
+  if (!Array.isArray(warnings)) {
+    return [];
+  }
+
+  const seen = new Set();
+  return warnings
+    .map((warning) => String(warning || "").trim())
+    .filter(Boolean)
+    .filter((warning) => {
+      if (seen.has(warning)) {
+        return false;
+      }
+      seen.add(warning);
+      return true;
+    });
+}
+
 function recordLocalStudyRun({
   study,
   subjectQuery = "",
@@ -88,7 +106,8 @@ function recordLocalStudyRun({
   summaryItems = [],
   links = [],
   status = "success",
-  warningCount = 0,
+  warnings = [],
+  warningCount = null,
   errorMessage = "",
   runKind = "analysis",
   startedAt = "",
@@ -99,6 +118,15 @@ function recordLocalStudyRun({
   if (!study?.id || !study?.title || !selectionLabel) {
     return false;
   }
+
+  const warningMessages = normalizeWarningMessages(warnings);
+  const normalizedWarningCount = Number.isFinite(Number(warningCount))
+    ? Math.max(0, Math.trunc(Number(warningCount)))
+    : warningMessages.length;
+  const normalizedResolvedParams = {
+    ...resolvedParams,
+    ...(warningMessages.length ? { warningMessages } : {}),
+  };
 
   const entry = {
     studyId: study.id,
@@ -113,13 +141,13 @@ function recordLocalStudyRun({
     actualEndDate,
     detailLabel,
     requestedParams,
-    resolvedParams,
+    resolvedParams: normalizedResolvedParams,
     providerSummary,
     dataSnapshotRefs,
     summaryItems: Array.isArray(summaryItems) ? summaryItems.filter(Boolean) : [],
     links: Array.isArray(links) ? links.filter(Boolean) : [],
     status,
-    warningCount,
+    warningCount: normalizedWarningCount,
     errorMessage,
     runKind,
     startedAt,

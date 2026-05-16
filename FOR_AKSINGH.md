@@ -175,6 +175,12 @@ The implementation now follows that rule more closely. The browser still keeps a
 
 That notebook now has depth too. The generic `study_runs` row is the spine. `study_run_summaries` stores a few high-signal facts like CAGR, matured rows, or front IV. `study_run_links` stores references outward, for example to an options screener archive run. This is an important pattern: do not make the main run row carry every detail forever. Keep the spine narrow, then hang richer context off it.
 
+The ledger also keeps warning message text inside its resolved-params JSON. A
+count is not enough for an assistant-safe system. "There was one warning" tells
+the assistant to be cautious, but "price data is being used as a TRI proxy" tells
+it what caveat must actually be repeated. That is the difference between a smoke
+alarm and a fire report.
+
 There is another product lesson hiding inside that design: once a ledger becomes durable, it deserves its own home in the app. That is why the app now has a dedicated settings route at `#settings/history`. Earlier, recent runs only lived in the sidebar, which made them feel like a convenience feature even after the backend ledger existed. Moving durable history into its own settings surface fixes the mental model. The sidebar is the sticky note. The history settings page is the filing cabinet.
 
 ## Provider Design
