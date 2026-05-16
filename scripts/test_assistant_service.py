@@ -342,6 +342,11 @@ def test_warning_and_clipped_run_requires_caveats():
                 "requestedEndDate": "2026-04-08",
                 "actualStartDate": "2026-01-03",
                 "actualEndDate": "2026-04-08",
+                "resolvedParams": {
+                    "warningMessages": [
+                        "Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence."
+                    ]
+                },
                 "warningCount": 1,
                 "summaryItems": [
                     {
@@ -368,6 +373,22 @@ def test_warning_and_clipped_run_requires_caveats():
         assert_true(
             "metric.short_window_annualized" in caveat_codes,
             "short-window annualized metrics should be mandatory caveats",
+        )
+        warning_caveat = next(
+            item
+            for item in payload["explanationBrief"]["requiredCaveats"]
+            if item["code"] == "run.warnings_recorded"
+        )
+        assert_true(
+            "Price proxy for TRI" in warning_caveat["metadata"]["warningMessages"][0],
+            "warning caveat should carry durable warning message text",
+        )
+        assert_true(
+            any(
+                "Price proxy for TRI" in item
+                for item in payload["explanationBrief"]["bulletItems"]
+            ),
+            "assistant brief bullets should include recorded warning messages",
         )
 
 

@@ -77,6 +77,7 @@
             "routeHash": "#rolling-returns/overview?subject=Nifty+50&start=2021-04-08&end=2026-04-08",
             "detailLabel": "",
             "warningCount": 0,
+            "warningMessages": [],
             "errorMessage": "",
             "runKind": "analysis",
             "completedAt": "2026-05-15T10:00:00+00:00"
@@ -268,6 +269,7 @@
             "routeHash": "#risk-adjusted-return/overview?subject=Nifty+50&start=2026-01-01&end=2026-05-15",
             "detailLabel": "",
             "warningCount": 1,
+            "warningMessages": [],
             "errorMessage": "",
             "runKind": "analysis",
             "completedAt": "2026-05-15T10:00:00+00:00"
@@ -319,7 +321,8 @@
               "severity": "warning",
               "message": "The run recorded warning(s); an explanation must mention that caveat.",
               "metadata": {
-                "warningCount": 1
+                "warningCount": 1,
+                "warningMessages": []
               }
             },
             {
@@ -348,7 +351,8 @@
               "severity": "warning",
               "message": "The run recorded warning(s); an explanation must mention that caveat.",
               "metadata": {
-                "warningCount": 1
+                "warningCount": 1,
+                "warningMessages": []
               }
             },
             {
@@ -453,7 +457,8 @@
             "severity": "warning",
             "message": "The run recorded warning(s); an explanation must mention that caveat.",
             "metadata": {
-              "warningCount": 1
+              "warningCount": 1,
+              "warningMessages": []
             }
           },
           {
@@ -581,6 +586,7 @@
             "routeHash": "",
             "detailLabel": "",
             "warningCount": 0,
+            "warningMessages": [],
             "errorMessage": "No history found.",
             "runKind": "analysis",
             "completedAt": "2026-05-15T10:00:00+00:00"

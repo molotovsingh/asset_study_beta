@@ -258,6 +258,7 @@ function recordIndexStudyRun(study, session) {
     providerSummary: buildIndexProviderSummary(studyRun),
     dataSnapshotRefs: buildIndexDataSnapshotRefs(studyRun),
     summaryItems: buildIndexStudySummaryItems(study.id, studyRun),
+    warnings: studyRun.warnings,
     warningCount: Array.isArray(studyRun.warnings) ? studyRun.warnings.length : 0,
     completedAt: studyRun.exportedAt?.toISOString?.() || new Date().toISOString(),
   });

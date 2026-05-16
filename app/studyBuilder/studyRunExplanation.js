@@ -224,6 +224,26 @@ function normalizeSnapshotRefs(refs) {
   return (Array.isArray(refs) ? refs : []).filter(isPlainObject);
 }
 
+function normalizeWarningMessages(run) {
+  const resolvedParams = isPlainObject(run?.resolvedParams) ? run.resolvedParams : {};
+  const candidates = Array.isArray(resolvedParams.warningMessages)
+    ? resolvedParams.warningMessages
+    : Array.isArray(resolvedParams.warnings)
+      ? resolvedParams.warnings
+      : [];
+  const seen = new Set();
+  return candidates
+    .map(cleanText)
+    .filter(Boolean)
+    .filter((warning) => {
+      if (seen.has(warning)) {
+        return false;
+      }
+      seen.add(warning);
+      return true;
+    });
+}
+
 function hasAnnualizedMetric(summaryItems) {
   return summaryItems.some((item) => {
     const haystack = `${item.summaryKey} ${item.label}`.toLowerCase();
@@ -268,6 +288,11 @@ function buildWindow(run) {
 }
 
 function buildRunSummary(run) {
+  const warningMessages = normalizeWarningMessages(run);
+  const warningCount = Math.max(
+    Math.max(0, Math.trunc(cleanNumber(run.warningCount) || 0)),
+    warningMessages.length,
+  );
   return {
     runId: cleanNumber(run.runId),
     studyId: cleanText(run.studyId),
@@ -279,7 +304,8 @@ function buildRunSummary(run) {
     status: cleanText(run.status || "success").toLowerCase(),
     routeHash: cleanText(run.routeHash),
     detailLabel: cleanText(run.detailLabel),
-    warningCount: Math.max(0, Math.trunc(cleanNumber(run.warningCount) || 0)),
+    warningCount,
+    warningMessages,
     errorMessage: cleanText(run.errorMessage),
     runKind: cleanText(run.runKind || "analysis"),
     completedAt: cleanText(run.completedAt),
@@ -304,6 +330,10 @@ function buildExplanationBullets({ runSummary, window, summaryItems, evidence })
         .map((item) => `${item.label} ${item.displayValue}`)
         .join("; ")}.`,
     );
+  }
+
+  if (runSummary.warningMessages.length) {
+    bullets.push(`Recorded warning(s): ${runSummary.warningMessages.slice(0, 3).join("; ")}.`);
   }
 
   if (evidence.linkCount || evidence.snapshotRefCount) {
@@ -392,7 +422,10 @@ function buildStudyRunExplanationSeed(run) {
         STUDY_RUN_EXPLANATION_ISSUE_CODES.WARNINGS_RECORDED,
         "warning",
         "The run recorded warning(s); an explanation must mention that caveat.",
-        { warningCount: runSummary.warningCount },
+        {
+          warningCount: runSummary.warningCount,
+          warningMessages: runSummary.warningMessages,
+        },
       ),
     );
   }
