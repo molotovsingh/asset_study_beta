@@ -181,6 +181,14 @@ the assistant to be cautious, but "price data is being used as a TRI proxy" tell
 it what caveat must actually be repeated. That is the difference between a smoke
 alarm and a fire report.
 
+One small bug here was worth fixing at the persistence boundary, not in the UI.
+Some callers could send warning text without a matching `warningCount`, which
+meant the row carried the important caveat but still looked warning-free to
+summary readers. The runtime store now deduplicates warning messages and derives
+the count before writing the row. The lesson is simple: whenever two fields
+describe the same truth, normalize them at the ledger door. Do not ask every
+future reader to rediscover and repair the mismatch.
+
 There is another product lesson hiding inside that design: once a ledger becomes durable, it deserves its own home in the app. That is why the app now has a dedicated settings route at `#settings/history`. Earlier, recent runs only lived in the sidebar, which made them feel like a convenience feature even after the backend ledger existed. Moving durable history into its own settings surface fixes the mental model. The sidebar is the sticky note. The history settings page is the filing cabinet.
 
 ## Provider Design
