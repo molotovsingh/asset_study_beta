@@ -3,12 +3,26 @@ import {
   appendCoverageWarnings,
   appendSnapshotWarnings,
 } from "./overviewUtils.js";
-import { buildReturnBasisWarning } from "./returnBasis.js";
+import {
+  buildReturnBasisWarning,
+  isReturnBasisProxy,
+} from "./returnBasis.js";
 
 function buildIndexStudyMethodLabel(snapshot) {
   return snapshot.cache
     ? `Local ${snapshot.providerName || "market-data"} fetch using ${snapshot.symbol}`
     : `Bundled snapshot using ${snapshot.symbol}`;
+}
+
+function appendUniqueWarning(warnings, message) {
+  const normalized = String(message || "").trim();
+  if (normalized && !warnings.includes(normalized)) {
+    warnings.push(normalized);
+  }
+}
+
+function isProxyCaveatNote(note) {
+  return /\bproxy\b/i.test(String(note || ""));
 }
 
 async function prepareIndexStudySeries({
@@ -38,11 +52,16 @@ async function prepareIndexStudySeries({
     sourceSeriesType: snapshot.sourceSeriesType || selection.sourceSeriesType,
   });
   if (returnBasisWarning) {
-    warnings.push(returnBasisWarning);
+    appendUniqueWarning(warnings, returnBasisWarning);
   }
 
-  if (snapshot.note) {
-    warnings.push(snapshot.note);
+  const proxyBasis = isReturnBasisProxy({
+    returnBasis: snapshot.returnBasis || selection.returnBasis,
+    targetSeriesType: snapshot.targetSeriesType || selection.targetSeriesType,
+    sourceSeriesType: snapshot.sourceSeriesType || selection.sourceSeriesType,
+  });
+  if (snapshot.note && !(proxyBasis && isProxyCaveatNote(snapshot.note))) {
+    appendUniqueWarning(warnings, snapshot.note);
   }
 
   return {

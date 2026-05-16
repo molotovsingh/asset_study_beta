@@ -35,6 +35,7 @@ RETURN_BASIS_VALUES = {
     RETURN_BASIS_TOTAL_RETURN,
     RETURN_BASIS_PROXY,
 }
+TOTAL_RETURN_SERIES_TYPES = {"tri", "total_return", "total return"}
 
 
 def derive_return_basis(target_series_type: str, source_series_type: str) -> str:
@@ -43,7 +44,7 @@ def derive_return_basis(target_series_type: str, source_series_type: str) -> str
 
     if target and source and target != source:
         return RETURN_BASIS_PROXY
-    if target in {"tri", "total_return", "total return"}:
+    if target in TOTAL_RETURN_SERIES_TYPES:
         return RETURN_BASIS_TOTAL_RETURN
     return RETURN_BASIS_PRICE
 
@@ -60,6 +61,15 @@ def normalize_return_basis(
     if normalized not in RETURN_BASIS_VALUES:
         allowed = ", ".join(sorted(RETURN_BASIS_VALUES))
         raise RuntimeError(f"returnBasis must be one of: {allowed}")
+
+    derived = derive_return_basis(target_series_type, source_series_type)
+    if normalized == RETURN_BASIS_PROXY:
+        return normalized
+    if normalized != derived:
+        raise RuntimeError(
+            f"returnBasis {normalized!r} is inconsistent with "
+            f"targetSeriesType={target_series_type!r} and sourceSeriesType={source_series_type!r}"
+        )
     return normalized
 
 

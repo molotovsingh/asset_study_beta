@@ -9,6 +9,7 @@ from sync_yfinance import (
     DatasetConfig,
     build_snapshot,
     collect_manifest_entries,
+    normalize_return_basis,
     write_manifest,
     write_snapshot,
 )
@@ -103,9 +104,47 @@ def test_snapshot_and_manifest_include_return_basis():
         )
 
 
+def test_return_basis_rejects_inconsistent_total_return_claims():
+    try:
+        normalize_return_basis(
+            "total_return",
+            target_series_type="TRI",
+            source_series_type="Price",
+        )
+    except RuntimeError as error:
+        assert_equal(
+            "inconsistent" in str(error),
+            True,
+            "inconsistent return-basis error should explain the mismatch",
+        )
+    else:
+        raise AssertionError("TRI backed by price data must not claim total_return basis")
+
+    assert_equal(
+        normalize_return_basis(
+            None,
+            target_series_type="TRI",
+            source_series_type="Price",
+        ),
+        "proxy",
+        "missing returnBasis should derive proxy from mismatched target/source series",
+    )
+
+    assert_equal(
+        normalize_return_basis(
+            "proxy",
+            target_series_type="TRI",
+            source_series_type="Price",
+        ),
+        "proxy",
+        "explicit proxy returnBasis should remain valid",
+    )
+
+
 def main():
     test_repeated_snapshot_writes_preserve_existing_generated_at()
     test_snapshot_and_manifest_include_return_basis()
+    test_return_basis_rejects_inconsistent_total_return_claims()
     print("ok yfinance sync idempotence")
 
 

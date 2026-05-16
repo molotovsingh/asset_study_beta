@@ -52,6 +52,10 @@ import {
   renderSeasonalityInterpretation,
 } from "../app/studies/shared/interpretation.js";
 import {
+  buildReturnBasisWarning,
+  normalizeReturnBasis,
+} from "../app/studies/shared/returnBasis.js";
+import {
   buildAvailableStudyWindow,
   toInputDate,
 } from "../app/studies/shared/overviewUtils.js";
@@ -1208,6 +1212,34 @@ function testInterpretationPanels() {
   );
 
   console.log("ok interpretation panels");
+}
+
+function testReturnBasisPolicy() {
+  assert(
+    normalizeReturnBasis({
+      returnBasis: "total_return",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "Price",
+    }) === "proxy",
+    "frontend return-basis policy should fail safe to proxy when source and target differ",
+  );
+  assert(
+    normalizeReturnBasis({
+      returnBasis: "total_return",
+      targetSeriesType: "Price",
+      sourceSeriesType: "Price",
+    }) === "price",
+    "frontend return-basis policy should not allow price data to claim total-return basis",
+  );
+  assert(
+    buildReturnBasisWarning({
+      returnBasis: "proxy",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "Price",
+    }).includes("Do not treat it as true total-return evidence"),
+    "proxy return-basis warnings should block total-return over-reading",
+  );
+  console.log("ok return basis policy");
 }
 
 function mean(values) {
@@ -3158,6 +3190,7 @@ async function main() {
   testStudyKickerLabels();
   testShareableInputUrls();
   testInterpretationPanels();
+  testReturnBasisPolicy();
   await runRiskRegressionChecks();
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();
