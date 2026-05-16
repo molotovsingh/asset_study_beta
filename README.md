@@ -302,7 +302,8 @@ it does not shrink the stored universe.
 - `Nifty 50 TRI` and `S&P BSE Sensex TRI` currently use price index proxies from
   Yahoo Finance, not true TRI series. They are marked `returnBasis: "proxy"` so
   the app and future assistant flows do not over-read them as investor wealth
-  evidence.
+  evidence. The unresolved source/licensing/fallback policy is tracked in
+  [`docs/planned-features/true-total-return-sourcing.md`](docs/planned-features/true-total-return-sourcing.md).
 - Risk-free rate is entered manually for now, typically using an RBI reference.
 
 ## Adding another study
