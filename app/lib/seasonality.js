@@ -277,6 +277,15 @@ function buildMonthAnchors(indexSeries) {
   return anchors;
 }
 
+function clipSeriesAtEndDate(indexSeries, endDate) {
+  const endTime = endDate instanceof Date ? endDate.getTime() : new Date(endDate).getTime();
+  if (!Number.isFinite(endTime)) {
+    return indexSeries;
+  }
+
+  return indexSeries.filter((point) => point.date.getTime() <= endTime);
+}
+
 function monthDistance(leftAnchor, rightAnchor) {
   return (
     (rightAnchor.year - leftAnchor.year) * 12 +
@@ -301,7 +310,7 @@ function buildMonthlyRows(
   indexSeries,
   { startDate, endDate, includePartialBoundaryMonths = false } = {},
 ) {
-  const anchors = buildMonthAnchors(indexSeries);
+  const anchors = buildMonthAnchors(clipSeriesAtEndDate(indexSeries, endDate));
   const monthlyRows = [];
   let skippedTransitions = 0;
 

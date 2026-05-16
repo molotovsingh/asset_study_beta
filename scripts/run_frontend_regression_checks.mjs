@@ -1355,6 +1355,74 @@ function filterSeriesByDate(series, startDate, endDate) {
   return series.filter((point) => point.date >= startDate && point.date <= endDate);
 }
 
+function buildMonthlyStartPointsIndependent(series) {
+  const monthlyPoints = [];
+  let previousKey = null;
+
+  for (const point of series) {
+    const key = `${point.date.getFullYear()}-${point.date.getMonth()}`;
+    if (key === previousKey) {
+      continue;
+    }
+
+    monthlyPoints.push(point);
+    previousKey = key;
+  }
+
+  return monthlyPoints;
+}
+
+function shiftDateForwardByYearsIndependent(date, years) {
+  const nextDate = new Date(date);
+  nextDate.setFullYear(nextDate.getFullYear() + years);
+  return nextDate;
+}
+
+function findLatestPointOnOrBeforeIndependent(series, targetDate) {
+  let best = null;
+
+  for (const point of series) {
+    if (point.date <= targetDate) {
+      best = point;
+    } else {
+      break;
+    }
+  }
+
+  return best;
+}
+
+function countLumpsumVsSipCohortsIndependent(series, monthlyPoints, horizonYears) {
+  const minimumContributionCount = Math.max(2, horizonYears * 12 - 1);
+  let cohortCount = 0;
+
+  for (const startPoint of monthlyPoints) {
+    const targetEndDate = shiftDateForwardByYearsIndependent(
+      startPoint.date,
+      horizonYears,
+    );
+    const endPoint = findLatestPointOnOrBeforeIndependent(series, targetEndDate);
+
+    if (!endPoint || endPoint.date <= startPoint.date) {
+      continue;
+    }
+
+    const endGapDays = (targetEndDate - endPoint.date) / 86400000;
+    if (endGapDays > 10) {
+      continue;
+    }
+
+    const contributionCount = monthlyPoints.filter(
+      (point) => point.date >= startPoint.date && point.date < endPoint.date,
+    ).length;
+    if (contributionCount >= minimumContributionCount) {
+      cohortCount += 1;
+    }
+  }
+
+  return cohortCount;
+}
+
 function toPeriodicReturns(series) {
   const rows = [];
   for (let index = 1; index < series.length; index += 1) {
@@ -2699,13 +2767,16 @@ async function runSipRegressionChecks() {
     monthlyContribution,
     minContributions: 12,
   });
+  const expectedMonthlyPoints = buildMonthlyStartPointsIndependent(series);
+  const expectedMonthlyAnchorCount = expectedMonthlyPoints.length;
+  const expectedSipCohortCount = Math.max(0, expectedMonthlyAnchorCount - 12 + 1);
 
   assert(
-    actual.monthlyPoints.length === 61,
+    actual.monthlyPoints.length === expectedMonthlyAnchorCount,
     `sip monthly anchor count mismatch: ${actual.monthlyPoints.length}`,
   );
   assert(
-    actual.cohorts.length === 50,
+    actual.cohorts.length === expectedSipCohortCount,
     `sip cohort count mismatch: ${actual.cohorts.length}`,
   );
   assert(
@@ -2803,13 +2874,20 @@ async function runLumpsumVsSipRegressionChecks() {
     totalInvestment,
     horizonYears,
   });
+  const expectedMonthlyPoints = buildMonthlyStartPointsIndependent(series);
+  const expectedMonthlyAnchorCount = expectedMonthlyPoints.length;
+  const expectedLumpsumVsSipCohortCount = countLumpsumVsSipCohortsIndependent(
+    series,
+    expectedMonthlyPoints,
+    horizonYears,
+  );
 
   assert(
-    actual.monthlyPoints.length === 61,
+    actual.monthlyPoints.length === expectedMonthlyAnchorCount,
     `lumpsum vs sip monthly anchor count mismatch: ${actual.monthlyPoints.length}`,
   );
   assert(
-    actual.cohorts.length === 25,
+    actual.cohorts.length === expectedLumpsumVsSipCohortCount,
     `lumpsum vs sip cohort count mismatch: ${actual.cohorts.length}`,
   );
   assert(
