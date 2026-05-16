@@ -9,7 +9,9 @@ import {
   exportDrawdownStudyXls,
 } from "../lib/drawdownStudyExport.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
 
+const STUDY_KICKER_LABEL = getStudyKickerLabel("drawdown-study");
 const OVERVIEW_HASH = "#drawdown-study/overview";
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 248;
@@ -323,7 +325,7 @@ function renderVisualsShell(studyRun) {
     <div class="visuals-shell rolling-returns-visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 06</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Drawdown Visuals</h2>
           <p class="summary-meta">
             Read the underwater path first, then compare the deepest and longest historical episodes.

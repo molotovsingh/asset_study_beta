@@ -7,6 +7,9 @@ import { buildSeasonalityMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderSeasonalityInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("seasonality");
 
 function renderCard({ label, value, detail }) {
   return `
@@ -314,7 +317,7 @@ function seasonalityTemplate(defaultStartDate, defaultEndDate, includePartialMon
     <div class="study-layout">
       <div class="study-header">
         <div class="study-copy">
-          <p class="study-kicker">Study 02</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Seasonality</h2>
           <p>
             Read how one index behaves by month of year without mixing it with benchmark logic.

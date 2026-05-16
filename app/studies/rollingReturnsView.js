@@ -7,6 +7,9 @@ import {
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderRollingReturnsInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("rolling-returns");
 
 function renderCard({ label, value, detail }) {
   return `
@@ -251,7 +254,7 @@ function rollingReturnsTemplate(defaultStartDate, defaultEndDate) {
     <div class="study-layout">
       <div class="study-header">
         <div class="study-copy">
-          <p class="study-kicker">Study 03</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Rolling Returns</h2>
           <p>
             See how 1Y, 3Y, 5Y, and 10Y CAGR would have changed across historical entry and exit dates.

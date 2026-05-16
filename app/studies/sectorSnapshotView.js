@@ -9,6 +9,9 @@ import {
 } from "../lib/sectorSnapshot.js";
 import { renderInterpretationPanel } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("sector-snapshot");
 
 const STYLE_FORMATTERS = {
   percent: (value) => formatPercent(value),
@@ -585,7 +588,7 @@ function sectorSnapshotTemplate({
     <div class="card-shell">
       <section class="card intro-card">
         <div>
-          <p class="study-kicker">Study 07</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Sector Snapshot</h2>
           <p class="summary-meta">
             Same-end-date sector comparison across 1Y, 5Y, 10Y, and 20Y trailing windows.

@@ -10,6 +10,9 @@ import {
   OPTIONS_SCREENER_SORT_DEFINITIONS,
   getSortDefinition,
 } from "../lib/optionsScreener.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("options-screener");
 
 function renderMetricCard({ label, value, detail }) {
   return `
@@ -418,7 +421,7 @@ function optionsScreenerTemplate({
     <div class="card-shell">
       <section class="card intro-card">
         <div>
-          <p class="study-kicker">Study 09</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Options Screener</h2>
           <p class="summary-meta">
             Front-month daily options screen for rich-versus-cheap vol reads across a small liquid universe.

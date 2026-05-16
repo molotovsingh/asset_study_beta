@@ -13,7 +13,9 @@ import {
   toPeriodicReturns,
 } from "../lib/stats.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
 
+const STUDY_KICKER_LABEL = getStudyKickerLabel("risk-adjusted-return");
 const OVERVIEW_HASH = "#risk-adjusted-return/overview";
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 248;
@@ -482,7 +484,7 @@ function renderVisualsShell(studyRun, visualModel) {
     <div class="visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 01</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Visuals</h2>
           <p class="summary-meta">
             Read the last completed run as path, stress, and dispersion without leaving the study.

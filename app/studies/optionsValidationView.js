@@ -6,6 +6,9 @@ import {
   OPTIONS_VALIDATION_GROUP_DEFINITIONS,
   OPTIONS_VALIDATION_HORIZON_DEFINITIONS,
 } from "../lib/optionsValidation.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("options-validation");
 
 function renderMetricCard({ label, value, detail }) {
   return `
@@ -300,7 +303,7 @@ function optionsValidationTemplate({
     <div class="card-shell">
       <section class="card intro-card">
         <div>
-          <p class="study-kicker">Study 11</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Options Validation</h2>
           <p class="summary-meta">
             Group archived screener rows and measure what the underlying did over the next few trading sessions or a monthly hold proxy.

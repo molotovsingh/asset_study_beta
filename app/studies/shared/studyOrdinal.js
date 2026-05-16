@@ -1,7 +1,18 @@
-import { studyRegistry } from "../registry.js";
+const STUDY_ORDER_IDS = [
+  "risk-adjusted-return",
+  "sector-snapshot",
+  "monthly-straddle",
+  "options-screener",
+  "options-validation",
+  "seasonality",
+  "rolling-returns",
+  "sip-simulator",
+  "lumpsum-vs-sip",
+  "drawdown-study",
+];
 
 const studyOrdinalById = new Map(
-  studyRegistry.map((study, index) => [study.id, index + 1]),
+  STUDY_ORDER_IDS.map((studyId, index) => [studyId, index + 1]),
 );
 
 function getStudyOrdinalById(studyId) {
@@ -16,4 +27,4 @@ function getStudyKickerLabel(studyId) {
   return `Study ${String(ordinal).padStart(2, "0")}`;
 }
 
-export { getStudyKickerLabel, getStudyOrdinalById };
+export { STUDY_ORDER_IDS, getStudyKickerLabel, getStudyOrdinalById };

@@ -5,6 +5,9 @@ import {
   exportMonthlyStraddleXls,
 } from "../lib/monthlyStraddleExport.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("monthly-straddle");
 
 function buildOverviewHash(studyRun) {
   const params = new URLSearchParams({
@@ -296,7 +299,7 @@ function renderVisualsShell(studyRun) {
     <div class="visuals-shell straddle-visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 08</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Monthly Straddle Visuals</h2>
           <p class="summary-meta">
             ${studyRun.symbol} · spot ${formatNumber(studyRun.spotPrice, 2)} ${studyRun.currency || ""} · focus ${focus.expiry}

@@ -4,6 +4,9 @@ import {
   getMetricValue,
   sortRowsByMetric,
 } from "../lib/sectorSnapshot.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("sector-snapshot");
 
 function formatMetricValue(metricKey, value) {
   if (!Number.isFinite(value)) {
@@ -319,7 +322,7 @@ function renderVisualsShell(studyRun) {
     <div class="visuals-shell sector-visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 07</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Sector Snapshot Visuals</h2>
           <p class="summary-meta">
             ${studyRun.market.label} · ${studyRun.market.universeLabel} · focus ${studyRun.focusHorizonYears}Y ${getMetricDefinition(studyRun.focusMetricKey).label}

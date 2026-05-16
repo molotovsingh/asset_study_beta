@@ -7,6 +7,9 @@ import { buildSipMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderSipInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("sip-simulator");
 
 function renderCard({ label, value, detail }) {
   return `
@@ -256,7 +259,7 @@ function sipSimulatorTemplate(defaultStartDate, defaultEndDate, defaultContribut
     <div class="study-layout">
       <div class="study-header">
         <div class="study-copy">
-          <p class="study-kicker">Study 04</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>SIP Simulator</h2>
           <p>
             Simulate a fixed monthly SIP across every eligible historical start month and compare the resulting XIRR range.

@@ -5,7 +5,10 @@ import {
 } from "../lib/optionsScreenerExport.js";
 import { getSortDefinition } from "../lib/optionsScreener.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
 import { buildStudyViewHash } from "./studyShell.js";
+
+const STUDY_KICKER_LABEL = getStudyKickerLabel("options-screener");
 
 function buildOverviewHash(studyRun) {
   return buildStudyViewHash("options-screener", "overview", {
@@ -303,7 +306,7 @@ function renderVisualsShell(studyRun) {
     <div class="visuals-shell options-screener-visuals-shell">
       <section class="card visuals-hero">
         <div class="visuals-copy">
-          <p class="study-kicker">Study 10</p>
+          <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
           <h2>Options Screener Visuals</h2>
           <p class="summary-meta">
             ${studyRun.universe.label} · ${formatNumber(studyRun.rows.length, 0)} loaded rows · ${studyRun.asOfDate ? formatDate(studyRun.asOfDate) : "n/a"}

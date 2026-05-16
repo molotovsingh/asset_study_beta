@@ -9,7 +9,9 @@ import {
   exportLumpsumVsSipXls,
 } from "../lib/lumpsumVsSipExport.js";
 import { createExportClickHandler } from "./shared/exportClickHandler.js";
+import { getStudyKickerLabel } from "./shared/studyOrdinal.js";
 
+const STUDY_KICKER_LABEL = getStudyKickerLabel("lumpsum-vs-sip");
 const OVERVIEW_HASH = "#lumpsum-vs-sip/overview";
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 248;
@@ -288,7 +290,7 @@ function mountLumpsumVsSipVisuals(root, session) {
   if (!studyRun) {
     root.innerHTML = `
       <section class="card visual-empty">
-        <p class="study-kicker">Study 05</p>
+        <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
         <h2>No comparison run is loaded yet.</h2>
         <p>
           Run the overview first so the visuals view has a cohort panel to draw.
@@ -328,7 +330,7 @@ function mountLumpsumVsSipVisuals(root, session) {
       <section class="card visual-card">
         <div class="visual-card-head">
           <div>
-            <p class="study-kicker">Study 05</p>
+            <p class="study-kicker">${STUDY_KICKER_LABEL}</p>
             <h2>Lumpsum vs SIP Visuals</h2>
             <p>
               Read where upfront deployment beat monthly deployment across historical start cohorts.

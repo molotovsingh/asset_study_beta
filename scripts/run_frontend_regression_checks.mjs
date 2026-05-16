@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,7 @@ import {
   renderAutomationSidebarSummary,
 } from "../app/settings/automationSettings.js";
 import { renderRunHistorySettingsPage } from "../app/settings/studyRunHistorySettings.js";
+import { studyRegistry } from "../app/studies/registry.js";
 import {
   EXAMPLE_STUDY_PLAN,
   mountStudyBuilderSettingsPage,
@@ -47,7 +48,10 @@ import {
   buildCommonIndexParams,
   readCommonIndexParams,
 } from "../app/studies/shared/shareableInputs.js";
-import { getStudyKickerLabel } from "../app/studies/shared/studyOrdinal.js";
+import {
+  STUDY_ORDER_IDS,
+  getStudyKickerLabel,
+} from "../app/studies/shared/studyOrdinal.js";
 import {
   renderRiskInterpretation,
   renderSeasonalityInterpretation,
@@ -407,7 +411,12 @@ function testAvailableStudyWindow() {
   console.log("ok available window");
 }
 
-function testStudyKickerLabels() {
+async function testStudyKickerLabels() {
+  const registryIds = studyRegistry.map((study) => study.id);
+  assert(
+    registryIds.join("|") === STUDY_ORDER_IDS.join("|"),
+    "study registry order should match the shared ordinal source",
+  );
   assert(
     getStudyKickerLabel("risk-adjusted-return") === "Study 01",
     "risk-adjusted-return should derive its ordinal from the registry",
@@ -419,6 +428,26 @@ function testStudyKickerLabels() {
   assert(
     getStudyKickerLabel("options-validation") === "Study 05",
     "options validation should derive its ordinal from the registry",
+  );
+  assert(
+    getStudyKickerLabel("drawdown-study") === "Study 10",
+    "drawdown study should derive the last ordinal from the shared study order",
+  );
+
+  const studiesDir = path.join(REPO_ROOT, "app", "studies");
+  const studyFiles = (await readdir(studiesDir)).filter((fileName) =>
+    fileName.endsWith(".js"),
+  );
+  const hardcodedKickers = [];
+  for (const fileName of studyFiles) {
+    const source = await readFile(path.join(studiesDir, fileName), "utf8");
+    if (/<p class="study-kicker">Study \d{2}<\/p>/.test(source)) {
+      hardcodedKickers.push(fileName);
+    }
+  }
+  assert(
+    hardcodedKickers.length === 0,
+    `study views should not hard-code numbered kickers: ${hardcodedKickers.join(", ")}`,
   );
   console.log("ok study kicker labels");
 }
@@ -3240,7 +3269,7 @@ async function main() {
   runSymbolDiscoveryChecks();
   await testRunHistoryStore();
   testAvailableStudyWindow();
-  testStudyKickerLabels();
+  await testStudyKickerLabels();
   testShareableInputUrls();
   testInterpretationPanels();
   testReturnBasisPolicy();
