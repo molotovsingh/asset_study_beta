@@ -10,7 +10,7 @@
   "providerName": "NSE Indices",
   "family": "Broad Market",
   "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-  "generatedAt": "2026-05-16T00:58:35.037506Z",
+  "generatedAt": "2026-05-16T01:06:50.329213Z",
   "range": {
     "startDate": "2021-05-17",
     "endDate": "2026-05-15",

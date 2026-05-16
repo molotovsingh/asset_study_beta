@@ -1,7 +1,7 @@
 {
   "provider": "yfinance",
   "datasetType": "index",
-  "generatedAt": "2026-05-16T00:58:35.399543Z",
+  "generatedAt": "2026-05-16T01:06:50.654344Z",
   "datasets": [
     {
       "datasetId": "nifty-50",
@@ -13,7 +13,7 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-05-16T00:58:35.037506Z",
+      "generatedAt": "2026-05-16T01:06:50.329213Z",
       "range": {
         "startDate": "2021-05-17",
         "endDate": "2026-05-15",
@@ -32,7 +32,7 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-05-16T00:58:35.062364Z",
+      "generatedAt": "2026-05-16T01:06:50.350139Z",
       "range": {
         "startDate": "2021-05-17",
         "endDate": "2026-05-15",
@@ -51,7 +51,7 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-05-16T00:58:35.369008Z",
+      "generatedAt": "2026-05-16T01:06:50.627406Z",
       "range": {
         "startDate": "2021-05-17",
         "endDate": "2026-05-15",
@@ -70,7 +70,7 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-05-16T00:58:35.394118Z",
+      "generatedAt": "2026-05-16T01:06:50.648910Z",
       "range": {
         "startDate": "2021-05-17",
         "endDate": "2026-05-15",
