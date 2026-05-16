@@ -1,0 +1,7 @@
+const STUDY_BUILDER_PLAN_RESPONSE_VERSION = "study-builder-plan-response-v1";
+const STUDY_BUILDER_VALIDATION_RESPONSE_VERSION = "study-builder-validation-response-v1";
+
+export {
+  STUDY_BUILDER_PLAN_RESPONSE_VERSION,
+  STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
+};

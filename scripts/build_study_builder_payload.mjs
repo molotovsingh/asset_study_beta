@@ -3,13 +3,14 @@ import { fileURLToPath } from "node:url";
 
 import { draftStudyPlanFromIntent } from "../app/studyBuilder/intentPlanner.js";
 import {
+  STUDY_BUILDER_PLAN_RESPONSE_VERSION,
+  STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
+} from "../app/studyBuilder/studyBuilderApiContract.js";
+import {
   buildStudyPlanConfirmationPreview,
   buildStudyPlanFromRouteHash,
   validateStudyPlan,
 } from "../app/studyBuilder/studyPlan.js";
-
-const STUDY_BUILDER_PLAN_RESPONSE_VERSION = "study-builder-plan-response-v1";
-const STUDY_BUILDER_VALIDATION_RESPONSE_VERSION = "study-builder-validation-response-v1";
 
 function isPlainObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
