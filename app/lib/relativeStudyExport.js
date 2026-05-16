@@ -1,4 +1,5 @@
 import { formatDateTime } from "./format.js";
+import { buildRelativeMetricPresentation } from "./metricRegistry.js";
 import {
   buildXmlWorkbook,
   createCell,
@@ -86,40 +87,60 @@ function buildSummaryRows(payload) {
 
 function buildMetricsRows(payload) {
   const metrics = payload.relativeMetrics;
+  const metricPresentation = buildRelativeMetricPresentation({ relativeMetrics: metrics });
 
   const definitions = [
-    ["Asset CAGR", metrics.assetMetrics.annualizedReturn, "percent"],
-    ["Benchmark CAGR", metrics.benchmarkMetrics.annualizedReturn, "percent"],
-    ["CAGR Spread", metrics.cagrSpread, "percent"],
-    ["Relative Wealth", metrics.relativeWealth, "percent"],
-    ["Correlation", metrics.correlation, "number2"],
-    ["Beta", metrics.beta, "number2"],
-    ["Tracking Error", metrics.trackingError, "percent"],
-    ["Information Ratio", metrics.informationRatio, "number2"],
-    ["Outperformance Rate", metrics.outperformanceRate, "percent"],
-    ["Upside Capture", metrics.upsideCapture, "number2"],
-    ["Downside Capture", metrics.downsideCapture, "number2"],
-    ["Relative Drawdown", metrics.relativeDrawdown, "percent"],
+    [
+      metricPresentation.relativeWealth.exportLabel,
+      metricPresentation.relativeWealth.value,
+      metricPresentation.relativeWealth.styleId,
+      metricPresentation.relativeWealth.note,
+    ],
+    [
+      metricPresentation.activeReturn.exportLabel,
+      metricPresentation.activeReturn.value,
+      metricPresentation.activeReturn.styleId,
+      metricPresentation.activeReturn.note,
+    ],
+    ["Asset Total Return", metrics.assetMetrics.totalReturn, "percent", "Asset period return across the overlap"],
+    ["Benchmark Total Return", metrics.benchmarkMetrics.totalReturn, "percent", "Benchmark period return across the overlap"],
+    ["Asset Annualized Pace", metrics.assetMetrics.annualizedReturn, "percent", "Annualized asset return; diagnostic when overlap is short or thin"],
+    ["Benchmark Annualized Pace", metrics.benchmarkMetrics.annualizedReturn, "percent", "Annualized benchmark return; diagnostic when overlap is short or thin"],
+    [
+      metricPresentation.annualizedSpread.exportLabel,
+      metricPresentation.annualizedSpread.value,
+      metricPresentation.annualizedSpread.styleId,
+      metricPresentation.annualizedSpread.note,
+    ],
+    ["Correlation", metrics.correlation, "number2", `Computed from ${metrics.overlapReturnObservations} overlap return observations`],
+    ["Beta", metrics.beta, "number2", `Computed from ${metrics.overlapReturnObservations} overlap return observations`],
+    ["Tracking Error", metrics.trackingError, "percent", `Annualized diagnostic from ${metrics.overlapReturnObservations} overlap return observations`],
+    ["Information Ratio", metrics.informationRatio, "number2", `Annualized diagnostic from ${metrics.overlapReturnObservations} overlap return observations`],
+    ["Outperformance Rate", metrics.outperformanceRate, "percent", "Share of overlap periods where the asset beat the benchmark"],
+    ["Upside Capture", metrics.upsideCapture, "number2", "Return capture in benchmark-up periods"],
+    ["Downside Capture", metrics.downsideCapture, "number2", "Return capture in benchmark-down periods"],
+    ["Relative Drawdown", metrics.relativeDrawdown, "percent", "Worst peak-to-trough decline in relative wealth"],
     [
       "Annualized Excess Log Return",
       metrics.annualizedExcessLogReturn,
       "number4",
+      "Diagnostic annualized excess log return",
     ],
-    ["Overlap Observations", metrics.overlapObservations, "integer"],
-    ["Overlap Return Observations", metrics.overlapReturnObservations, "integer"],
-    ["Periods Per Year", metrics.periodsPerYear, "integer"],
+    ["Overlap Observations", metrics.overlapObservations, "integer", "Aligned price observations in the overlap"],
+    ["Overlap Return Observations", metrics.overlapReturnObservations, "integer", "Aligned return observations in the overlap"],
+    ["Periods Per Year", metrics.periodsPerYear, "integer", "Sampling frequency inferred from aligned periods"],
   ];
 
   return [
     [
       createCell("Metric", "header"),
       createCell("Value", "header"),
-      createCell("Format", "header"),
+      createCell("Notes", "header"),
     ],
-    ...definitions.map(([label, value, styleId]) => [
+    ...definitions.map(([label, value, styleId, note]) => [
       createCell(label),
       createCell(value, styleId),
-      createCell(styleId),
+      createCell(note),
     ]),
   ];
 }

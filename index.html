@@ -35,7 +35,7 @@
           <p id="active-subject-status" class="active-asset-status summary-meta" aria-live="polite"></p>
           <div id="active-subject-results" class="active-asset-results"></div>
           <p class="active-asset-copy">
-            This asset carries across studies. Lookback, rates, windows, and benchmarks stay inside each study.
+            This asset carries across studies. Lookback, rates, windows, and benchmarks stay inside each study. Use <span class="mono">Label | SYMBOL</span> to save a manual local entry when discovery misses it.
           </p>
         </section>
 
@@ -46,8 +46,18 @@
         </section>
 
         <section class="panel run-history-panel">
-          <p class="meta-label">Recent Runs</p>
+          <p class="meta-label">Recent Local Runs</p>
           <div id="run-history"></div>
+        </section>
+
+        <section class="panel automation-panel">
+          <div class="automation-panel-head">
+            <p class="meta-label">Operations</p>
+            <a id="automation-manage-link" class="button ghost automation-refresh-button" href="#settings/automations">
+              Manage
+            </a>
+          </div>
+          <div id="automation-sidebar-summary" class="automation-runtime-health"></div>
         </section>
       </aside>
 

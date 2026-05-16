@@ -63,6 +63,38 @@ Shared support across studies includes:
 - optional synthetic demo data mode
 - study-specific inputs, visuals, and CSV/XLS exports
 
+## Planned features
+
+Future product tracks that are real enough to preserve live in
+[`docs/planned-features.md`](docs/planned-features.md). The active AI tracks are
+strictly bounded: the AI Study Builder turns natural-language research intent
+into validated study plans, and the read-only Study Factory proposal endpoint
+checks whether a new study idea has existing-study coverage, approved tools,
+evidence requirements, and caveats. In both cases, the app's existing study
+engine, metric policy, and data-window checks stay in charge.
+
+The deterministic assistant boundary can be checked without any AI key:
+
+```bash
+python3 scripts/check_assistant_readiness.py
+```
+
+The backend also exposes a keyless assistant planning dry run at
+`POST /api/assistant/study-plan-dry-run`; it drafts and validates a StudyPlan
+without executing a study or calling an AI model.
+
+New study ideas can be shaped without execution through
+`POST /api/study-factory/proposal`. That endpoint returns a versioned
+`study-proposal-v1` feasibility packet and an explicit `executed: false` marker.
+
+Optional live model smoke is explicit and non-executing:
+
+```bash
+python3 scripts/run_assistant_live_planner_smoke.py --env-file /path/to/.env
+```
+
+If the key is stored under a different variable, pass `--api-key-var NAME`.
+
 ## Data sources
 
 - NSE historical and TRI data:
@@ -93,6 +125,12 @@ Example:
 
 ```bash
 cp .env.example .env
+```
+
+Useful optional keys:
+
+```bash
+FINNHUB_API_KEY=your_finnhub_key_here
 ```
 
 3. Either serve the static app for bundled datasets:
@@ -175,6 +213,20 @@ Run the frontend-side calculator and export regressions with:
 node scripts/run_frontend_regression_checks.mjs
 ```
 
+Inspect the local runtime-store health for stale symbols, recent collection runs,
+and open options evidence:
+
+```bash
+python3 scripts/report_runtime_health.py
+```
+
+Run one automation-friendly maintenance pass that collects market universes,
+refreshes options evidence, and then evaluates runtime health:
+
+```bash
+python3 scripts/run_data_maintenance.py --max-attention-symbols 0 --max-sync-errors 0
+```
+
 ### Add a custom yfinance symbol
 
 Register a symbol once:
@@ -197,12 +249,42 @@ tooling when you want a dataset to become part of the bundled repo catalog.
 If you already have older `data/local-cache/.../*.json` files from the previous
 runtime format, the local server imports them into SQLite on startup.
 
+### Collect a bounded market universe
+
+Seed or refresh a local universe and collect daily bars into the SQLite cache:
+
+```bash
+./.venv/bin/python scripts/collect_market_universe.py \
+  --universe-id us-core \
+  --symbols AAPL MSFT NVDA \
+  --provider-order finnhub,yfinance
+```
+
+Or refresh a Finnhub exchange-backed symbol master first, then collect a bounded
+subset for a smoke run:
+
+```bash
+./.venv/bin/python scripts/collect_market_universe.py \
+  --universe-id us-all \
+  --universe-label "US All Symbols" \
+  --exchange US \
+  --refresh-symbol-master \
+  --provider-order finnhub,yfinance \
+  --limit 100
+```
+
+The collector keeps the symbol universe, member metadata, and run summaries in
+the local SQLite runtime store. `--limit` only caps the current collection run;
+it does not shrink the stored universe.
+
 ### Current limits
 
 - The local backend currently uses `yfinance` directly.
 - yfinance profile metadata is opportunistic. It is useful for orientation, but
   it should not be treated as audited fundamentals.
-- Built-in names only cover a small curated set of mapped symbols.
+- The active-asset sidebar now supports remembered symbols, derived India sector
+  indexes, and manual `Label | SYMBOL` entries, but it is still not a full
+  market-security master.
 - `Nifty 50 TRI` and `S&P BSE Sensex TRI` currently use price index proxies from
   Yahoo Finance, not true TRI series.
 - Risk-free rate is entered manually for now, typically using an RBI reference.

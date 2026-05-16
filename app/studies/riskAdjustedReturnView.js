@@ -4,6 +4,9 @@ import {
   formatNumber,
   formatPercent,
 } from "../lib/format.js";
+import {
+  buildRiskMetricPresentation,
+} from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderRiskInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
@@ -19,19 +22,25 @@ const RESULT_TAB_DEFINITIONS = [
         summary: "Six first-pass metrics for the current window.",
         cards: [
           {
-            label: "CAGR",
-            value: ({ metrics }) => formatPercent(metrics.annualizedReturn),
-            detail: "Annualized compound return",
+            label: ({ metricPresentation }) => metricPresentation.primaryReturn.label,
+            value: ({ metricPresentation }) =>
+              formatPercent(metricPresentation.primaryReturn.value),
+            detail: ({ metricPresentation }) => metricPresentation.primaryReturn.detail,
           },
           {
-            label: "Total Return",
-            value: ({ metrics }) => formatPercent(metrics.totalReturn),
-            detail: ({ startDate, endDate }) => formatDateRange(startDate, endDate),
+            label: ({ metricPresentation }) => metricPresentation.secondaryReturn.label,
+            value: ({ metricPresentation }) =>
+              formatPercent(metricPresentation.secondaryReturn.value),
+            detail: ({ startDate, endDate, metricPolicy, metricPresentation }) =>
+              metricPolicy.canHeadlineAnnualized
+                ? formatDateRange(startDate, endDate)
+                : metricPresentation.secondaryReturn.detail,
           },
           {
             label: "Volatility",
             value: ({ metrics }) => formatPercent(metrics.annualizedVolatility),
-            detail: "Annualized log-return volatility",
+            detail: ({ metrics }) =>
+              `Annualized from ${formatNumber(metrics.periodicObservations, 0)} daily returns`,
           },
           {
             label: "Max Drawdown",
@@ -41,12 +50,14 @@ const RESULT_TAB_DEFINITIONS = [
           {
             label: "Sharpe Ratio",
             value: ({ metrics }) => formatNumber(metrics.sharpeRatio),
-            detail: "Uses annualized excess log return",
+            detail: ({ metrics }) =>
+              `Diagnostic from ${formatNumber(metrics.periodicObservations, 0)} return observations`,
           },
           {
             label: "Sortino Ratio",
             value: ({ metrics }) => formatNumber(metrics.sortinoRatio),
-            detail: "Uses downside log deviation",
+            detail: ({ metrics }) =>
+              `Diagnostic from ${formatNumber(metrics.periodicObservations, 0)} return observations`,
           },
         ],
       },
@@ -109,9 +120,10 @@ const RESULT_TAB_DEFINITIONS = [
         summary: "Secondary ratios and assumptions behind the headline read.",
         cards: [
           {
-            label: "Calmar Ratio",
-            value: ({ metrics }) => formatNumber(metrics.calmarRatio),
-            detail: "CAGR divided by max drawdown",
+            label: ({ metricPresentation }) => metricPresentation.drawdownEfficiency.label,
+            value: ({ metricPresentation }) =>
+              formatNumber(metricPresentation.drawdownEfficiency.value),
+            detail: ({ metricPresentation }) => metricPresentation.drawdownEfficiency.detail,
           },
           {
             label: "Martin Ratio",
@@ -229,7 +241,7 @@ function renderSectionFromDefinition(section, context) {
     summary: resolveCardContent(section.summary, context),
     cards: section.cards.map((card) =>
       renderMetricCard({
-        label: card.label,
+        label: resolveCardContent(card.label, context),
         value: resolveCardContent(card.value, context),
         detail: resolveCardContent(card.detail, context),
       }),
@@ -238,8 +250,12 @@ function renderSectionFromDefinition(section, context) {
 }
 
 function renderResults({ metrics, startDate, endDate, methodLabel, warnings }) {
+  const metricPresentation = buildRiskMetricPresentation({ metrics, startDate, endDate });
+  const { policy: metricPolicy } = metricPresentation;
   const context = {
     metrics,
+    metricPolicy,
+    metricPresentation,
     startDate,
     endDate,
     methodLabel,
@@ -288,7 +304,7 @@ function renderResults({ metrics, startDate, endDate, methodLabel, warnings }) {
               ${tab.sections
                 .map((section) => renderSectionFromDefinition(section, context))
                 .join("")}
-              ${tab.id === "overview" ? renderRiskInterpretation(metrics) : ""}
+              ${tab.id === "overview" ? renderRiskInterpretation(metrics, { metricPolicy }) : ""}
               ${tab.renderDetails ? tab.renderDetails(context) : ""}
             </section>
           `,

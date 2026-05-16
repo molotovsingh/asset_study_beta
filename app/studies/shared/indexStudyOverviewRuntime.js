@@ -58,6 +58,14 @@ function createIndexStudyOverviewRuntime({
       : null;
   }
 
+  function getBundledDatasetForSelection(selection) {
+    if (!selection?.sync || !session.bundledManifest) {
+      return null;
+    }
+
+    return getManifestDataset(session.bundledManifest, selection.sync);
+  }
+
   function getInstrumentProfileState(selection) {
     const profileKey = getProfileKey(selection);
     return profileKey ? session.instrumentProfiles[profileKey] || null : null;
@@ -111,7 +119,7 @@ function createIndexStudyOverviewRuntime({
   }
 
   async function loadSelectionData(selection) {
-    if (selection.kind === "builtin" || selection.kind === "bundled") {
+    if ((selection.kind === "builtin" || selection.kind === "bundled") && selection.sync) {
       const manifestDataset =
         session.bundledManifest && selection.sync
           ? getManifestDataset(session.bundledManifest, selection.sync)
@@ -169,6 +177,11 @@ function createIndexStudyOverviewRuntime({
       return;
     }
 
+    // Ad hoc symbols stay unresolved until the first history load succeeds.
+    if (selection?.kind === "adhoc" && !getRuntimeSnapshot(selection)) {
+      return;
+    }
+
     const currentState = session.instrumentProfiles[profileKey];
     if (
       currentState?.status === "ready" ||
@@ -215,6 +228,7 @@ function createIndexStudyOverviewRuntime({
     getSuggestions,
     getCurrentSelection,
     getRuntimeSnapshot,
+    getBundledDatasetForSelection,
     updateIndexSummary,
     refreshSelectionUi,
     rememberCatalogEntry,

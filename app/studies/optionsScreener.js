@@ -6,10 +6,12 @@ import {
 import {
   DEFAULT_OPTIONS_SCREENER_BIAS,
   DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER,
+  DEFAULT_OPTIONS_SCREENER_PRESET_ID,
   DEFAULT_OPTIONS_SCREENER_SORT_KEY,
   buildOptionsScreenerStudyRun,
   getSortDefinition,
   normalizeCandidateFilter,
+  normalizePresetId,
 } from "../lib/optionsScreener.js";
 import {
   exportOptionsScreenerCsv,
@@ -26,6 +28,11 @@ import {
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
 import {
+  createLinkItem,
+  createSummaryItem,
+  recordLocalStudyRun,
+} from "./shared/studyRunHistory.js";
+import {
   optionsScreenerTemplate,
   renderOptionsScreenerHistory,
   renderOptionsScreenerResults,
@@ -37,6 +44,7 @@ const optionsScreenerSession = {
   universeId: DEFAULT_OPTIONS_SCREENER_UNIVERSE_ID,
   bias: DEFAULT_OPTIONS_SCREENER_BIAS,
   candidateFilter: DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER,
+  presetId: DEFAULT_OPTIONS_SCREENER_PRESET_ID,
   sortKey: DEFAULT_OPTIONS_SCREENER_SORT_KEY,
   minimumDteValue: String(
     getOptionsScreenerUniverseById(DEFAULT_OPTIONS_SCREENER_UNIVERSE_ID)
@@ -51,6 +59,7 @@ function buildRunSignature(session) {
     session.universeId,
     session.bias,
     session.candidateFilter,
+    session.presetId,
     session.sortKey,
     session.minimumDteValue,
   ].join("|");
@@ -69,7 +78,11 @@ function normalizeBias(value) {
 }
 
 function normalizeSortKey(value) {
-  return getSortDefinition(value).key;
+  const nextValue = String(value || "").trim();
+  if (!nextValue) {
+    return DEFAULT_OPTIONS_SCREENER_SORT_KEY;
+  }
+  return getSortDefinition(nextValue).key;
 }
 
 function applyRouteParams() {
@@ -77,6 +90,7 @@ function applyRouteParams() {
   const nextUniverseId = normalizeUniverseId(readTextParam(params, "u"));
   const nextBias = normalizeBias(readTextParam(params, "bias"));
   const nextCandidateFilter = normalizeCandidateFilter(readTextParam(params, "advice"));
+  const nextPresetId = normalizePresetId(readTextParam(params, "preset"));
   const nextSortKey = normalizeSortKey(readTextParam(params, "sort"));
   const nextMinimumDte = readTextParam(params, "dte");
   let changed = false;
@@ -93,6 +107,11 @@ function applyRouteParams() {
 
   if (optionsScreenerSession.candidateFilter !== nextCandidateFilter) {
     optionsScreenerSession.candidateFilter = nextCandidateFilter;
+    changed = true;
+  }
+
+  if (optionsScreenerSession.presetId !== nextPresetId) {
+    optionsScreenerSession.presetId = nextPresetId;
     changed = true;
   }
 
@@ -121,6 +140,7 @@ function replaceOptionsScreenerRouteParams(viewId = "overview") {
     u: optionsScreenerSession.universeId,
     bias: optionsScreenerSession.bias,
     advice: optionsScreenerSession.candidateFilter,
+    preset: optionsScreenerSession.presetId,
     sort: optionsScreenerSession.sortKey,
     dte: optionsScreenerSession.minimumDteValue,
   });
@@ -138,7 +158,7 @@ function validateInputs(universe, minimumDteValue) {
 
   return {
     minimumDte: Math.trunc(minimumDte),
-    maxContracts: universe.maxContracts || 1,
+    maxContracts: Math.max(universe.maxContracts || 1, 4),
   };
 }
 
@@ -156,6 +176,7 @@ function mountOptionsScreenerOverview(root) {
     universeId: initialUniverse.id,
     bias: optionsScreenerSession.bias,
     candidateFilter: optionsScreenerSession.candidateFilter,
+    presetId: optionsScreenerSession.presetId,
     sortKey: optionsScreenerSession.sortKey,
     minimumDteValue: optionsScreenerSession.minimumDteValue,
     presetMarkup: renderUniversePresetInfo(initialUniverse),
@@ -165,6 +186,7 @@ function mountOptionsScreenerOverview(root) {
   const universeSelect = root.querySelector("#options-screener-universe");
   const biasSelect = root.querySelector("#options-screener-bias");
   const candidateFilterSelect = root.querySelector("#options-screener-candidate");
+  const presetSelect = root.querySelector("#options-screener-preset");
   const sortSelect = root.querySelector("#options-screener-sort");
   const minimumDteInput = root.querySelector("#options-screener-min-dte");
   const statusEl = root.querySelector("#options-screener-status");
@@ -257,6 +279,7 @@ function mountOptionsScreenerOverview(root) {
     optionsScreenerSession.candidateFilter = normalizeCandidateFilter(
       candidateFilterSelect.value,
     );
+    optionsScreenerSession.presetId = normalizePresetId(presetSelect.value);
     optionsScreenerSession.sortKey = normalizeSortKey(sortSelect.value);
     optionsScreenerSession.minimumDteValue = minimumDteInput.value.trim();
     const nextSignature = buildRunSignature(optionsScreenerSession);
@@ -309,12 +332,86 @@ function mountOptionsScreenerOverview(root) {
         sortKey: optionsScreenerSession.sortKey,
         bias: optionsScreenerSession.bias,
         candidateFilter: optionsScreenerSession.candidateFilter,
+        presetId: optionsScreenerSession.presetId,
       });
 
       optionsScreenerSession.lastStudyRun = studyRun;
       optionsScreenerSession.lastRunSignature = buildRunSignature(
         optionsScreenerSession,
       );
+      recordLocalStudyRun({
+        study: optionsScreenerStudy,
+        subjectQuery: universe.id,
+        selectionLabel: universe.label,
+        symbol: "",
+        actualEndDate: studyRun.asOfDate,
+        detailLabel: `${studyRun.filteredRows.length} rows · ${getSortDefinition(studyRun.sortKey).label} · ${studyRun.minimumDte}D minimum`,
+        requestedParams: {
+          universeId: universe.id,
+          minimumDte,
+          maxContracts,
+          sortKey: optionsScreenerSession.sortKey,
+          bias: optionsScreenerSession.bias,
+          candidateFilter: optionsScreenerSession.candidateFilter,
+          presetId: optionsScreenerSession.presetId,
+        },
+        resolvedParams: {
+          asOfDate: studyRun.asOfDate || "",
+          totalRows: studyRun.rows.length,
+          filteredRows: studyRun.filteredRows.length,
+          signalVersion: studyRun.storage?.signalVersion || screenerPayload.signalVersion || "",
+        },
+        providerSummary: {
+          providers: studyRun.providerSummary,
+        },
+        summaryItems: [
+          createSummaryItem({
+            key: "filtered-rows",
+            label: "Filtered Rows",
+            valueNumber: studyRun.filteredRows.length,
+            valueKind: "integer",
+            sortOrder: 0,
+          }),
+          createSummaryItem({
+            key: "total-rows",
+            label: "Universe Reads",
+            valueNumber: studyRun.rows.length,
+            valueKind: "integer",
+            sortOrder: 1,
+          }),
+          createSummaryItem({
+            key: "cheap-reads",
+            label: "Cheap Reads",
+            valueNumber: studyRun.cheapCount,
+            valueKind: "integer",
+            sortOrder: 2,
+          }),
+          createSummaryItem({
+            key: "rich-reads",
+            label: "Rich Reads",
+            valueNumber: studyRun.richCount,
+            valueKind: "integer",
+            sortOrder: 3,
+          }),
+        ],
+        links: [
+          createLinkItem({
+            linkType: "evidence-source",
+            targetKind: "options_screener_run",
+            targetId: studyRun.storage?.runId,
+            targetLabel: studyRun.storage?.runId
+              ? `${universe.label} run #${studyRun.storage.runId}`
+              : "",
+            metadata: {
+              universeId: universe.id,
+              signalVersion: studyRun.storage?.signalVersion || screenerPayload.signalVersion || "",
+            },
+            sortOrder: 0,
+          }),
+        ],
+        warningCount: studyRun.failures.length + (studyRun.storageWarning ? 1 : 0),
+        completedAt: studyRun.exportedAt?.toISOString?.() || new Date().toISOString(),
+      });
       resultsRoot.innerHTML = renderOptionsScreenerResults(studyRun);
       universe.historyPayload = null;
       void loadHistory(universe, { force: true });
@@ -355,6 +452,7 @@ function mountOptionsScreenerOverview(root) {
   universeSelect.addEventListener("change", handleUniverseChange);
   biasSelect.addEventListener("change", handleFieldChange);
   candidateFilterSelect.addEventListener("change", handleFieldChange);
+  presetSelect.addEventListener("change", handleFieldChange);
   sortSelect.addEventListener("change", handleFieldChange);
   minimumDteInput.addEventListener("change", handleFieldChange);
   resultsRoot.addEventListener("click", handleResultsClick);
@@ -365,6 +463,7 @@ function mountOptionsScreenerOverview(root) {
     universeSelect.removeEventListener("change", handleUniverseChange);
     biasSelect.removeEventListener("change", handleFieldChange);
     candidateFilterSelect.removeEventListener("change", handleFieldChange);
+    presetSelect.removeEventListener("change", handleFieldChange);
     sortSelect.removeEventListener("change", handleFieldChange);
     minimumDteInput.removeEventListener("change", handleFieldChange);
     resultsRoot.removeEventListener("click", handleResultsClick);

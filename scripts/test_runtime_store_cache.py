@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -163,6 +164,234 @@ def test_legacy_series_cache_migrates_to_normalized_rows():
             "legacy",
             "legacy migration should force a broad refresh later",
         )
+
+
+def test_legacy_options_screener_rows_migrate_with_defaults():
+    with isolated_runtime_store():
+        runtime_store.CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(runtime_store.CACHE_DB_PATH)
+        connection.execute(
+            """
+            CREATE TABLE symbols (
+                symbol_id INTEGER PRIMARY KEY,
+                symbol TEXT NOT NULL UNIQUE
+            )
+            """,
+        )
+        connection.execute(
+            """
+            CREATE TABLE options_screener_runs (
+                run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                universe_id TEXT NOT NULL,
+                universe_label TEXT NOT NULL,
+                minimum_dte INTEGER NOT NULL,
+                max_contracts INTEGER NOT NULL,
+                requested_symbols_json TEXT NOT NULL,
+                failure_json TEXT NOT NULL DEFAULT '[]',
+                row_count INTEGER NOT NULL DEFAULT 0,
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                as_of_date TEXT,
+                created_at TEXT NOT NULL
+            )
+            """,
+        )
+        connection.execute(
+            """
+            CREATE TABLE options_screener_rows (
+                run_id INTEGER NOT NULL,
+                symbol_id INTEGER NOT NULL,
+                provider TEXT NOT NULL DEFAULT 'yfinance',
+                as_of_date TEXT NOT NULL,
+                expiry TEXT,
+                spot_price REAL,
+                strike REAL,
+                days_to_expiry INTEGER,
+                straddle_mid_price REAL,
+                implied_move_percent REAL,
+                straddle_implied_volatility REAL,
+                chain_implied_volatility REAL,
+                historical_volatility_20 REAL,
+                historical_volatility_60 REAL,
+                iv_hv20_ratio REAL,
+                iv_hv60_ratio REAL,
+                iv_percentile REAL,
+                iv_hv20_percentile REAL,
+                combined_open_interest INTEGER,
+                combined_volume INTEGER,
+                spread_share REAL,
+                pricing_label TEXT,
+                pricing_bucket TEXT,
+                direction_score REAL,
+                direction_label TEXT,
+                trend_score REAL,
+                trend_label TEXT,
+                trend_return_63 REAL,
+                trend_return_252 REAL,
+                seasonality_score REAL,
+                seasonality_label TEXT,
+                seasonality_month_label TEXT,
+                seasonality_mean_return REAL,
+                seasonality_median_return REAL,
+                seasonality_win_rate REAL,
+                seasonality_average_absolute_return REAL,
+                seasonality_observations INTEGER,
+                vol_pricing_score REAL,
+                execution_score REAL,
+                confidence_score REAL,
+                candidate_advisory TEXT,
+                candidate_bucket TEXT,
+                warnings_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (run_id, symbol_id),
+                FOREIGN KEY (run_id) REFERENCES options_screener_runs(run_id) ON DELETE CASCADE,
+                FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+            )
+            """,
+        )
+        connection.execute(
+            "INSERT INTO symbols (symbol_id, symbol) VALUES (?, ?)",
+            (1, "AAPL"),
+        )
+        connection.execute(
+            """
+            INSERT INTO options_screener_runs (
+                run_id,
+                universe_id,
+                universe_label,
+                minimum_dte,
+                max_contracts,
+                requested_symbols_json,
+                failure_json,
+                row_count,
+                failure_count,
+                as_of_date,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                "us-liquid-10",
+                "US Liquid 10",
+                25,
+                1,
+                '["AAPL"]',
+                "[]",
+                1,
+                0,
+                "2026-04-12",
+                "2026-04-12T08:30:00+00:00",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO options_screener_rows (
+                run_id,
+                symbol_id,
+                provider,
+                as_of_date,
+                expiry,
+                spot_price,
+                strike,
+                days_to_expiry,
+                straddle_mid_price,
+                implied_move_percent,
+                straddle_implied_volatility,
+                chain_implied_volatility,
+                historical_volatility_20,
+                historical_volatility_60,
+                iv_hv20_ratio,
+                iv_hv60_ratio,
+                iv_percentile,
+                iv_hv20_percentile,
+                combined_open_interest,
+                combined_volume,
+                spread_share,
+                pricing_label,
+                pricing_bucket,
+                direction_score,
+                direction_label,
+                trend_score,
+                trend_label,
+                trend_return_63,
+                trend_return_252,
+                seasonality_score,
+                seasonality_label,
+                seasonality_month_label,
+                seasonality_mean_return,
+                seasonality_median_return,
+                seasonality_win_rate,
+                seasonality_average_absolute_return,
+                seasonality_observations,
+                vol_pricing_score,
+                execution_score,
+                confidence_score,
+                candidate_advisory,
+                candidate_bucket,
+                warnings_json,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                1,
+                "yfinance",
+                "2026-04-12",
+                "2026-05-15",
+                260.48,
+                260,
+                33,
+                17.675,
+                0.0679,
+                0.2828,
+                0.2817,
+                0.244,
+                0.231,
+                1.159,
+                1.224,
+                0.65,
+                0.72,
+                22827,
+                3220,
+                0.02,
+                "Mildly Rich",
+                "rich",
+                66.09,
+                "Long Bias",
+                68.2,
+                "Long Bias",
+                0.055,
+                0.124,
+                63.98,
+                "Long Bias",
+                "Apr",
+                0.0356,
+                0.0221,
+                0.587,
+                0.061,
+                23,
+                65.2,
+                91.7,
+                94.4,
+                "Short Premium Candidate",
+                "short-premium",
+                "[]",
+                "2026-04-12T08:30:00+00:00",
+            ),
+        )
+        connection.commit()
+        connection.close()
+
+        runtime_store._RUNTIME_STORE_READY = False
+        runtime_store.ensure_runtime_store()
+
+        recent_runs = runtime_store.load_recent_options_screener_runs(limit=5)
+        rows = runtime_store.load_options_screener_rows(run_id=1, limit=5)
+
+        assert_equal(recent_runs[0]["signalVersion"], "legacy-v0", "legacy runs should default signal version")
+        assert_equal(rows[0]["signalVersion"], "legacy-v0", "legacy rows should default signal version")
+        assert_equal(rows[0]["rvPercentile"], None, "legacy rows should default new metric fields to null")
+        assert_equal(rows[0]["primaryTradeIdea"], None, "legacy rows should load without a primary trade idea")
+        assert_equal(rows[0]["tradeIdeaLabels"], [], "legacy rows should default trade idea labels to an empty list")
 
 
 def test_overlap_validation_detects_price_and_action_changes():
@@ -488,26 +717,55 @@ def test_options_screener_runs_persist():
                     "confidenceScore": 94.4,
                     "candidateAdvisory": "Short Premium Candidate",
                     "candidateBucket": "short-premium",
+                    "signalVersion": "options-signal-v1",
+                    "rvPercentile": 0.61,
+                    "vrp": 0.0388,
+                    "frontImpliedVolatility": 0.2828,
+                    "backImpliedVolatility": 0.271,
+                    "termStructureSteepness": -0.0105,
+                    "termStructureBucket": "flat",
+                    "termStructureLabel": "Flat",
+                    "atmImpliedVolatility": 0.2817,
+                    "put25DeltaImpliedVolatility": 0.297,
+                    "call25DeltaImpliedVolatility": 0.267,
+                    "normalizedSkew": 0.054,
+                    "normalizedUpsideSkew": -0.052,
+                    "ivRank": 82.0,
+                    "rvRank": 71.0,
+                    "vrpRank": 76.0,
+                    "termStructureRank": 45.0,
+                    "skewRank": 69.0,
+                    "primaryTradeIdea": "Sell Vega",
+                    "tradeIdeaLabels": ["Sell Vega"],
                     "warnings": [],
                 }
             ],
+            signal_version="options-signal-v1",
             created_at="2026-04-12T08:30:00+00:00",
         )
 
         assert_equal(summary["universeId"], "us-liquid-10", "screener run universe should persist")
         assert_equal(summary["rowCount"], 1, "screener run row count should persist")
         assert_equal(summary["failureCount"], 1, "screener run failure count should persist")
+        assert_equal(summary["signalVersion"], "options-signal-v1", "run signal version should persist")
 
         recent_runs = runtime_store.load_recent_options_screener_runs(limit=5)
         assert_equal(len(recent_runs), 1, "recent screener runs should load")
         assert_equal(recent_runs[0]["requestedSymbols"], ["AAPL", "TSLA"], "requested symbols should round-trip")
         assert_equal(recent_runs[0]["failures"][0]["symbol"], "TSLA", "failures should round-trip")
+        assert_equal(recent_runs[0]["signalVersion"], "options-signal-v1", "recent runs should load signal version")
 
         rows = runtime_store.load_options_screener_rows(symbol="AAPL", universe_id="us-liquid-10", limit=5)
         assert_equal(len(rows), 1, "stored screener rows should load")
         assert_equal(rows[0]["pricingBucket"], "rich", "pricing bucket should round-trip")
         assert_equal(rows[0]["directionLabel"], "Long Bias", "direction label should round-trip")
         assert_equal(rows[0]["candidateAdvisory"], "Short Premium Candidate", "candidate advisory should round-trip")
+        assert_equal(rows[0]["signalVersion"], "options-signal-v1", "stored rows should include signal version")
+        assert_equal(round(rows[0]["rvPercentile"], 2), 0.61, "RV percentile should round-trip")
+        assert_equal(round(rows[0]["vrp"], 4), 0.0388, "VRP should round-trip")
+        assert_equal(rows[0]["termStructureBucket"], "flat", "term-structure bucket should round-trip")
+        assert_equal(rows[0]["primaryTradeIdea"], "Sell Vega", "primary trade idea should round-trip")
+        assert_equal(rows[0]["tradeIdeaLabels"], ["Sell Vega"], "trade idea labels should round-trip")
         assert_equal(
             runtime_store.load_options_screener_rows(run_id=summary["runId"], limit=5)[0]["symbol"],
             "AAPL",
@@ -736,6 +994,7 @@ def test_get_or_refresh_uses_full_then_incremental_then_rebuild():
 def main() -> int:
     test_normalized_store_full_and_incremental_merge()
     test_legacy_series_cache_migrates_to_normalized_rows()
+    test_legacy_options_screener_rows_migrate_with_defaults()
     test_overlap_validation_detects_price_and_action_changes()
     test_option_snapshot_and_realized_metrics_persist()
     test_options_screener_runs_persist()

@@ -1,0 +1,118 @@
+{
+  "version": "study-proposal-v1",
+  "responseVersion": "study-proposal-response-v1",
+  "toolCatalogVersion": "tool-catalog-v1",
+  "purpose": "Read-only contract for evaluating whether a new study idea is testable before code, execution, or conclusions.",
+  "requestShape": {
+    "idea": "required natural-language study idea",
+    "approvedTools": "optional array of approved tool descriptors with id, label, kind, capabilities, and limitations"
+  },
+  "responseFields": [
+    "version",
+    "status",
+    "idea",
+    "hypothesis",
+    "existingCoverage",
+    "feasibility",
+    "requiredTools",
+    "missingToolKinds",
+    "requiredData",
+    "proposedMetrics",
+    "studyPlanCandidate",
+    "validationRules",
+    "caveats",
+    "nonGoals",
+    "nextSteps"
+  ],
+  "hardStops": [
+    "A proposal is not evidence.",
+    "No external tools are called by the deterministic proposal builder.",
+    "News or event text must be archived with source IDs and timestamps before conclusions.",
+    "Generated implementation scope must not be applied without human confirmation."
+  ],
+  "toolCatalog": {
+    "version": "tool-catalog-v1",
+    "purpose": "Approved tool descriptors for read-only study proposal feasibility checks.",
+    "tools": [
+      {
+        "id": "bundled-yfinance-index-snapshots",
+        "label": "Bundled yfinance index snapshots",
+        "kind": "market-data",
+        "status": "approved",
+        "evidenceRole": "historical_price_series",
+        "capabilities": [
+          "daily_prices",
+          "index_history",
+          "offline_repeatability"
+        ],
+        "limitations": [
+          "snapshot_staleness",
+          "limited_builtin_universe"
+        ]
+      },
+      {
+        "id": "local-yfinance-backend",
+        "label": "Local yfinance backend",
+        "kind": "market-data",
+        "status": "approved",
+        "evidenceRole": "ad_hoc_price_series",
+        "capabilities": [
+          "daily_prices",
+          "profiles",
+          "option_chains"
+        ],
+        "limitations": [
+          "provider_availability",
+          "not_an_exchange_master"
+        ]
+      },
+      {
+        "id": "runtime-store",
+        "label": "Local SQLite runtime store",
+        "kind": "storage",
+        "status": "approved",
+        "evidenceRole": "durable_local_ledger",
+        "capabilities": [
+          "study_runs",
+          "symbol_universes",
+          "options_evidence",
+          "runtime_health"
+        ],
+        "limitations": [
+          "local_first",
+          "not_shared_by_default"
+        ]
+      },
+      {
+        "id": "options-evidence-ledger",
+        "label": "Options evidence ledger",
+        "kind": "options-evidence",
+        "status": "approved",
+        "evidenceRole": "archived_options_signals_and_marks",
+        "capabilities": [
+          "screener_archive",
+          "tracked_straddles",
+          "trade_validation"
+        ],
+        "limitations": [
+          "requires_collector_history",
+          "front_straddles_only_in_v1"
+        ]
+      },
+      {
+        "id": "finnhub-symbol-discovery",
+        "label": "Finnhub symbol discovery",
+        "kind": "symbol-discovery",
+        "status": "approved",
+        "evidenceRole": "symbol_master_lookup",
+        "capabilities": [
+          "exchange_symbols",
+          "search"
+        ],
+        "limitations": [
+          "not_a_study_result_source"
+        ]
+      }
+    ]
+  }
+}

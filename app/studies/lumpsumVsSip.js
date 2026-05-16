@@ -23,6 +23,7 @@ import {
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
 import {
+  buildAvailableStudyWindow,
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
@@ -114,6 +115,7 @@ function replaceLumpsumVsSipRouteParams() {
 
 function mountLumpsumVsSipOverview(root) {
   const routeParamsApplied = applyLumpsumVsSipRouteParams();
+  const routeHasExplicitWindow = routeParamsApplied.start || routeParamsApplied.end;
   if (routeParamsApplied.changed) {
     lumpsumVsSipSession.lastStudyRun = null;
   }
@@ -169,6 +171,8 @@ function mountLumpsumVsSipOverview(root) {
     loadBundledManifest,
     loadRememberedSymbols,
     updateIndexSummary,
+    getRuntimeSnapshot,
+    getBundledDatasetForSelection,
   } = runtime;
   const handleExportClick = createExportClickHandler({
     triggerSelector: "[data-lumpsum-sip-export]",
@@ -193,6 +197,42 @@ function mountLumpsumVsSipOverview(root) {
       state.lastStudyRun = null;
     }
     replaceLumpsumVsSipRouteParams();
+  }
+
+  function applyAvailableWindow({ announce = false, force = false } = {}) {
+    if (!force && routeHasExplicitWindow) {
+      return false;
+    }
+
+    const selection = getCurrentSelection();
+    const manifestDataset = getBundledDatasetForSelection(selection);
+    const nextWindow = buildAvailableStudyWindow({
+      selection: manifestDataset
+        ? { ...selection, range: manifestDataset.range || selection.range }
+        : selection,
+      runtimeSnapshot: getRuntimeSnapshot(selection),
+    });
+    const nextStartValue = toInputDate(nextWindow.startDate);
+    const nextEndValue = toInputDate(nextWindow.endDate);
+    if (
+      startDateInput.value === nextStartValue &&
+      endDateInput.value === nextEndValue
+    ) {
+      return false;
+    }
+
+    startDateInput.value = nextStartValue;
+    endDateInput.value = nextEndValue;
+    persistFormState();
+    if (announce) {
+      setStatus(
+        nextWindow.anchoredToAvailableEndDate
+          ? "Loaded the last 5 available market years."
+          : "Loaded a trailing 5-year window.",
+        "info",
+      );
+    }
+    return true;
   }
 
   function handleResultsClick(event) {
@@ -283,13 +323,7 @@ function mountLumpsumVsSipOverview(root) {
   }
 
   function applyLastFiveYears() {
-    const end = new Date();
-    const start = new Date(end);
-    start.setFullYear(start.getFullYear() - 5);
-    startDateInput.value = toInputDate(start);
-    endDateInput.value = toInputDate(end);
-    persistFormState();
-    setStatus("Loaded a trailing 5-year window.", "info");
+    applyAvailableWindow({ announce: true, force: true });
   }
 
   function handleFormFieldChange() {
@@ -306,14 +340,23 @@ function mountLumpsumVsSipOverview(root) {
   resultsRoot.addEventListener("click", handleResultsClick);
 
   refreshSelectionUi();
-  loadBundledManifest();
-  loadRememberedSymbols();
+  loadBundledManifest().finally(() => {
+    if (!state.lastStudyRun) {
+      applyAvailableWindow();
+    }
+  });
+  loadRememberedSymbols().finally(() => {
+    if (!state.lastStudyRun) {
+      applyAvailableWindow();
+    }
+  });
 
   if (state.lastStudyRun) {
     renderStudyRunResults(resultsRoot, state.lastStudyRun);
     setStatus("Loaded the last completed comparison run.", "success");
   } else {
     updateIndexSummary();
+    applyAvailableWindow();
   }
 
   return () => {

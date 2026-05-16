@@ -4,6 +4,7 @@ import {
   formatPercent,
 } from "../lib/format.js";
 import { DEFAULT_HORIZON_OPTIONS } from "../lib/lumpsumVsSip.js";
+import { buildLumpsumVsSipMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderLumpsumVsSipInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
@@ -94,6 +95,7 @@ function renderCohortTable(studyRun) {
 function renderLumpsumVsSipResults(studyRun) {
   const { summary } = studyRun;
   const firstCohort = summary.firstCohort;
+  const metricPresentation = buildLumpsumVsSipMetricPresentation();
 
   return `
     <div class="results-shell">
@@ -121,7 +123,7 @@ function renderLumpsumVsSipResults(studyRun) {
           <div>
             <p class="section-label">Headline Comparison</p>
             <p class="summary-meta">
-              Same total capital, same start month, same terminal date; only the deployment path changes.
+              Win rate and advantage use terminal wealth. CAGR and XIRR are supporting reads because the cash-flow timing differs.
             </p>
           </div>
         </div>
@@ -129,17 +131,17 @@ function renderLumpsumVsSipResults(studyRun) {
           ${renderCard({
             label: "Lumpsum Win Rate",
             value: formatPercent(summary.lumpsumWinRate),
-            detail: `${formatNumber(summary.lumpsumWins, 0)} of ${formatNumber(summary.totalCohorts, 0)} cohorts`,
+            detail: `${formatNumber(summary.lumpsumWins, 0)} of ${formatNumber(summary.totalCohorts, 0)} cohorts by terminal wealth`,
           })}
           ${renderCard({
             label: "SIP Win Rate",
             value: formatPercent(summary.sipWinRate),
-            detail: `${formatNumber(summary.sipWins, 0)} of ${formatNumber(summary.totalCohorts, 0)} cohorts`,
+            detail: `${formatNumber(summary.sipWins, 0)} of ${formatNumber(summary.totalCohorts, 0)} cohorts by terminal wealth`,
           })}
           ${renderCard({
             label: "Median Advantage",
             value: formatPercent(summary.medianAdvantageRate),
-            detail: "Positive means lumpsum finished ahead",
+            detail: `${metricPresentation.terminalWealth.detail}, not return-rate spread`,
           })}
           ${renderCard({
             label: "IQR Advantage",
@@ -171,14 +173,14 @@ function renderLumpsumVsSipResults(studyRun) {
             label: "Lumpsum Terminal",
             value: formatAmount(firstCohort?.lumpsumTerminalValue, studyRun.selection?.currency),
             detail: firstCohort
-              ? `CAGR ${formatPercent(firstCohort.lumpsumCagr)}`
+              ? `Supporting CAGR ${formatPercent(firstCohort.lumpsumCagr)}`
               : "No cohort available",
           })}
           ${renderCard({
             label: "SIP Terminal",
             value: formatAmount(firstCohort?.sipTerminalValue, studyRun.selection?.currency),
             detail: firstCohort
-              ? `XIRR ${formatPercent(firstCohort.sipXirr)}`
+              ? `Supporting XIRR ${formatPercent(firstCohort.sipXirr)}`
               : "No cohort available",
           })}
           ${renderCard({
@@ -238,10 +240,16 @@ function renderLumpsumVsSipResults(studyRun) {
         <div class="detail-block">
           <h3>Return Read</h3>
           <p class="result-detail">
+            Win rate, median advantage, and the cohort winner are based on terminal wealth.
+          </p>
+          <p class="result-detail">
             Median lumpsum CAGR: ${formatPercent(summary.medianLumpsumCagr)}
           </p>
           <p class="result-detail">
             Median SIP XIRR: ${formatPercent(summary.medianSipXirr)}
+          </p>
+          <p class="result-detail">
+            CAGR and XIRR are not directly comparable as a single ranking metric because SIP deploys capital through time.
           </p>
           <p class="result-detail">
             Ties: ${formatNumber(summary.ties, 0)}

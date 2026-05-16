@@ -1,4 +1,5 @@
 import { getRunnableIndexCatalog } from "../../catalog/indexCatalog.js";
+import { parseManualSelectionInput } from "../../lib/symbolDiscovery.js";
 
 function buildYahooQuoteUrl(symbol) {
   return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`;
@@ -6,6 +7,10 @@ function buildYahooQuoteUrl(symbol) {
 
 function normalizeQuery(value) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function compactQuery(value) {
+  return normalizeQuery(value).replace(/[^a-z0-9]+/g, "");
 }
 
 function buildSelectionSubjectQuery(selection) {
@@ -21,29 +26,39 @@ function buildSelectionSubjectQuery(selection) {
     return selection.label || selection.symbol || "";
   }
 
+  if (
+    selection.kind === "adhoc" &&
+    selection.label &&
+    selection.symbol &&
+    selection.label !== selection.symbol
+  ) {
+    return `${selection.label} | ${selection.symbol}`;
+  }
+
   return selection.symbol || selection.label || "";
 }
 
 function buildBuiltInSelection(entry, bundledDataset = null) {
+  const symbol = entry.sync?.symbol || entry.symbol || "";
   return {
     kind: "builtin",
     id: entry.id,
     label: entry.label,
-    symbol: entry.sync.symbol,
+    symbol,
     currency: bundledDataset?.currency || entry.currency || null,
     providerName: entry.provider,
     family: entry.family,
     targetSeriesType: entry.seriesType,
     sourceSeriesType:
       bundledDataset?.sourceSeriesType ||
-      entry.sync.sourceSeriesType ||
+      entry.sync?.sourceSeriesType ||
       entry.seriesType,
     sourceUrl: bundledDataset?.sourceUrl || entry.sourceUrl,
-    note: bundledDataset?.note || entry.sync.note || null,
+    note: bundledDataset?.note || entry.sync?.note || entry.note || null,
     aliases: entry.aliases || [],
     generatedAt: bundledDataset?.generatedAt || null,
     range: bundledDataset?.range || null,
-    sync: entry.sync,
+    sync: entry.sync || null,
     path: bundledDataset?.path || null,
   };
 }
@@ -99,21 +114,25 @@ function buildRememberedSelection(entry) {
   };
 }
 
-function buildAdHocSelection(rawValue) {
+function buildAdHocSelection(rawValue, { label = null } = {}) {
   const symbol = rawValue.trim();
+  const normalizedLabel = String(label || "").trim() || symbol;
+  const isManualEntry = normalizedLabel !== symbol;
 
   return {
     kind: "adhoc",
     id: `adhoc:${symbol}`,
-    label: symbol,
+    label: normalizedLabel,
     symbol,
     currency: null,
     providerName: "Yahoo Finance",
-    family: "Ad hoc",
+    family: isManualEntry ? "Manual" : "Ad hoc",
     targetSeriesType: "Price",
     sourceSeriesType: "Price",
     sourceUrl: buildYahooQuoteUrl(symbol),
-    note: null,
+    note: isManualEntry
+      ? "Manual symbol entry. This label is stored locally after the first successful load."
+      : null,
     aliases: [],
     generatedAt: null,
     range: null,
@@ -148,12 +167,20 @@ function buildSelectionSignature(selection) {
 }
 
 function scoreSelectionSuggestion(entry, normalizedQuery) {
+  const normalizedCompactQuery = compactQuery(normalizedQuery);
   const normalizedLabel = normalizeQuery(entry.label || "");
   const normalizedId = normalizeQuery(entry.id || "");
   const normalizedSymbol = normalizeQuery(entry.symbol || "");
   const normalizedFamily = normalizeQuery(entry.family || "");
   const normalizedAliases = (entry.aliases || []).map((alias) =>
     normalizeQuery(alias),
+  );
+  const compactLabel = compactQuery(entry.label || "");
+  const compactId = compactQuery(entry.id || "");
+  const compactSymbol = compactQuery(entry.symbol || "");
+  const compactFamily = compactQuery(entry.family || "");
+  const compactAliases = (entry.aliases || []).map((alias) =>
+    compactQuery(alias),
   );
 
   if (!normalizedQuery) {
@@ -176,6 +203,25 @@ function scoreSelectionSuggestion(entry, normalizedQuery) {
     return { score: 208, matchKind: "exact-alias" };
   }
 
+  if (normalizedCompactQuery && compactLabel === normalizedCompactQuery) {
+    return { score: 216, matchKind: "exact-compact-label" };
+  }
+
+  if (normalizedCompactQuery && compactId === normalizedCompactQuery) {
+    return { score: 210, matchKind: "exact-compact-id" };
+  }
+
+  if (normalizedCompactQuery && compactSymbol === normalizedCompactQuery) {
+    return { score: 206, matchKind: "exact-compact-symbol" };
+  }
+
+  if (
+    normalizedCompactQuery &&
+    compactAliases.includes(normalizedCompactQuery)
+  ) {
+    return { score: 204, matchKind: "exact-compact-alias" };
+  }
+
   if (normalizedLabel.startsWith(normalizedQuery)) {
     return { score: 182, matchKind: "starts-with-label" };
   }
@@ -186,6 +232,27 @@ function scoreSelectionSuggestion(entry, normalizedQuery) {
 
   if (normalizedSymbol.startsWith(normalizedQuery)) {
     return { score: 172, matchKind: "starts-with-symbol" };
+  }
+
+  if (
+    normalizedCompactQuery &&
+    compactLabel.startsWith(normalizedCompactQuery)
+  ) {
+    return { score: 176, matchKind: "starts-with-compact-label" };
+  }
+
+  if (
+    normalizedCompactQuery &&
+    compactAliases.some((alias) => alias.startsWith(normalizedCompactQuery))
+  ) {
+    return { score: 170, matchKind: "starts-with-compact-alias" };
+  }
+
+  if (
+    normalizedCompactQuery &&
+    compactSymbol.startsWith(normalizedCompactQuery)
+  ) {
+    return { score: 166, matchKind: "starts-with-compact-symbol" };
   }
 
   if (normalizedLabel.includes(normalizedQuery)) {
@@ -200,8 +267,37 @@ function scoreSelectionSuggestion(entry, normalizedQuery) {
     return { score: 138, matchKind: "contains-symbol" };
   }
 
+  if (
+    normalizedCompactQuery &&
+    compactLabel.includes(normalizedCompactQuery)
+  ) {
+    return { score: 144, matchKind: "contains-compact-label" };
+  }
+
+  if (
+    normalizedCompactQuery &&
+    compactAliases.some((alias) => alias.includes(normalizedCompactQuery))
+  ) {
+    return { score: 140, matchKind: "contains-compact-alias" };
+  }
+
+  if (
+    normalizedCompactQuery &&
+    compactSymbol.includes(normalizedCompactQuery)
+  ) {
+    return { score: 136, matchKind: "contains-compact-symbol" };
+  }
+
   if (normalizedFamily && normalizedFamily.includes(normalizedQuery)) {
     return { score: 122, matchKind: "contains-family" };
+  }
+
+  if (
+    normalizedCompactQuery &&
+    compactFamily &&
+    compactFamily.includes(normalizedCompactQuery)
+  ) {
+    return { score: 118, matchKind: "contains-compact-family" };
   }
 
   return null;
@@ -288,6 +384,7 @@ function mergeSelectionSuggestions(bundledManifest, rememberedCatalog) {
 
 function findSelectionByQuery(query, suggestions) {
   const normalized = normalizeQuery(query);
+  const compact = compactQuery(query);
   if (!normalized) {
     return null;
   }
@@ -320,11 +417,55 @@ function findSelectionByQuery(query, suggestions) {
     return symbolMatches[0];
   }
 
+  if (compact) {
+    const compactLabelMatch = suggestions.find(
+      (entry) => compactQuery(entry.label) === compact,
+    );
+    if (compactLabelMatch) {
+      return compactLabelMatch;
+    }
+
+    const compactIdMatch = suggestions.find(
+      (entry) => compactQuery(entry.id || "") === compact,
+    );
+    if (compactIdMatch) {
+      return compactIdMatch;
+    }
+
+    const compactAliasMatch = suggestions.find((entry) =>
+      entry.aliases.some((alias) => compactQuery(alias) === compact),
+    );
+    if (compactAliasMatch) {
+      return compactAliasMatch;
+    }
+
+    const compactSymbolMatches = suggestions.filter(
+      (entry) => compactQuery(entry.symbol) === compact,
+    );
+    if (compactSymbolMatches.length === 1) {
+      return compactSymbolMatches[0];
+    }
+
+    const rememberedCompactSymbolMatch = compactSymbolMatches.find(
+      (entry) => entry.kind === "remembered",
+    );
+    if (rememberedCompactSymbolMatch) {
+      return rememberedCompactSymbolMatch;
+    }
+  }
+
   const rememberedSymbolMatch = symbolMatches.find(
     (entry) => entry.kind === "remembered",
   );
   if (rememberedSymbolMatch) {
     return rememberedSymbolMatch;
+  }
+
+  const manualSelection = parseManualSelectionInput(query);
+  if (manualSelection) {
+    return buildAdHocSelection(manualSelection.symbol, {
+      label: manualSelection.label,
+    });
   }
 
   return buildAdHocSelection(query);

@@ -1,4 +1,5 @@
 import { formatDateTime } from "./format.js";
+import { buildLumpsumVsSipMetricPresentation } from "./metricRegistry.js";
 import {
   buildXmlWorkbook,
   createCell,
@@ -75,6 +76,7 @@ function buildCsvRows(payload) {
 
 function buildSummaryRows(payload) {
   const { summary } = payload;
+  const metricPresentation = buildLumpsumVsSipMetricPresentation();
 
   return [
     [createCell("Field", "header"), createCell("Value", "header")],
@@ -88,6 +90,11 @@ function buildSummaryRows(payload) {
     [createCell("Actual End"), createCell(payload.actualEndDate, "date")],
     [createCell("Total Investment"), createCell(payload.totalInvestment, "number2")],
     [createCell("Horizon Years"), createCell(payload.horizonYears, "number2")],
+    [createCell("Win Criterion"), createCell(metricPresentation.terminalWealth.exportLabel)],
+    [
+      createCell("Return-Rate Note"),
+      createCell(metricPresentation.terminalWealth.note),
+    ],
     [createCell("Cohorts"), createCell(summary.totalCohorts, "integer")],
     [createCell("Lumpsum Wins"), createCell(summary.lumpsumWins, "integer")],
     [createCell("SIP Wins"), createCell(summary.sipWins, "integer")],

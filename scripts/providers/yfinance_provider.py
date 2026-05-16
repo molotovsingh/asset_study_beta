@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from math import log, pi, sqrt
+from math import erf, log, pi, sqrt
 from math import isnan
 
 from .base import HistoryResult, ProfileResult
@@ -16,6 +16,10 @@ PROVIDER_ID = "yfinance"
 PROVIDER_NAME = "Yahoo Finance (yfinance)"
 
 
+class OptionContractNotMarkableError(RuntimeError):
+    pass
+
+
 def _clean_number(value) -> float | None:
     if value is None:
         return None
@@ -27,6 +31,21 @@ def _clean_number(value) -> float | None:
 
     if isnan(numeric_value):
         return None
+
+    return numeric_value
+
+
+def _clean_implied_volatility(value) -> float | None:
+    numeric_value = _clean_number(value)
+    if numeric_value is None:
+        return None
+
+    # Some Yahoo option-chain responses occasionally surface IV scaled as
+    # whole-percentage points divided by 100 again, for example 0.002 instead
+    # of 0.20. Values below 5% are not credible for the current equity-option
+    # use cases in this app, so normalize them back to annualized decimals.
+    if 0 < numeric_value < 0.05:
+        return numeric_value * 100.0
 
     return numeric_value
 
@@ -58,6 +77,178 @@ def approximate_annualized_implied_volatility(
         / sqrt(2 / pi)
         / sqrt(float(days_to_expiry) / 365)
     )
+
+
+def standard_normal_cdf(value: float) -> float:
+    return 0.5 * (1 + erf(value / sqrt(2)))
+
+
+def black_scholes_delta(
+    *,
+    spot_price: float | None,
+    strike: float | None,
+    time_to_expiry_years: float | None,
+    implied_volatility: float | None,
+    option_type: str,
+) -> float | None:
+    if (
+        spot_price is None
+        or strike is None
+        or time_to_expiry_years is None
+        or implied_volatility is None
+    ):
+        return None
+    if (
+        spot_price <= 0
+        or strike <= 0
+        or time_to_expiry_years <= 0
+        or implied_volatility <= 0
+    ):
+        return None
+
+    sigma_root_t = float(implied_volatility) * sqrt(float(time_to_expiry_years))
+    if sigma_root_t <= 0:
+        return None
+
+    d1 = (
+        log(float(spot_price) / float(strike))
+        + 0.5 * float(implied_volatility) ** 2 * float(time_to_expiry_years)
+    ) / sigma_root_t
+    call_delta = standard_normal_cdf(d1)
+    if option_type == "call":
+        return call_delta
+    if option_type == "put":
+        return call_delta - 1.0
+    return None
+
+
+def select_target_delta_contract(
+    option_frame,
+    *,
+    spot_price: float | None,
+    days_to_expiry: int | float,
+    option_type: str,
+    target_abs_delta: float,
+) -> dict | None:
+    if option_frame is None or option_frame.empty:
+        return None
+    if spot_price is None or spot_price <= 0:
+        return None
+    if not isinstance(days_to_expiry, (int, float)) or days_to_expiry <= 0:
+        return None
+
+    time_to_expiry_years = float(days_to_expiry) / 365.0
+    best_match = None
+    best_score = None
+
+    for _, row in option_frame.iterrows():
+        strike = _clean_number(row.get("strike"))
+        implied_volatility = _clean_implied_volatility(row.get("impliedVolatility"))
+        delta = black_scholes_delta(
+            spot_price=spot_price,
+            strike=strike,
+            time_to_expiry_years=time_to_expiry_years,
+            implied_volatility=implied_volatility,
+            option_type=option_type,
+        )
+        if delta is None:
+            continue
+
+        open_interest = int(_clean_number(row.get("openInterest")) or 0)
+        volume = int(_clean_number(row.get("volume")) or 0)
+        score = (
+            abs(abs(delta) - float(target_abs_delta)),
+            -open_interest,
+            -volume,
+            abs(float(strike or 0) - float(spot_price)),
+        )
+        if best_score is None or score < best_score:
+            best_score = score
+            best_match = {
+                "strike": strike,
+                "impliedVolatility": implied_volatility,
+                "delta": delta,
+            }
+
+    return best_match
+
+
+def summarize_normalized_skew(
+    calls_frame,
+    puts_frame,
+    *,
+    spot_price: float | None,
+    days_to_expiry: int | float,
+    chain_implied_volatility: float | None = None,
+) -> dict:
+    put_25 = select_target_delta_contract(
+        puts_frame,
+        spot_price=spot_price,
+        days_to_expiry=days_to_expiry,
+        option_type="put",
+        target_abs_delta=0.25,
+    )
+    call_25 = select_target_delta_contract(
+        calls_frame,
+        spot_price=spot_price,
+        days_to_expiry=days_to_expiry,
+        option_type="call",
+        target_abs_delta=0.25,
+    )
+    atm_call = select_target_delta_contract(
+        calls_frame,
+        spot_price=spot_price,
+        days_to_expiry=days_to_expiry,
+        option_type="call",
+        target_abs_delta=0.5,
+    )
+    atm_put = select_target_delta_contract(
+        puts_frame,
+        spot_price=spot_price,
+        days_to_expiry=days_to_expiry,
+        option_type="put",
+        target_abs_delta=0.5,
+    )
+
+    atm_candidates = [
+        candidate["impliedVolatility"]
+        for candidate in (atm_call, atm_put)
+        if candidate and candidate.get("impliedVolatility") is not None
+    ]
+    atm_implied_volatility = (
+        sum(atm_candidates) / len(atm_candidates)
+        if atm_candidates
+        else _clean_number(chain_implied_volatility)
+    )
+    if atm_implied_volatility is None or atm_implied_volatility <= 0:
+        atm_implied_volatility = _clean_number(chain_implied_volatility)
+
+    put_25_implied_volatility = (
+        put_25.get("impliedVolatility") if put_25 is not None else None
+    )
+    call_25_implied_volatility = (
+        call_25.get("impliedVolatility") if call_25 is not None else None
+    )
+
+    return {
+        "atmImpliedVolatility": atm_implied_volatility,
+        "put25DeltaImpliedVolatility": put_25_implied_volatility,
+        "call25DeltaImpliedVolatility": call_25_implied_volatility,
+        "normalizedSkew": (
+            (put_25_implied_volatility - atm_implied_volatility) / atm_implied_volatility
+            if put_25_implied_volatility is not None
+            and atm_implied_volatility is not None
+            and atm_implied_volatility > 0
+            else None
+        ),
+        "normalizedUpsideSkew": (
+            (call_25_implied_volatility - atm_implied_volatility) / atm_implied_volatility
+            if call_25_implied_volatility is not None
+            and atm_implied_volatility is not None
+            and atm_implied_volatility > 0
+            else None
+        ),
+    }
 
 
 def _mid_or_last_price(
@@ -126,6 +317,261 @@ def _load_ticker(symbol: str):
     return yf.Ticker(symbol)
 
 
+def _build_contract_snapshot(
+    *,
+    raw_calls,
+    raw_puts,
+    selected_row,
+    latest_close: float,
+    days_to_expiry: int,
+    realized_volatility: dict,
+) -> dict:
+    strike = _clean_number(selected_row.get("strike"))
+    call_bid = _clean_number(selected_row.get("callBid"))
+    call_ask = _clean_number(selected_row.get("callAsk"))
+    put_bid = _clean_number(selected_row.get("putBid"))
+    put_ask = _clean_number(selected_row.get("putAsk"))
+    call_last_price = _clean_number(selected_row.get("callLastPrice"))
+    put_last_price = _clean_number(selected_row.get("putLastPrice"))
+    call_mid, call_source = _mid_or_last_price(
+        call_bid,
+        call_ask,
+        call_last_price,
+    )
+    put_mid, put_source = _mid_or_last_price(
+        put_bid,
+        put_ask,
+        put_last_price,
+    )
+    straddle_mid = (
+        call_mid + put_mid
+        if call_mid is not None and put_mid is not None
+        else None
+    )
+    implied_move_percent = (
+        straddle_mid / latest_close
+        if straddle_mid is not None and latest_close > 0
+        else None
+    )
+    straddle_implied_vol = approximate_annualized_implied_volatility(
+        implied_move_percent,
+        days_to_expiry,
+    )
+    call_iv = _clean_implied_volatility(selected_row.get("callImpliedVolatility"))
+    put_iv = _clean_implied_volatility(selected_row.get("putImpliedVolatility"))
+    chain_iv = None
+    if call_iv is not None and put_iv is not None:
+        chain_iv = (call_iv + put_iv) / 2.0
+    skew_summary = summarize_normalized_skew(
+        raw_calls,
+        raw_puts,
+        spot_price=latest_close,
+        days_to_expiry=days_to_expiry,
+        chain_implied_volatility=chain_iv,
+    )
+    hv20 = realized_volatility["hv20"]
+    hv60 = realized_volatility["hv60"]
+    hv120 = realized_volatility["hv120"]
+
+    return {
+        "strike": strike,
+        "callBid": call_bid,
+        "callAsk": call_ask,
+        "callLastPrice": call_last_price,
+        "callMidPrice": call_mid,
+        "callPriceSource": call_source,
+        "callOpenInterest": int(_clean_number(selected_row.get("callOpenInterest")) or 0),
+        "callVolume": int(_clean_number(selected_row.get("callVolume")) or 0),
+        "callImpliedVolatility": call_iv,
+        "callSpread": (call_ask - call_bid)
+        if call_bid is not None and call_ask is not None
+        else None,
+        "putBid": put_bid,
+        "putAsk": put_ask,
+        "putLastPrice": put_last_price,
+        "putMidPrice": put_mid,
+        "putPriceSource": put_source,
+        "putOpenInterest": int(_clean_number(selected_row.get("putOpenInterest")) or 0),
+        "putVolume": int(_clean_number(selected_row.get("putVolume")) or 0),
+        "putImpliedVolatility": put_iv,
+        "putSpread": (put_ask - put_bid)
+        if put_bid is not None and put_ask is not None
+        else None,
+        "straddleMidPrice": straddle_mid,
+        "impliedMovePrice": straddle_mid,
+        "impliedMovePercent": implied_move_percent,
+        "straddleImpliedVolatility": straddle_implied_vol,
+        "chainImpliedVolatility": chain_iv,
+        "atmImpliedVolatility": skew_summary["atmImpliedVolatility"],
+        "put25DeltaImpliedVolatility": skew_summary["put25DeltaImpliedVolatility"],
+        "call25DeltaImpliedVolatility": skew_summary["call25DeltaImpliedVolatility"],
+        "normalizedSkew": skew_summary["normalizedSkew"],
+        "normalizedUpsideSkew": skew_summary["normalizedUpsideSkew"],
+        "impliedVolatilityGap": (
+            straddle_implied_vol - chain_iv
+            if straddle_implied_vol is not None and chain_iv is not None
+            else None
+        ),
+        "historicalVolatility20": hv20,
+        "historicalVolatility60": hv60,
+        "historicalVolatility120": hv120,
+        "ivHv20Ratio": (
+            straddle_implied_vol / hv20
+            if straddle_implied_vol is not None and hv20 not in (None, 0)
+            else None
+        ),
+        "ivHv60Ratio": (
+            straddle_implied_vol / hv60
+            if straddle_implied_vol is not None and hv60 not in (None, 0)
+            else None
+        ),
+        "ivHv120Ratio": (
+            straddle_implied_vol / hv120
+            if straddle_implied_vol is not None and hv120 not in (None, 0)
+            else None
+        ),
+        "ivHv20Spread": (
+            straddle_implied_vol - hv20
+            if straddle_implied_vol is not None and hv20 is not None
+            else None
+        ),
+        "ivHv60Spread": (
+            straddle_implied_vol - hv60
+            if straddle_implied_vol is not None and hv60 is not None
+            else None
+        ),
+        "ivHv120Spread": (
+            straddle_implied_vol - hv120
+            if straddle_implied_vol is not None and hv120 is not None
+            else None
+        ),
+        "combinedOpenInterest": int(_clean_number(selected_row.get("combinedOpenInterest")) or 0),
+        "combinedVolume": int(_clean_number(selected_row.get("combinedVolume")) or 0),
+        "pricingMode": (
+            "bid-ask-mid"
+            if call_source == "mid" and put_source == "mid"
+            else "mixed"
+        ),
+    }
+
+
+def fetch_exact_contract_quote(
+    symbol: str,
+    *,
+    expiry: str,
+    strike: float,
+) -> dict:
+    ticker = _load_ticker(symbol)
+    history_frame = ticker.history(period="1y", auto_adjust=False)
+    if history_frame.empty or "Close" not in history_frame.columns:
+        raise RuntimeError(f"yfinance returned no recent price data for symbol {symbol}.")
+
+    latest_close = _clean_number(history_frame["Close"].dropna().iloc[-1])
+    if latest_close is None or latest_close <= 0:
+        raise RuntimeError(f"Could not determine a spot price for {symbol}.")
+
+    spot_date = _index_date(history_frame.index[-1])
+    realized_volatility = summarize_realized_volatility(history_frame)
+    as_of_date = datetime.now(timezone.utc).date()
+    try:
+        expiry_date = datetime.strptime(str(expiry), "%Y-%m-%d").date()
+    except ValueError as error:
+        raise OptionContractNotMarkableError(
+            f"Expiry {expiry!r} is not a valid YYYY-MM-DD option expiry.",
+        ) from error
+
+    days_to_expiry = (expiry_date - as_of_date).days
+    chain = ticker.option_chain(str(expiry))
+    raw_calls = chain.calls.copy()
+    raw_puts = chain.puts.copy()
+    if raw_calls.empty or raw_puts.empty:
+        raise OptionContractNotMarkableError(
+            f"No liquid option chain was available for {symbol} {expiry}.",
+        )
+
+    calls = raw_calls.rename(
+        columns={
+            "bid": "callBid",
+            "ask": "callAsk",
+            "lastPrice": "callLastPrice",
+            "openInterest": "callOpenInterest",
+            "volume": "callVolume",
+            "impliedVolatility": "callImpliedVolatility",
+        },
+    )
+    puts = raw_puts.rename(
+        columns={
+            "bid": "putBid",
+            "ask": "putAsk",
+            "lastPrice": "putLastPrice",
+            "openInterest": "putOpenInterest",
+            "volume": "putVolume",
+            "impliedVolatility": "putImpliedVolatility",
+        },
+    )
+    merged = calls.merge(
+        puts,
+        on="strike",
+        how="inner",
+        suffixes=("_call", "_put"),
+    )
+    if merged.empty:
+        raise OptionContractNotMarkableError(
+            f"No exact call/put strike pair was available for {symbol} {expiry}.",
+        )
+
+    normalized_strike = float(strike)
+    exact_matches = merged.loc[
+        merged["strike"].apply(
+            lambda value: _clean_number(value) is not None
+            and abs(float(_clean_number(value)) - normalized_strike) < 1e-9,
+        )
+    ]
+    if exact_matches.empty:
+        raise OptionContractNotMarkableError(
+            f"The exact {symbol} {expiry} {normalized_strike:g} straddle is not markable from the current chain.",
+        )
+
+    exact_matches = exact_matches.copy()
+    exact_matches["combinedOpenInterest"] = (
+        exact_matches["callOpenInterest"].fillna(0)
+        + exact_matches["putOpenInterest"].fillna(0)
+    )
+    exact_matches["combinedVolume"] = (
+        exact_matches["callVolume"].fillna(0)
+        + exact_matches["putVolume"].fillna(0)
+    )
+    exact_matches = exact_matches.sort_values(
+        ["combinedOpenInterest", "combinedVolume"],
+        ascending=[False, False],
+    )
+    selected_row = exact_matches.iloc[0]
+    contract = _build_contract_snapshot(
+        raw_calls=raw_calls,
+        raw_puts=raw_puts,
+        selected_row=selected_row,
+        latest_close=latest_close,
+        days_to_expiry=days_to_expiry,
+        realized_volatility=realized_volatility,
+    )
+    contract["expiry"] = str(expiry)
+    contract["daysToExpiry"] = int(days_to_expiry)
+
+    return {
+        "symbol": symbol,
+        "provider": PROVIDER_ID,
+        "providerName": PROVIDER_NAME,
+        "currency": resolve_ticker_currency(ticker),
+        "fetchedAt": datetime.now(timezone.utc).isoformat(),
+        "asOfDate": as_of_date.isoformat(),
+        "spotDate": spot_date,
+        "spotPrice": latest_close,
+        "expiry": str(expiry),
+        "daysToExpiry": int(days_to_expiry),
+        "contract": contract,
+    }
+
+
 def fetch_monthly_straddle_snapshot(
     symbol: str,
     *,
@@ -163,12 +609,12 @@ def fetch_monthly_straddle_snapshot(
     contracts = []
     for expiry_text, expiry_date, days_to_expiry in monthly_expiries[: max(1, max_contracts)]:
         chain = ticker.option_chain(expiry_text)
-        calls = chain.calls.copy()
-        puts = chain.puts.copy()
-        if calls.empty or puts.empty:
+        raw_calls = chain.calls.copy()
+        raw_puts = chain.puts.copy()
+        if raw_calls.empty or raw_puts.empty:
             continue
 
-        calls = calls.rename(
+        calls = raw_calls.rename(
             columns={
                 "bid": "callBid",
                 "ask": "callAsk",
@@ -178,7 +624,7 @@ def fetch_monthly_straddle_snapshot(
                 "impliedVolatility": "callImpliedVolatility",
             },
         )
-        puts = puts.rename(
+        puts = raw_puts.rename(
             columns={
                 "bid": "putBid",
                 "ask": "putAsk",
@@ -248,11 +694,18 @@ def fetch_monthly_straddle_snapshot(
             implied_move_percent,
             days_to_expiry,
         )
-        call_iv = _clean_number(selected_row.get("callImpliedVolatility"))
-        put_iv = _clean_number(selected_row.get("putImpliedVolatility"))
+        call_iv = _clean_implied_volatility(selected_row.get("callImpliedVolatility"))
+        put_iv = _clean_implied_volatility(selected_row.get("putImpliedVolatility"))
         chain_iv = None
         if call_iv is not None and put_iv is not None:
             chain_iv = (call_iv + put_iv) / 2.0
+        skew_summary = summarize_normalized_skew(
+            raw_calls,
+            raw_puts,
+            spot_price=latest_close,
+            days_to_expiry=days_to_expiry,
+            chain_implied_volatility=chain_iv,
+        )
         hv20 = realized_volatility["hv20"]
         hv60 = realized_volatility["hv60"]
         hv120 = realized_volatility["hv120"]
@@ -289,6 +742,11 @@ def fetch_monthly_straddle_snapshot(
                 "impliedMovePercent": implied_move_percent,
                 "straddleImpliedVolatility": straddle_implied_vol,
                 "chainImpliedVolatility": chain_iv,
+                "atmImpliedVolatility": skew_summary["atmImpliedVolatility"],
+                "put25DeltaImpliedVolatility": skew_summary["put25DeltaImpliedVolatility"],
+                "call25DeltaImpliedVolatility": skew_summary["call25DeltaImpliedVolatility"],
+                "normalizedSkew": skew_summary["normalizedSkew"],
+                "normalizedUpsideSkew": skew_summary["normalizedUpsideSkew"],
                 "impliedVolatilityGap": (
                     straddle_implied_vol - chain_iv
                     if straddle_implied_vol is not None and chain_iv is not None

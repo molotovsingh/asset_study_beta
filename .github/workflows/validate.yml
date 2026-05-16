@@ -28,14 +28,27 @@ jobs:
           node-version: "22"
 
       - name: Compile Python scripts
-        run: python3 -m py_compile scripts/*.py scripts/server/*.py
+        run: python3 -m py_compile scripts/*.py scripts/server/*.py scripts/server/options/*.py scripts/providers/*.py
 
       - name: Run backend regression checks
         run: |
+          python3 scripts/test_assistant_service.py
+          python3 scripts/check_assistant_readiness.py
+          python3 scripts/test_study_builder_service.py
+          python3 scripts/test_study_factory_service.py
           python3 scripts/test_route_dispatch.py
           python3 scripts/test_provider_router.py
           python3 scripts/test_dev_server_provider_preference.py
+          python3 scripts/test_finnhub_search_helpers.py
+          python3 scripts/test_automation_service.py
+          python3 scripts/test_maintenance_service.py
+          python3 scripts/test_market_collector.py
+          python3 scripts/test_options_screener_history.py
+          python3 scripts/test_options_service_facade.py
+          python3 scripts/test_study_run_service.py
           python3 scripts/test_runtime_store_cache.py
+          python3 scripts/test_runtime_health.py
+          python3 scripts/test_options_evidence.py
 
       - name: Validate bundled snapshots
         run: python3 scripts/validate_yfinance_snapshots.py --require-all-configured
@@ -45,6 +58,51 @@ jobs:
 
       - name: Run options validation checks
         run: node scripts/test_options_validation.mjs
+
+      - name: Run options screener checks
+        run: node scripts/test_options_screener.mjs
+
+      - name: Run monthly straddle checks
+        run: node scripts/test_monthly_straddle.mjs
+
+      - name: Run symbol discovery checks
+        run: node scripts/test_symbol_discovery.mjs
+
+      - name: Run study builder contract checks
+        run: node scripts/test_study_builder.mjs
+
+      - name: Run study factory contract checks
+        run: node scripts/test_study_factory.mjs
+
+      - name: Check metric registry manifest
+        run: node scripts/export_metric_registry_manifest.mjs --check
+
+      - name: Check study plan contract
+        run: node scripts/export_study_plan_contract.mjs --check
+
+      - name: Check study plan recipe contract
+        run: node scripts/export_study_plan_recipe_contract.mjs --check
+
+      - name: Check study proposal contract
+        run: node scripts/export_study_proposal_contract.mjs --check
+
+      - name: Check study run explanation contract
+        run: node scripts/export_study_run_explanation_contract.mjs --check
+
+      - name: Check study run handoff contract
+        run: node scripts/export_study_run_handoff_contract.mjs --check
+
+      - name: Check study run explanation brief contract
+        run: node scripts/export_study_run_explanation_brief_contract.mjs --check
+
+      - name: Check study catalog manifest
+        run: node scripts/export_study_catalog_manifest.mjs --check
+
+      - name: Check intent planner contract
+        run: node scripts/export_intent_planner_contract.mjs --check
+
+      - name: Check assistant contract
+        run: node scripts/export_assistant_contract.mjs --check
 
       - name: Run frontend regression checks
         run: node scripts/run_frontend_regression_checks.mjs

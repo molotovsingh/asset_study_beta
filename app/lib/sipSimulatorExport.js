@@ -1,4 +1,5 @@
 import { formatDateTime } from "./format.js";
+import { buildSipMetricPresentation } from "./metricRegistry.js";
 import {
   buildXmlWorkbook,
   createCell,
@@ -60,6 +61,7 @@ function buildCsvRows(payload) {
 
 function buildSummaryRows(payload) {
   const { summary } = payload;
+  const metricPresentation = buildSipMetricPresentation();
   const { fullWindowCohort } = summary;
 
   return [
@@ -74,6 +76,10 @@ function buildSummaryRows(payload) {
     [createCell("Actual End"), createCell(payload.actualEndDate, "date")],
     [createCell("Monthly Contribution"), createCell(payload.monthlyContribution, "number2")],
     [createCell("Minimum Contributions"), createCell(payload.minContributions, "integer")],
+    [
+      createCell("Cohort Comparison Mode"),
+      createCell(metricPresentation.cohortXirr.note),
+    ],
     [createCell("Monthly Anchors"), createCell(summary.totalMonthlyAnchors, "integer")],
     [createCell("Cohorts"), createCell(summary.totalCohorts, "integer")],
     [createCell("Median Cohort XIRR"), createCell(summary.medianXirr, "percent")],

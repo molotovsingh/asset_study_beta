@@ -7,6 +7,7 @@ import {
   toIsoDate,
 } from "./studyExport.js";
 import { flattenMonthlyStraddleRows } from "./monthlyStraddle.js";
+import { buildHistoricalPercentileMetric } from "./metricRegistry.js";
 
 function buildExportFileBaseName(studyRun) {
   return [
@@ -109,6 +110,27 @@ function buildCsvRows(studyRun) {
 
 function buildSummaryRows(studyRun) {
   const focus = studyRun.focusContract;
+  const ivPercentileMetric = buildHistoricalPercentileMetric({
+    label: "IV Percentile",
+    value: studyRun.historySummary.ivPercentile,
+    observations: studyRun.historySummary.observations,
+  });
+  const movePercentileMetric = buildHistoricalPercentileMetric({
+    label: "Move Percentile",
+    value: studyRun.historySummary.movePercentile,
+    observations: studyRun.historySummary.observations,
+  });
+  const ivHv20PercentileMetric = buildHistoricalPercentileMetric({
+    label: "IV/HV20 Percentile",
+    value: studyRun.historySummary.ivHv20Percentile,
+    observations: studyRun.historySummary.observations,
+  });
+  const ivHv60PercentileMetric = buildHistoricalPercentileMetric({
+    label: "IV/HV60 Percentile",
+    value: studyRun.historySummary.ivHv60Percentile,
+    observations: studyRun.historySummary.observations,
+  });
+  const hasCrediblePercentiles = ivPercentileMetric.exportable;
   return [
     [createCell("Field", "header"), createCell("Value", "header")],
     [createCell("Study"), createCell(studyRun.studyTitle)],
@@ -125,10 +147,18 @@ function buildSummaryRows(studyRun) {
     [createCell("Realized Vol Source"), createCell(studyRun.realizedVolatility.seriesType)],
     [createCell("Realized Vol Observations"), createCell(studyRun.realizedVolatility.observations, "integer")],
     [createCell("Stored Front Snapshots"), createCell(studyRun.historySummary.observations, "integer")],
-    [createCell("IV Percentile"), createCell(studyRun.historySummary.ivPercentile, "percent")],
-    [createCell("Move Percentile"), createCell(studyRun.historySummary.movePercentile, "percent")],
-    [createCell("IV/HV20 Percentile"), createCell(studyRun.historySummary.ivHv20Percentile, "percent")],
-    [createCell("IV/HV60 Percentile"), createCell(studyRun.historySummary.ivHv60Percentile, "percent")],
+    [
+      createCell("Percentile Context"),
+      createCell(
+        hasCrediblePercentiles
+          ? "Visible"
+          : "Suppressed until front-history is deeper",
+      ),
+    ],
+    [createCell("IV Percentile"), createCell(ivPercentileMetric.exportable ? ivPercentileMetric.value : "", ivPercentileMetric.exportable ? "percent" : "text")],
+    [createCell("Move Percentile"), createCell(movePercentileMetric.exportable ? movePercentileMetric.value : "", movePercentileMetric.exportable ? "percent" : "text")],
+    [createCell("IV/HV20 Percentile"), createCell(ivHv20PercentileMetric.exportable ? ivHv20PercentileMetric.value : "", ivHv20PercentileMetric.exportable ? "percent" : "text")],
+    [createCell("IV/HV60 Percentile"), createCell(ivHv60PercentileMetric.exportable ? ivHv60PercentileMetric.value : "", ivHv60PercentileMetric.exportable ? "percent" : "text")],
     [],
     [createCell("Focus Expiry", "header"), createCell(focus.expiry)],
     [createCell("Focus DTE"), createCell(focus.daysToExpiry, "integer")],

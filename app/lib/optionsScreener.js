@@ -27,6 +27,31 @@ const OPTIONS_SCREENER_SORT_DEFINITIONS = [
     styleId: "percent",
   },
   {
+    key: "rvPercentile",
+    label: "RV Percentile",
+    styleId: "percent",
+  },
+  {
+    key: "vrp",
+    label: "VRP",
+    styleId: "percent",
+  },
+  {
+    key: "termStructureSteepness",
+    label: "Term Structure",
+    styleId: "percent",
+  },
+  {
+    key: "normalizedSkew",
+    label: "Normalized Skew",
+    styleId: "percent",
+  },
+  {
+    key: "vrpRank",
+    label: "VRP Rank",
+    styleId: "number2",
+  },
+  {
     key: "combinedOpenInterest",
     label: "Combined OI",
     styleId: "integer",
@@ -43,14 +68,49 @@ const OPTIONS_SCREENER_SORT_DEFINITIONS = [
   },
 ];
 
+const OPTIONS_SCREENER_PRESET_DEFINITIONS = [
+  {
+    id: "long-calendar",
+    label: "Long Calendar",
+    shortLabel: "Long Calendar",
+    trade: "Sell front, buy back",
+  },
+  {
+    id: "sell-vega",
+    label: "Sell Vega",
+    shortLabel: "Sell Vega",
+    trade: "Sell options",
+  },
+  {
+    id: "buy-gamma-vega",
+    label: "Buy Gamma/Vega",
+    shortLabel: "Buy Gamma/Vega",
+    trade: "Buy options",
+  },
+  {
+    id: "short-calendar",
+    label: "Short Calendar",
+    shortLabel: "Short Calendar",
+    trade: "Buy front, sell back",
+  },
+];
+
 const DEFAULT_OPTIONS_SCREENER_SORT_KEY = "ivHv20Ratio";
 const DEFAULT_OPTIONS_SCREENER_BIAS = "all";
 const DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER = "all";
+const DEFAULT_OPTIONS_SCREENER_PRESET_ID = "all";
 
 function getSortDefinition(sortKey) {
   return (
     OPTIONS_SCREENER_SORT_DEFINITIONS.find((definition) => definition.key === sortKey) ||
     OPTIONS_SCREENER_SORT_DEFINITIONS[0]
+  );
+}
+
+function getPresetDefinition(presetId) {
+  return (
+    OPTIONS_SCREENER_PRESET_DEFINITIONS.find((definition) => definition.id === presetId) ||
+    null
   );
 }
 
@@ -68,6 +128,38 @@ function average(values) {
     return null;
   }
   return validValues.reduce((sum, value) => sum + value, 0) / validValues.length;
+}
+
+function computePercentileRank(series, currentValue) {
+  if (!isFiniteNumber(currentValue)) {
+    return null;
+  }
+  const validValues = series.filter(isFiniteNumber);
+  if (!validValues.length) {
+    return null;
+  }
+
+  const lessThanCount = validValues.filter((value) => value < currentValue).length;
+  const equalCount = validValues.filter((value) => value === currentValue).length;
+  return (lessThanCount + equalCount) / validValues.length;
+}
+
+function computeCrossSectionalRank(series, currentValue) {
+  if (!isFiniteNumber(currentValue)) {
+    return null;
+  }
+  const validValues = series.filter(isFiniteNumber).sort((left, right) => left - right);
+  if (!validValues.length) {
+    return null;
+  }
+  if (validValues.length === 1) {
+    return 100;
+  }
+
+  const lessThanCount = validValues.filter((value) => value < currentValue).length;
+  const equalCount = validValues.filter((value) => value === currentValue).length;
+  const averagePosition = lessThanCount + Math.max(equalCount - 1, 0) / 2;
+  return 1 + (averagePosition / (validValues.length - 1)) * 99;
 }
 
 function normalizeBias(value) {
@@ -89,6 +181,11 @@ function normalizeCandidateFilter(value) {
     return text;
   }
   return DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER;
+}
+
+function normalizePresetId(value) {
+  const text = String(value || "").trim().toLowerCase();
+  return getPresetDefinition(text)?.id || DEFAULT_OPTIONS_SCREENER_PRESET_ID;
 }
 
 function pricingBucket(label) {
@@ -262,6 +359,98 @@ function buildCandidateAdvisory({
   };
 }
 
+function buildTermStructureContext(contracts) {
+  const validContracts = (Array.isArray(contracts) ? contracts : [])
+    .filter(
+      (contract) =>
+        isFiniteNumber(contract?.daysToExpiry) &&
+        isFiniteNumber(contract?.straddleImpliedVolatility),
+    )
+    .sort((left, right) => left.daysToExpiry - right.daysToExpiry);
+  if (validContracts.length < 2) {
+    return {
+      frontImpliedVolatility: null,
+      backImpliedVolatility: null,
+      termStructureSteepness: null,
+      termStructureBucket: "none",
+      termStructureLabel: "No Read",
+    };
+  }
+
+  const frontContract = validContracts[0];
+  const backContract = validContracts[validContracts.length - 1];
+  const daySpan = backContract.daysToExpiry - frontContract.daysToExpiry;
+  if (!isFiniteNumber(daySpan) || daySpan <= 0) {
+    return {
+      frontImpliedVolatility: frontContract.straddleImpliedVolatility,
+      backImpliedVolatility: backContract.straddleImpliedVolatility,
+      termStructureSteepness: null,
+      termStructureBucket: "none",
+      termStructureLabel: "No Read",
+    };
+  }
+
+  const steepness =
+    ((backContract.straddleImpliedVolatility - frontContract.straddleImpliedVolatility) /
+      daySpan) *
+    30;
+  if (!isFiniteNumber(steepness)) {
+    return {
+      frontImpliedVolatility: frontContract.straddleImpliedVolatility,
+      backImpliedVolatility: backContract.straddleImpliedVolatility,
+      termStructureSteepness: null,
+      termStructureBucket: "none",
+      termStructureLabel: "No Read",
+    };
+  }
+
+  let termStructureBucket = "normal";
+  let termStructureLabel = "Normal";
+  if (Math.abs(steepness) <= 0.015) {
+    termStructureBucket = "flat";
+    termStructureLabel = "Flat";
+  } else if (steepness >= 0.04) {
+    termStructureBucket = "steep";
+    termStructureLabel = "Steep";
+  } else if (steepness <= -0.04) {
+    termStructureBucket = "inverted";
+    termStructureLabel = "Inverted";
+  }
+
+  return {
+    frontImpliedVolatility: frontContract.straddleImpliedVolatility,
+    backImpliedVolatility: backContract.straddleImpliedVolatility,
+    termStructureSteepness: steepness,
+    termStructureBucket,
+    termStructureLabel,
+  };
+}
+
+function buildTradeIdeaMatches(row) {
+  const matches = [];
+  const isLowIv = isFiniteNumber(row.ivPercentile) && row.ivPercentile <= 0.35;
+  const isHighIv = isFiniteNumber(row.ivPercentile) && row.ivPercentile >= 0.65;
+  const isLowRv = isFiniteNumber(row.rvPercentile) && row.rvPercentile <= 0.35;
+  const isHighRv = isFiniteNumber(row.rvPercentile) && row.rvPercentile >= 0.65;
+  const isLowVrp = isFiniteNumber(row.vrpRank) && row.vrpRank <= 35;
+  const isHighVrp = isFiniteNumber(row.vrpRank) && row.vrpRank >= 65;
+
+  if (isLowIv && isHighVrp && row.termStructureBucket === "flat") {
+    matches.push(getPresetDefinition("long-calendar"));
+  }
+  if (isHighIv && isHighVrp && isHighRv) {
+    matches.push(getPresetDefinition("sell-vega"));
+  }
+  if (isLowIv && isLowVrp && isLowRv) {
+    matches.push(getPresetDefinition("buy-gamma-vega"));
+  }
+  if (isHighIv && isLowVrp && row.termStructureBucket === "steep") {
+    matches.push(getPresetDefinition("short-calendar"));
+  }
+
+  return matches.filter(Boolean);
+}
+
 function buildScreenerRow(snapshot, options) {
   const studyRun = buildMonthlyStraddleStudyRun(snapshot, {
     requestedSymbol: snapshot.symbol,
@@ -300,6 +489,11 @@ function buildScreenerRow(snapshot, options) {
     ivPercentile: studyRun.historySummary.ivPercentile,
     ivHv20Percentile: studyRun.historySummary.ivHv20Percentile,
   });
+  const rvPercentile = computePercentileRank(
+    studyRun.frontHistory.map((row) => row.historicalVolatility20),
+    focus.historicalVolatility20,
+  );
+  const termStructureContext = buildTermStructureContext(studyRun.contracts);
 
   return {
     id: studyRun.symbol,
@@ -317,11 +511,18 @@ function buildScreenerRow(snapshot, options) {
     impliedMovePercent: focus.impliedMovePercent,
     straddleImpliedVolatility: focus.straddleImpliedVolatility,
     chainImpliedVolatility: focus.chainImpliedVolatility,
+    atmImpliedVolatility: focus.atmImpliedVolatility,
+    put25DeltaImpliedVolatility: focus.put25DeltaImpliedVolatility,
+    call25DeltaImpliedVolatility: focus.call25DeltaImpliedVolatility,
+    normalizedSkew: focus.normalizedSkew,
+    normalizedUpsideSkew: focus.normalizedUpsideSkew,
     historicalVolatility20: focus.historicalVolatility20,
     historicalVolatility60: focus.historicalVolatility60,
     ivHv20Ratio: focus.ivHv20Ratio,
     ivHv60Ratio: focus.ivHv60Ratio,
     ivPercentile: studyRun.historySummary.ivPercentile,
+    rvPercentile,
+    vrp: focus.ivHv20Spread,
     ivHv20Percentile: studyRun.historySummary.ivHv20Percentile,
     combinedOpenInterest: focus.combinedOpenInterest,
     combinedVolume: focus.combinedVolume,
@@ -339,6 +540,8 @@ function buildScreenerRow(snapshot, options) {
     directionBucket: directionBucket(directionContext.directionLabel),
     trendScore: directionContext.trend.score,
     trendLabel: directionContext.trend.label,
+    trendReturn63: directionContext.trend.return63,
+    trendReturn252: directionContext.trend.return252,
     seasonalityScore: directionContext.seasonality.score,
     seasonalityLabel: directionContext.seasonality.label,
     seasonalityMeanReturn: directionContext.seasonality.meanReturn,
@@ -351,9 +554,53 @@ function buildScreenerRow(snapshot, options) {
     candidateAdvisory: candidateAdvisory.label,
     candidateBucket: candidateAdvisory.bucket,
     curveShape: studyRun.curveShape,
+    frontImpliedVolatility: termStructureContext.frontImpliedVolatility,
+    backImpliedVolatility: termStructureContext.backImpliedVolatility,
+    termStructureSteepness: termStructureContext.termStructureSteepness,
+    termStructureBucket: termStructureContext.termStructureBucket,
+    termStructureLabel: termStructureContext.termStructureLabel,
     warnings: studyRun.warnings,
     studyRun,
   };
+}
+
+function decorateRowsWithRanksAndIdeas(rows) {
+  const ivSeries = rows.map((row) => row.ivPercentile);
+  const rvSeries = rows.map((row) => row.rvPercentile);
+  const vrpSeries = rows.map((row) => row.vrp);
+  const termSeries = rows.map((row) => row.termStructureSteepness);
+  const skewSeries = rows.map((row) => row.normalizedSkew);
+
+  return rows.map((row) => {
+    const ivRank = computeCrossSectionalRank(ivSeries, row.ivPercentile);
+    const rvRank = computeCrossSectionalRank(rvSeries, row.rvPercentile);
+    const vrpRank = computeCrossSectionalRank(vrpSeries, row.vrp);
+    const termStructureRank = computeCrossSectionalRank(
+      termSeries,
+      row.termStructureSteepness,
+    );
+    const skewRank = computeCrossSectionalRank(skewSeries, row.normalizedSkew);
+    const tradeIdeaMatches = buildTradeIdeaMatches({
+      ...row,
+      ivRank,
+      rvRank,
+      vrpRank,
+      termStructureRank,
+      skewRank,
+    });
+
+    return {
+      ...row,
+      ivRank,
+      rvRank,
+      vrpRank,
+      termStructureRank,
+      skewRank,
+      tradeIdeaMatches,
+      tradeIdeaLabels: tradeIdeaMatches.map((definition) => definition.label),
+      primaryTradeIdea: tradeIdeaMatches[0]?.label || "No Preset Match",
+    };
+  });
 }
 
 function rowSortValue(row, sortKey) {
@@ -395,6 +642,7 @@ function buildOptionsScreenerStudyRun({
   sortKey = DEFAULT_OPTIONS_SCREENER_SORT_KEY,
   bias = DEFAULT_OPTIONS_SCREENER_BIAS,
   candidateFilter = DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER,
+  presetId = DEFAULT_OPTIONS_SCREENER_PRESET_ID,
   exportedAt = new Date(),
 }) {
   if (!universe?.id) {
@@ -406,11 +654,14 @@ function buildOptionsScreenerStudyRun({
 
   const normalizedBias = normalizeBias(bias);
   const normalizedCandidateFilter = normalizeCandidateFilter(candidateFilter);
-  const rows = screenerPayload.snapshots.map((snapshot) =>
-    buildScreenerRow(snapshot, {
-      minimumDte,
-      maxContracts,
-    }),
+  const normalizedPresetId = normalizePresetId(presetId);
+  const rows = decorateRowsWithRanksAndIdeas(
+    screenerPayload.snapshots.map((snapshot) =>
+      buildScreenerRow(snapshot, {
+        minimumDte,
+        maxContracts,
+      }),
+    ),
   );
   const filteredRows = rows.filter((row) => {
     const biasMatches =
@@ -419,7 +670,11 @@ function buildOptionsScreenerStudyRun({
       normalizedCandidateFilter === "all"
         ? true
         : row.candidateBucket === normalizedCandidateFilter;
-    return biasMatches && candidateMatches;
+    const presetMatches =
+      normalizedPresetId === "all"
+        ? true
+        : row.tradeIdeaMatches.some((definition) => definition.id === normalizedPresetId);
+    return biasMatches && candidateMatches && presetMatches;
   });
   const sortedRows = [...filteredRows].sort((leftRow, rightRow) =>
     compareRows(leftRow, rightRow, sortKey, normalizedBias),
@@ -443,6 +698,15 @@ function buildOptionsScreenerStudyRun({
     summary.set(key, current);
     return summary;
   }, new Map());
+  const presetCounts = OPTIONS_SCREENER_PRESET_DEFINITIONS.reduce(
+    (counts, definition) => ({
+      ...counts,
+      [definition.id]: rows.filter((row) =>
+        row.tradeIdeaMatches.some((match) => match.id === definition.id),
+      ).length,
+    }),
+    {},
+  );
   const asOfDate = rows.reduce((latest, row) => {
     if (!row.asOfDate) {
       return latest;
@@ -461,11 +725,14 @@ function buildOptionsScreenerStudyRun({
     sortKey: getSortDefinition(sortKey).key,
     bias: normalizedBias,
     candidateFilter: normalizedCandidateFilter,
+    presetId: normalizedPresetId,
+    presetDefinition: getPresetDefinition(normalizedPresetId),
     asOfDate,
     rows,
     filteredRows: sortedRows,
     richCount: richRows.length,
     cheapCount: cheapRows.length,
+    presetCounts,
     failures,
     topDirectionRow: [...rows].sort((leftRow, rightRow) =>
       compareRows(leftRow, rightRow, "directionScore", "all"),
@@ -502,11 +769,25 @@ function flattenOptionsScreenerRows(studyRun) {
     straddleMidPrice: row.straddleMidPrice,
     impliedMovePercent: row.impliedMovePercent,
     straddleImpliedVolatility: row.straddleImpliedVolatility,
+    atmImpliedVolatility: row.atmImpliedVolatility,
+    put25DeltaImpliedVolatility: row.put25DeltaImpliedVolatility,
+    call25DeltaImpliedVolatility: row.call25DeltaImpliedVolatility,
+    normalizedSkew: row.normalizedSkew,
+    normalizedUpsideSkew: row.normalizedUpsideSkew,
     historicalVolatility20: row.historicalVolatility20,
     historicalVolatility60: row.historicalVolatility60,
     ivHv20Ratio: row.ivHv20Ratio,
     ivHv60Ratio: row.ivHv60Ratio,
     ivPercentile: row.ivPercentile,
+    rvPercentile: row.rvPercentile,
+    vrp: row.vrp,
+    ivRank: row.ivRank,
+    rvRank: row.rvRank,
+    vrpRank: row.vrpRank,
+    termStructureSteepness: row.termStructureSteepness,
+    termStructureLabel: row.termStructureLabel,
+    termStructureRank: row.termStructureRank,
+    skewRank: row.skewRank,
     ivHv20Percentile: row.ivHv20Percentile,
     combinedOpenInterest: row.combinedOpenInterest,
     combinedVolume: row.combinedVolume,
@@ -526,16 +807,22 @@ function flattenOptionsScreenerRows(studyRun) {
     executionScore: row.executionScore,
     confidenceScore: row.confidenceScore,
     candidateAdvisory: row.candidateAdvisory,
+    primaryTradeIdea: row.primaryTradeIdea,
+    tradeIdeaLabels: row.tradeIdeaLabels.join(" | "),
   }));
 }
 
 export {
   DEFAULT_OPTIONS_SCREENER_BIAS,
   DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER,
+  DEFAULT_OPTIONS_SCREENER_PRESET_ID,
   DEFAULT_OPTIONS_SCREENER_SORT_KEY,
+  OPTIONS_SCREENER_PRESET_DEFINITIONS,
   OPTIONS_SCREENER_SORT_DEFINITIONS,
   buildOptionsScreenerStudyRun,
   flattenOptionsScreenerRows,
+  getPresetDefinition,
   getSortDefinition,
   normalizeCandidateFilter,
+  normalizePresetId,
 };

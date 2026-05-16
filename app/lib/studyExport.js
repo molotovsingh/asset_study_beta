@@ -1,29 +1,42 @@
 import { formatDateTime } from "./format.js";
+import {
+  buildAnnualizedMetricPolicy,
+  buildRiskMetricPresentation,
+} from "./metricRegistry.js";
 
-const METRIC_EXPORT_DEFINITIONS = [
-  {
-    label: "CAGR",
-    key: "annualizedReturn",
-    styleId: "percent",
-    note: "Annualized compound return",
-  },
-  {
-    label: "Total Return",
-    key: "totalReturn",
-    styleId: "percent",
-    note: "Total change across the filtered window",
-  },
+function buildMetricExportDefinitions(payload) {
+  const metricPresentation = buildRiskMetricPresentation({
+    metrics: payload.metrics,
+    startDate: payload.actualStartDate,
+    endDate: payload.actualEndDate,
+  });
+  const { policy: metricPolicy } = metricPresentation;
+  const returnObservationNote = `${metricPolicy.returnObservations} return observations`;
+
+  return [
+    {
+      label: metricPresentation.primaryReturn.exportLabel,
+      key: metricPresentation.primaryReturn.key,
+      styleId: metricPresentation.primaryReturn.styleId,
+      note: metricPresentation.primaryReturn.note,
+    },
+    {
+      label: metricPresentation.secondaryReturn.exportLabel,
+      key: metricPresentation.secondaryReturn.key,
+      styleId: metricPresentation.secondaryReturn.styleId,
+      note: metricPresentation.secondaryReturn.note,
+    },
   {
     label: "Volatility",
     key: "annualizedVolatility",
     styleId: "percent",
-    note: "Annualized volatility of log returns",
+    note: `Annualized volatility of log returns from ${returnObservationNote}`,
   },
   {
     label: "Downside Deviation",
     key: "downsideDeviation",
     styleId: "percent",
-    note: "Annualized downside deviation of excess log returns",
+    note: `Annualized downside deviation from ${returnObservationNote}`,
   },
   {
     label: "Max Drawdown",
@@ -41,25 +54,26 @@ const METRIC_EXPORT_DEFINITIONS = [
     label: "Sharpe Ratio",
     key: "sharpeRatio",
     styleId: "number2",
-    note: "Annualized excess log return divided by log-return volatility",
+    note: `Annualized excess log return divided by volatility; ${returnObservationNote}`,
   },
   {
     label: "Sortino Ratio",
     key: "sortinoRatio",
     styleId: "number2",
-    note: "Annualized excess log return divided by downside deviation",
+    note: `Annualized excess log return divided by downside deviation; ${returnObservationNote}`,
   },
   {
-    label: "Calmar Ratio",
-    key: "calmarRatio",
-    styleId: "number2",
-    note: "CAGR divided by max drawdown",
+    label: metricPresentation.drawdownEfficiency.exportLabel,
+    key: metricPresentation.drawdownEfficiency.key,
+    value: metricPresentation.drawdownEfficiency.value,
+    styleId: metricPresentation.drawdownEfficiency.styleId,
+    note: metricPresentation.drawdownEfficiency.note,
   },
   {
     label: "Martin Ratio",
     key: "martinRatio",
     styleId: "number2",
-    note: "Return above risk-free divided by ulcer index",
+    note: `Return above risk-free divided by ulcer index; ${returnObservationNote}`,
   },
   {
     label: "Risk-Free Rate",
@@ -157,7 +171,8 @@ const METRIC_EXPORT_DEFINITIONS = [
     styleId: "integer",
     note: "Peak-to-recovery or end, in periods",
   },
-];
+  ];
+}
 
 function toIsoDate(date) {
   const year = date.getFullYear();
@@ -349,6 +364,12 @@ function buildCsvRows(payload) {
 }
 
 function buildSummarySheetRows(payload) {
+  const metricPolicy = buildAnnualizedMetricPolicy({
+    startDate: payload.actualStartDate,
+    endDate: payload.actualEndDate,
+    returnObservations: payload.metrics?.periodicObservations,
+  });
+
   return [
     [createCell("Field", "header"), createCell("Value", "header")],
     [createCell("Study"), createCell(payload.studyTitle)],
@@ -363,6 +384,12 @@ function buildSummarySheetRows(payload) {
     [createCell("Actual Start"), createCell(payload.actualStartDate, "date")],
     [createCell("Actual End"), createCell(payload.actualEndDate, "date")],
     [createCell("Input Risk-Free Rate"), createCell(payload.annualRiskFreeRate, "percent")],
+    [
+      createCell("Annualized Headline Policy"),
+      createCell(metricPolicy.canHeadlineAnnualized ? "CAGR allowed as headline" : "Period truth first; annualized values diagnostic"),
+    ],
+    [createCell("Policy Calendar Days"), createCell(metricPolicy.calendarDays, "integer")],
+    [createCell("Policy Return Observations"), createCell(metricPolicy.returnObservations, "integer")],
     [createCell("Demo Mode"), createCell(payload.useDemoData ? "Yes" : "No")],
     [createCell("Exported At"), createCell(formatDateTime(payload.exportedAt))],
     [createCell("Warnings"), createCell(payload.warnings.length, "integer")],
@@ -370,15 +397,21 @@ function buildSummarySheetRows(payload) {
 }
 
 function buildMetricsSheetRows(payload) {
+  const definitions = buildMetricExportDefinitions(payload);
   return [
     [
       createCell("Metric", "header"),
       createCell("Value", "header"),
       createCell("Notes", "header"),
     ],
-    ...METRIC_EXPORT_DEFINITIONS.map((definition) => [
+    ...definitions.map((definition) => [
       createCell(definition.label),
-      createCell(payload.metrics[definition.key], definition.styleId),
+      createCell(
+        Object.hasOwn(definition, "value")
+          ? definition.value
+          : payload.metrics[definition.key],
+        definition.styleId,
+      ),
       createCell(definition.note),
     ]),
     [

@@ -1,4 +1,6 @@
-const indexCatalog = [
+import { sectorMarketCatalog } from "./sectorSnapshotCatalog.js";
+
+const baseIndexCatalog = [
   {
     id: "nifty-50",
     label: "Nifty 50",
@@ -45,6 +47,19 @@ const indexCatalog = [
     aliases: ["nifty next fifty"],
   },
   {
+    id: "nifty-500",
+    label: "Nifty 500",
+    provider: "NSE Indices",
+    family: "Broad Market",
+    currency: "INR",
+    seriesType: "Price",
+    sourceUrl: "https://www.niftyindices.com/indices/equity/broad-based-indices/nifty-500",
+    aliases: ["nifty500"],
+    symbol: "^CRSLDX",
+    note:
+      "This built-in index loads through the local backend because it is not bundled in the repo snapshots.",
+  },
+  {
     id: "nifty-bank",
     label: "Nifty Bank",
     provider: "NSE Indices",
@@ -60,6 +75,45 @@ const indexCatalog = [
       symbol: "^NSEBANK",
       sourceSeriesType: "Price",
     },
+  },
+  {
+    id: "nifty-realty",
+    label: "Nifty Realty",
+    provider: "NSE Indices",
+    family: "Sectoral",
+    currency: "INR",
+    seriesType: "Price",
+    sourceUrl: "https://www.niftyindices.com/reports/historical-data",
+    aliases: ["nifty real estate"],
+    symbol: "^CNXREALTY",
+    note:
+      "This built-in index loads through the local backend because it is not bundled in the repo snapshots.",
+  },
+  {
+    id: "nifty-metal",
+    label: "Nifty Metal",
+    provider: "NSE Indices",
+    family: "Sectoral",
+    currency: "INR",
+    seriesType: "Price",
+    sourceUrl: "https://www.niftyindices.com/reports/historical-data",
+    aliases: ["nifty metals", "nifty metal index"],
+    symbol: "^CNXMETAL",
+    note:
+      "This built-in index loads through the local backend because it is not bundled in the repo snapshots.",
+  },
+  {
+    id: "nifty-energy",
+    label: "Nifty Energy",
+    provider: "NSE Indices",
+    family: "Sectoral",
+    currency: "INR",
+    seriesType: "Price",
+    sourceUrl: "https://www.niftyindices.com/reports/historical-data",
+    aliases: ["nifty energy index"],
+    symbol: "^CNXENERGY",
+    note:
+      "This built-in index loads through the local backend because it is not bundled in the repo snapshots.",
   },
   {
     id: "nifty-midcap-150",
@@ -147,6 +201,33 @@ const indexCatalog = [
   },
 ];
 
+function buildDerivedIndiaSectorEntries() {
+  const indiaMarket = sectorMarketCatalog.find((entry) => entry.id === "india");
+  if (!indiaMarket?.sectors?.length) {
+    return [];
+  }
+
+  const existingIds = new Set(baseIndexCatalog.map((entry) => entry.id));
+  return indiaMarket.sectors
+    .filter((entry) => !existingIds.has(entry.id))
+    .map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      provider: entry.providerName || "NSE Indices",
+      family: "Sectoral",
+      currency: "INR",
+      seriesType: entry.seriesType || "Price",
+      sourceUrl:
+        entry.sourceUrl || "https://www.niftyindices.com/reports/historical-data",
+      aliases: [],
+      symbol: entry.symbol,
+      note:
+        "This built-in index loads through the local backend because it is not bundled in the repo snapshots.",
+    }));
+}
+
+const indexCatalog = [...baseIndexCatalog, ...buildDerivedIndiaSectorEntries()];
+
 function normalize(text) {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -175,7 +256,7 @@ function getSyncedIndexCatalog() {
 }
 
 function getRunnableIndexCatalog() {
-  return indexCatalog.filter((entry) => entry.sync?.symbol);
+  return indexCatalog.filter((entry) => entry.sync?.symbol || entry.symbol);
 }
 
 function entryMatchesQuery(entry, query) {
@@ -191,7 +272,7 @@ function entryMatchesQuery(entry, query) {
     return true;
   }
 
-  return normalize(entry.sync?.symbol || "") === query;
+  return normalize(entry.sync?.symbol || entry.symbol || "") === query;
 }
 
 function findRunnableIndexMatch(name) {

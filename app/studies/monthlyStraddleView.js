@@ -1,4 +1,6 @@
 import { formatDate, formatNumber, formatPercent } from "../lib/format.js";
+import { MIN_CREDIBLE_PERCENTILE_HISTORY } from "../lib/monthlyStraddle.js";
+import { buildHistoricalPercentileMetric } from "../lib/metricRegistry.js";
 import { renderInterpretationPanel } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
 
@@ -17,6 +19,60 @@ function renderMetricCard({ label, value, detail }) {
       <strong class="result-value">${value}</strong>
       <span class="result-caption">${detail}</span>
     </div>
+  `;
+}
+
+function formatHistoryDepthDetail(history) {
+  if (history.hasCrediblePercentiles) {
+    return `${formatInteger(history.observations)} stored front snapshots`;
+  }
+  if (history.observations > 0) {
+    return `${formatInteger(history.observations)} of ${formatInteger(MIN_CREDIBLE_PERCENTILE_HISTORY)} stored front snapshots`;
+  }
+  return "No stored history yet";
+}
+
+function renderHistoryMetricCards(history) {
+  const ivPercentileMetric = buildHistoricalPercentileMetric({
+    label: "IV Percentile",
+    value: history.ivPercentile,
+    observations: history.observations,
+  });
+  const ivHv20PercentileMetric = buildHistoricalPercentileMetric({
+    label: "IV/HV20 Pctl",
+    value: history.ivHv20Percentile,
+    observations: history.observations,
+  });
+
+  if (!ivPercentileMetric.exportable) {
+    return `
+      ${renderMetricCard({
+        label: "History Depth",
+        value: history.observations > 0 ? formatInteger(history.observations) : "Build",
+        detail: formatHistoryDepthDetail(history),
+      })}
+      ${renderMetricCard({
+        label: "Percentile Status",
+        value: history.observations > 0 ? "Early" : "Waiting",
+        detail:
+          history.observations > 0
+            ? "Percentile context stays suppressed until front-history is deeper."
+            : "Run and persist front-month snapshots to unlock percentile context.",
+      })}
+    `;
+  }
+
+  return `
+    ${renderMetricCard({
+      label: ivPercentileMetric.label,
+      value: formatPercent(ivPercentileMetric.value),
+      detail: ivPercentileMetric.detail,
+    })}
+    ${renderMetricCard({
+      label: ivHv20PercentileMetric.label,
+      value: formatPercent(ivHv20PercentileMetric.value),
+      detail: history.startDate ? `${formatDate(history.startDate)} onward` : "No stored history yet",
+    })}
   `;
 }
 
@@ -91,8 +147,10 @@ function renderInterpretation(studyRun) {
               ? "neutral"
               : "caution",
         text:
-          history.observations > 0
+          history.hasCrediblePercentiles
             ? `Front IV sits at the ${formatPercent(history.ivPercentile)} percentile and IV/HV20 at the ${formatPercent(history.ivHv20Percentile)} percentile across ${formatInteger(history.observations)} stored front-month snapshots.`
+            : history.observations > 0
+              ? `Only ${formatInteger(history.observations)} stored front-month snapshots are available so far, so percentile context stays suppressed until the history is deeper.`
             : "No stored snapshot history is available yet for percentile context.",
       },
       {
@@ -200,18 +258,7 @@ function renderMonthlyStraddleResults(studyRun) {
               ? `Based on IV/HV${studyRun.focusVolComparison.windowDays}`
               : "No usable IV/HV context",
           })}
-          ${renderMetricCard({
-            label: "IV Percentile",
-            value: formatPercent(studyRun.historySummary.ivPercentile),
-            detail: `${formatInteger(studyRun.historySummary.observations)} stored front snapshots`,
-          })}
-          ${renderMetricCard({
-            label: "IV/HV20 Pctl",
-            value: formatPercent(studyRun.historySummary.ivHv20Percentile),
-            detail: studyRun.historySummary.startDate
-              ? `${formatDate(studyRun.historySummary.startDate)} onward`
-              : "No stored history yet",
-          })}
+          ${renderHistoryMetricCards(studyRun.historySummary)}
           ${renderMetricCard({
             label: "Combined OI",
             value: formatInteger(focus.combinedOpenInterest),

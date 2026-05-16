@@ -33,22 +33,39 @@ function buildSnapshot({
   symbol,
   spotPrice,
   straddleIv,
+  backStraddleIv,
   hv20,
   hv60,
   hv120,
   openInterest,
   volume,
   spreadWidth,
+  historyIvValues,
+  historyHv20Values,
+  normalizedSkew = 0.08,
+  normalizedUpsideSkew = -0.04,
   directionContext,
 }) {
   const expiry = "2026-05-15";
+  const backExpiry = "2026-06-19";
   const daysToExpiry = 33;
+  const backDaysToExpiry = 68;
   const strike = Math.round(spotPrice / 5) * 5;
   const callMidPrice = 8;
   const putMidPrice = 7.5;
   const straddleMidPrice = callMidPrice + putMidPrice;
   const callSpread = spreadWidth / 2;
   const putSpread = spreadWidth / 2;
+  const normalizedHistoryIvValues = historyIvValues || [
+    straddleIv * 0.9,
+    straddleIv * 0.96,
+    straddleIv,
+  ];
+  const normalizedHistoryHv20Values = historyHv20Values || [
+    hv20 * 0.9,
+    hv20 * 0.96,
+    hv20,
+  ];
 
   return {
     symbol,
@@ -64,74 +81,31 @@ function buildSnapshot({
     note: "Fixture monthly snapshot.",
     directionContext,
     history: {
-      frontContracts: [
-        {
-          asOfDate: "2026-04-08",
+      frontContracts: normalizedHistoryIvValues.map((historyIv, index) => {
+        const historyHv20 = normalizedHistoryHv20Values[index];
+        return {
+          asOfDate: ["2026-04-08", "2026-04-10", "2026-04-12"][index] || "2026-04-12",
           expiry,
-          daysToExpiry: 37,
+          daysToExpiry: [37, 35, daysToExpiry][index] || daysToExpiry,
           strike,
-          spotPrice: spotPrice * 0.98,
-          impliedMovePercent: 0.058,
-          straddleImpliedVolatility: straddleIv * 0.9,
-          chainImpliedVolatility: straddleIv * 0.89,
-          impliedVolatilityGap: 0.01,
-          historicalVolatility20: hv20,
-          historicalVolatility60: hv60,
-          historicalVolatility120: hv120,
-          ivHv20Ratio: (straddleIv * 0.9) / hv20,
-          ivHv60Ratio: (straddleIv * 0.9) / hv60,
-          ivHv120Ratio: (straddleIv * 0.9) / hv120,
-          ivHv20Spread: straddleIv * 0.9 - hv20,
-          ivHv60Spread: straddleIv * 0.9 - hv60,
-          ivHv120Spread: straddleIv * 0.9 - hv120,
-          combinedOpenInterest: openInterest - 1000,
-          combinedVolume: volume - 200,
-        },
-        {
-          asOfDate: "2026-04-10",
-          expiry,
-          daysToExpiry: 35,
-          strike,
-          spotPrice: spotPrice * 0.99,
-          impliedMovePercent: 0.061,
-          straddleImpliedVolatility: straddleIv * 0.96,
-          chainImpliedVolatility: straddleIv * 0.955,
-          impliedVolatilityGap: 0.005,
-          historicalVolatility20: hv20,
-          historicalVolatility60: hv60,
-          historicalVolatility120: hv120,
-          ivHv20Ratio: (straddleIv * 0.96) / hv20,
-          ivHv60Ratio: (straddleIv * 0.96) / hv60,
-          ivHv120Ratio: (straddleIv * 0.96) / hv120,
-          ivHv20Spread: straddleIv * 0.96 - hv20,
-          ivHv60Spread: straddleIv * 0.96 - hv60,
-          ivHv120Spread: straddleIv * 0.96 - hv120,
-          combinedOpenInterest: openInterest - 500,
-          combinedVolume: volume - 100,
-        },
-        {
-          asOfDate: "2026-04-12",
-          expiry,
-          daysToExpiry,
-          strike,
-          spotPrice,
-          impliedMovePercent: 0.066,
-          straddleImpliedVolatility: straddleIv,
-          chainImpliedVolatility: straddleIv - 0.004,
+          spotPrice: [spotPrice * 0.98, spotPrice * 0.99, spotPrice][index] || spotPrice,
+          impliedMovePercent: [0.058, 0.061, 0.066][index] || 0.066,
+          straddleImpliedVolatility: historyIv,
+          chainImpliedVolatility: historyIv - 0.004,
           impliedVolatilityGap: 0.004,
-          historicalVolatility20: hv20,
+          historicalVolatility20: historyHv20,
           historicalVolatility60: hv60,
           historicalVolatility120: hv120,
-          ivHv20Ratio: straddleIv / hv20,
-          ivHv60Ratio: straddleIv / hv60,
-          ivHv120Ratio: straddleIv / hv120,
-          ivHv20Spread: straddleIv - hv20,
-          ivHv60Spread: straddleIv - hv60,
-          ivHv120Spread: straddleIv - hv120,
-          combinedOpenInterest: openInterest,
-          combinedVolume: volume,
-        },
-      ],
+          ivHv20Ratio: historyIv / historyHv20,
+          ivHv60Ratio: historyIv / hv60,
+          ivHv120Ratio: historyIv / hv120,
+          ivHv20Spread: historyIv - historyHv20,
+          ivHv60Spread: historyIv - hv60,
+          ivHv120Spread: historyIv - hv120,
+          combinedOpenInterest: openInterest - (2 - index) * 500,
+          combinedVolume: volume - (2 - index) * 100,
+        };
+      }),
     },
     realizedVolatility: {
       seriesType: "adj_close",
@@ -170,6 +144,12 @@ function buildSnapshot({
         impliedMovePercent: straddleMidPrice / spotPrice,
         straddleImpliedVolatility: straddleIv,
         chainImpliedVolatility: straddleIv - 0.004,
+        atmImpliedVolatility: straddleIv - 0.004,
+        put25DeltaImpliedVolatility: (straddleIv - 0.004) * (1 + normalizedSkew),
+        call25DeltaImpliedVolatility:
+          (straddleIv - 0.004) * (1 + normalizedUpsideSkew),
+        normalizedSkew,
+        normalizedUpsideSkew,
         impliedVolatilityGap: 0.004,
         historicalVolatility20: hv20,
         historicalVolatility60: hv60,
@@ -180,6 +160,53 @@ function buildSnapshot({
         ivHv20Spread: straddleIv - hv20,
         ivHv60Spread: straddleIv - hv60,
         ivHv120Spread: straddleIv - hv120,
+        combinedOpenInterest: openInterest,
+        combinedVolume: volume,
+        pricingMode: "bid-ask-mid",
+      },
+      {
+        expiry: backExpiry,
+        daysToExpiry: backDaysToExpiry,
+        strike,
+        callBid: callMidPrice - callSpread / 2,
+        callAsk: callMidPrice + callSpread / 2,
+        callLastPrice: callMidPrice,
+        callMidPrice,
+        callPriceSource: "mid",
+        callOpenInterest: Math.round(openInterest * 0.4),
+        callVolume: Math.round(volume * 0.44),
+        callImpliedVolatility: backStraddleIv + 0.008,
+        callSpread,
+        putBid: putMidPrice - putSpread / 2,
+        putAsk: putMidPrice + putSpread / 2,
+        putLastPrice: putMidPrice,
+        putMidPrice,
+        putPriceSource: "mid",
+        putOpenInterest: Math.round(openInterest * 0.6),
+        putVolume: Math.round(volume * 0.56),
+        putImpliedVolatility: backStraddleIv - 0.008,
+        putSpread,
+        straddleMidPrice,
+        impliedMovePrice: straddleMidPrice,
+        impliedMovePercent: straddleMidPrice / spotPrice,
+        straddleImpliedVolatility: backStraddleIv,
+        chainImpliedVolatility: backStraddleIv - 0.004,
+        atmImpliedVolatility: backStraddleIv - 0.004,
+        put25DeltaImpliedVolatility: (backStraddleIv - 0.004) * (1 + normalizedSkew),
+        call25DeltaImpliedVolatility:
+          (backStraddleIv - 0.004) * (1 + normalizedUpsideSkew),
+        normalizedSkew,
+        normalizedUpsideSkew,
+        impliedVolatilityGap: 0.004,
+        historicalVolatility20: hv20,
+        historicalVolatility60: hv60,
+        historicalVolatility120: hv120,
+        ivHv20Ratio: backStraddleIv / hv20,
+        ivHv60Ratio: backStraddleIv / hv60,
+        ivHv120Ratio: backStraddleIv / hv120,
+        ivHv20Spread: backStraddleIv - hv20,
+        ivHv60Spread: backStraddleIv - hv60,
+        ivHv120Spread: backStraddleIv - hv120,
         combinedOpenInterest: openInterest,
         combinedVolume: volume,
         pricingMode: "bid-ask-mid",
@@ -202,13 +229,17 @@ function buildFixtureStudyRun(overrides = {}) {
         buildSnapshot({
           symbol: "AAPL",
           spotPrice: 260,
-          straddleIv: 0.36,
+          straddleIv: 0.39,
+          backStraddleIv: 0.43,
           hv20: 0.22,
           hv60: 0.24,
           hv120: 0.23,
           openInterest: 22000,
           volume: 3200,
           spreadWidth: 0.7,
+          historyIvValues: [0.26, 0.31, 0.39],
+          historyHv20Values: [0.18, 0.2, 0.22],
+          normalizedSkew: 0.09,
           directionContext: {
             asOfDate: "2026-04-12",
             historyStartDate: "2010-01-04",
@@ -243,13 +274,17 @@ function buildFixtureStudyRun(overrides = {}) {
         buildSnapshot({
           symbol: "MSFT",
           spotPrice: 430,
-          straddleIv: 0.26,
-          hv20: 0.25,
+          straddleIv: 0.25,
+          backStraddleIv: 0.251,
+          hv20: 0.15,
           hv60: 0.24,
           hv120: 0.23,
-          openInterest: 18000,
-          volume: 2100,
-          spreadWidth: 0.55,
+          openInterest: 4200,
+          volume: 380,
+          spreadWidth: 1.25,
+          historyIvValues: [0.31, 0.29, 0.25],
+          historyHv20Values: [0.22, 0.18, 0.15],
+          normalizedSkew: 0.05,
           directionContext: {
             asOfDate: "2026-04-12",
             historyStartDate: "2010-01-04",
@@ -284,13 +319,17 @@ function buildFixtureStudyRun(overrides = {}) {
         buildSnapshot({
           symbol: "TSLA",
           spotPrice: 349,
-          straddleIv: 0.33,
-          hv20: 0.44,
+          straddleIv: 0.28,
+          backStraddleIv: 0.29,
+          hv20: 0.4,
           hv60: 0.42,
           hv120: 0.4,
           openInterest: 15000,
           volume: 2900,
           spreadWidth: 1.1,
+          historyIvValues: [0.38, 0.34, 0.28],
+          historyHv20Values: [0.52, 0.46, 0.4],
+          normalizedSkew: 0.12,
           directionContext: {
             asOfDate: "2026-04-12",
             historyStartDate: "2010-06-29",
@@ -322,6 +361,51 @@ function buildFixtureStudyRun(overrides = {}) {
             },
           },
         }),
+        buildSnapshot({
+          symbol: "NVDA",
+          spotPrice: 920,
+          straddleIv: 0.31,
+          backStraddleIv: 0.39,
+          hv20: 0.36,
+          hv60: 0.34,
+          hv120: 0.33,
+          openInterest: 16500,
+          volume: 2500,
+          spreadWidth: 0.8,
+          historyIvValues: [0.22, 0.27, 0.31],
+          historyHv20Values: [0.42, 0.39, 0.36],
+          normalizedSkew: 0.11,
+          directionContext: {
+            asOfDate: "2026-04-12",
+            historyStartDate: "2010-01-04",
+            historyEndDate: "2026-04-10",
+            observations: 4100,
+            directionScore: 61,
+            directionLabel: "Neutral",
+            trend: {
+              score: 62,
+              label: "Neutral",
+              spotAboveSma50: true,
+              sma50AboveSma200: true,
+              return63: 0.08,
+              return252: 0.22,
+              sma50: 902,
+              sma200: 860,
+            },
+            seasonality: {
+              calendarMonth: 4,
+              calendarMonthLabel: "Apr",
+              observations: 12,
+              meanReturn: 0.017,
+              medianReturn: 0.013,
+              winRate: 0.55,
+              averageAbsoluteReturn: 0.063,
+              score: 57,
+              label: "Neutral",
+              sampleQuality: "deep",
+            },
+          },
+        }),
       ],
       failures: [
         {
@@ -336,37 +420,48 @@ function buildFixtureStudyRun(overrides = {}) {
 
 function testStudyRun() {
   const studyRun = buildFixtureStudyRun();
-  assert(studyRun.rows.length === 3, "study run should build one row per snapshot");
-  assert(studyRun.filteredRows.length === 3, "all bias should keep every row");
-  assert(studyRun.richCount === 1, "fixture should produce one rich row");
-  assert(studyRun.cheapCount === 1, "fixture should produce one cheap row");
+  assert(studyRun.rows.length === 4, "study run should build one row per snapshot");
+  assert(studyRun.filteredRows.length === 4, "all filters should keep every fixture row");
+  assert(studyRun.richCount === 2, "fixture should produce two rich rows");
+  assert(studyRun.cheapCount === 2, "fixture should produce two cheap rows");
   assert(studyRun.topDirectionRow?.symbol === "AAPL", "AAPL should lead direction rows");
   assert(studyRun.topRichRow?.symbol === "AAPL", "AAPL should lead rich rows");
   assert(studyRun.topCheapRow?.symbol === "TSLA", "TSLA should lead cheap rows");
   assert(studyRun.filteredRows[0].symbol === "AAPL", "default sort should rank richest IV/HV20 first");
-  assert(studyRun.providerSummary[0].count === 3, "provider summary should aggregate row counts");
+  assert(studyRun.providerSummary[0].count === 4, "provider summary should aggregate row counts");
   assert(studyRun.failures.length === 1, "study run should preserve failures");
   assert(studyRun.bestExecutionRow?.symbol === "AAPL", "AAPL should lead execution score");
+  assert(studyRun.rows.find((row) => row.symbol === "AAPL")?.tradeIdeaLabels.includes("Sell Vega"), "AAPL should match the Sell Vega preset");
+  assert(studyRun.rows.find((row) => row.symbol === "TSLA")?.tradeIdeaLabels.includes("Buy Gamma/Vega"), "TSLA should match the Buy Gamma/Vega preset");
+  assert(studyRun.rows.find((row) => row.symbol === "MSFT")?.tradeIdeaLabels.includes("Long Calendar"), "MSFT should match the Long Calendar preset");
+  assert(studyRun.rows.find((row) => row.symbol === "NVDA")?.tradeIdeaLabels.includes("Short Calendar"), "NVDA should match the Short Calendar preset");
 
   const cheapOnly = buildFixtureStudyRun({ bias: "cheap" });
-  assert(cheapOnly.filteredRows.length === 1, "cheap bias should keep only cheap rows");
+  assert(cheapOnly.filteredRows.length === 2, "cheap bias should keep only cheap rows");
   assert(cheapOnly.filteredRows[0].symbol === "TSLA", "cheap bias should keep TSLA");
 
   const shortPremiumOnly = buildFixtureStudyRun({ candidateFilter: "short-premium" });
   assert(shortPremiumOnly.filteredRows.length === 1, "candidate filter should keep only matching rows");
   assert(shortPremiumOnly.filteredRows[0].symbol === "AAPL", "short premium filter should keep AAPL");
 
+  const longCalendarOnly = buildFixtureStudyRun({ presetId: "long-calendar" });
+  assert(longCalendarOnly.filteredRows.length === 1, "preset filter should keep only matching rows");
+  assert(longCalendarOnly.filteredRows[0].symbol === "MSFT", "long calendar preset should keep MSFT");
+
   const flattenedRows = flattenOptionsScreenerRows(studyRun);
-  assert(flattenedRows.length === 3, "flattened rows should match rendered rows");
+  assert(flattenedRows.length === 4, "flattened rows should match rendered rows");
   assert(flattenedRows[0].pricingLabel === "Rich", "flattened row should preserve pricing label");
   assert(flattenedRows[0].directionLabel === "Long Bias", "flattened row should preserve direction label");
   assert(flattenedRows[0].candidateAdvisory === "Short Premium Candidate", "flattened row should preserve advisory");
+  assert(flattenedRows[0].primaryTradeIdea === "Sell Vega", "flattened row should preserve the primary preset");
+  assert(Number.isFinite(flattenedRows[0].rvPercentile), "flattened rows should include RV percentile");
 
   const csvRows = buildCsvRows(studyRun);
-  assert(csvRows.length === 4, "csv export should include header plus rows");
+  assert(csvRows.length === 5, "csv export should include header plus rows");
   assert(csvRows[0][0] === "Rank", "csv export should start with Rank");
-  assert(csvRows[0].includes("IV/HV20"), "csv export should include IV/HV20");
-  assert(csvRows[0].includes("Direction Score"), "csv export should include direction score");
+  assert(csvRows[0].includes("RV Percentile"), "csv export should include RV percentile");
+  assert(csvRows[0].includes("Normalized Skew"), "csv export should include normalized skew");
+  assert(csvRows[0].includes("Trade Idea"), "csv export should include trade-idea output");
 
   const workbook = buildWorkbookXml(studyRun);
   assert(workbook.includes('Worksheet ss:Name="Summary"'), "workbook should include Summary sheet");
@@ -384,6 +479,7 @@ function testViews() {
     universeId: universe.id,
     bias: "all",
     candidateFilter: "all",
+    presetId: "all",
     sortKey: DEFAULT_OPTIONS_SCREENER_SORT_KEY,
     minimumDteValue: "25",
     presetMarkup: renderUniversePresetInfo(universe),
@@ -392,6 +488,7 @@ function testViews() {
   assert(template.includes("US Liquid 10"), "template should include the universe label");
   assert(template.includes("This study loads its own preset universe"), "template should explain the preset model");
   assert(template.includes('id="options-screener-history-root"'), "template should include the screener history root");
+  assert(template.includes('id="options-screener-preset"'), "template should include the trade-idea preset selector");
 
   const historyMarkup = renderOptionsScreenerHistory(
     {
@@ -427,7 +524,9 @@ function testViews() {
   assert(resultsMarkup.includes("Export CSV"), "results should include export buttons");
   assert(resultsMarkup.includes("#monthly-straddle/overview?subject=AAPL"), "results should link to the monthly straddle drilldown");
   assert(resultsMarkup.includes("Failures"), "results should include the failures context");
-  assert(resultsMarkup.includes("Long Premium Candidate"), "results should include advisory badges");
+  assert(resultsMarkup.includes("Sell Vega"), "results should include trade-idea labels");
+  assert(resultsMarkup.includes("RV Pctl"), "results should include RV percentile columns");
+  assert(resultsMarkup.includes("Active Sort (IV/HV20)"), "results should expose the active sort metric column");
   assert(resultsMarkup.includes("Long Bias"), "results should include direction badges");
 
   const populatedRoot = { innerHTML: "", addEventListener() {}, removeEventListener() {} };
@@ -435,7 +534,9 @@ function testViews() {
   assert(populatedRoot.innerHTML.includes("Options Screener Visuals"), "visuals should render when a run is present");
   assert(populatedRoot.innerHTML.includes("Pricing Mix"), "visuals should include the pricing mix card");
   assert(populatedRoot.innerHTML.includes("Direction Mix"), "visuals should include the direction mix card");
+  assert(populatedRoot.innerHTML.includes("Trade Ideas"), "visuals should include the trade-idea mix card");
   assert(populatedRoot.innerHTML.includes("Top Rich"), "visuals should include the rich leaderboard");
+  assert(populatedRoot.innerHTML.includes("sort IV/HV20"), "visuals should render the human sort label");
   dispose();
 
   const emptyRoot = { innerHTML: "", addEventListener() {}, removeEventListener() {} };
@@ -443,6 +544,7 @@ function testViews() {
     universeId: universe.id,
     bias: "all",
     candidateFilter: "all",
+    presetId: "all",
     sortKey: DEFAULT_OPTIONS_SCREENER_SORT_KEY,
     minimumDteValue: "25",
     lastStudyRun: null,

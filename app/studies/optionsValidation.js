@@ -22,6 +22,10 @@ import {
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
 import {
+  createSummaryItem,
+  recordLocalStudyRun,
+} from "./shared/studyRunHistory.js";
+import {
   optionsValidationTemplate,
   renderOptionsValidationResults,
 } from "./optionsValidationView.js";
@@ -182,6 +186,55 @@ function mountOptionsValidationView(root, { viewId = "overview", renderResults, 
       optionsValidationSession.lastRunSignature = buildRunSignature(
         optionsValidationSession,
       );
+      recordLocalStudyRun({
+        study: optionsValidationStudy,
+        subjectQuery: currentUniverse.id,
+        selectionLabel: currentUniverse.label,
+        symbol: "",
+        actualEndDate: studyRun.latestAsOfDate,
+        detailLabel: `${studyRun.horizonLabel} · ${studyRun.groupDefinition.label}`,
+        requestedParams: {
+          universeId: currentUniverse.id,
+          horizonDays,
+          groupKey: optionsValidationSession.groupKey,
+        },
+        resolvedParams: {
+          latestAsOfDate: studyRun.latestAsOfDate || "",
+          maturedCount: studyRun.maturedCount,
+          pendingCount: studyRun.pendingCount,
+          rerunCountCollapsed: studyRun.rerunCountCollapsed || 0,
+        },
+        summaryItems: [
+          createSummaryItem({
+            key: "matured-count",
+            label: "Matured Rows",
+            valueNumber: studyRun.maturedCount,
+            valueKind: "integer",
+            sortOrder: 0,
+          }),
+          createSummaryItem({
+            key: "pending-count",
+            label: "Pending Rows",
+            valueNumber: studyRun.pendingCount,
+            valueKind: "integer",
+            sortOrder: 1,
+          }),
+          createSummaryItem({
+            key: "best-group",
+            label: "Best Group",
+            valueText: studyRun.bestGroup?.label || "",
+            sortOrder: 2,
+          }),
+          createSummaryItem({
+            key: "best-group-return",
+            label: "Best Group Return",
+            valueNumber: studyRun.bestGroup?.averageForwardReturn,
+            valueKind: "percent",
+            sortOrder: 3,
+          }),
+        ],
+        completedAt: studyRun.exportedAt?.toISOString?.() || new Date().toISOString(),
+      });
       resultsRoot.innerHTML = renderResults(studyRun);
       setStatus("Options validation loaded.", "success");
     } catch (error) {

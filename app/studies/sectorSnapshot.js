@@ -22,6 +22,10 @@ import {
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
 import {
+  createSummaryItem,
+  recordLocalStudyRun,
+} from "./shared/studyRunHistory.js";
+import {
   renderMarketPresetInfo,
   renderSectorSnapshotResults,
   sectorSnapshotTemplate,
@@ -284,6 +288,56 @@ function mountSectorSnapshotOverview(root) {
       sectorSnapshotSession.lastRunSignature = buildRunSignature(
         sectorSnapshotSession,
       );
+      recordLocalStudyRun({
+        study: sectorSnapshotStudy,
+        subjectQuery: currentMarket.id,
+        selectionLabel: currentMarket.label,
+        symbol: currentMarket.benchmark?.symbol || "",
+        actualEndDate: studyRun.commonEndDate,
+        detailLabel: `${currentMarket.universeLabel} · ${studyRun.focusHorizonYears}Y ${getMetricDefinition(studyRun.focusMetricKey).label}`,
+        requestedParams: {
+          marketId: currentMarket.id,
+          focusHorizonYears: sectorSnapshotSession.focusHorizonYears,
+          focusMetricKey: sectorSnapshotSession.focusMetricKey,
+          riskFreeRate,
+        },
+        resolvedParams: {
+          commonEndDate: studyRun.commonEndDate?.toISOString?.()?.slice(0, 10) || "",
+          providerCount: Array.isArray(studyRun.providerSummary) ? studyRun.providerSummary.length : 0,
+        },
+        providerSummary: {
+          providers: studyRun.providerSummary,
+        },
+        summaryItems: [
+          createSummaryItem({
+            key: "focus-horizon",
+            label: "Focus Horizon",
+            valueText: `${studyRun.focusHorizonYears}Y`,
+            sortOrder: 0,
+          }),
+          createSummaryItem({
+            key: "focus-metric",
+            label: "Focus Metric",
+            valueText: getMetricDefinition(studyRun.focusMetricKey).label,
+            sortOrder: 1,
+          }),
+          createSummaryItem({
+            key: "sector-count",
+            label: "Sectors",
+            valueNumber: Array.isArray(studyRun.focusRows) ? studyRun.focusRows.length : 0,
+            valueKind: "integer",
+            sortOrder: 2,
+          }),
+          createSummaryItem({
+            key: "focus-leader",
+            label: "Focus Leader",
+            valueText: studyRun.focusRows?.[0]?.label || "",
+            sortOrder: 3,
+          }),
+        ],
+        warningCount: Array.isArray(studyRun.warnings) ? studyRun.warnings.length : 0,
+        completedAt: studyRun.exportedAt?.toISOString?.() || new Date().toISOString(),
+      });
       resultsRoot.innerHTML = renderSectorSnapshotResults(studyRun);
       setStatus("Sector snapshot completed.", "success");
     } catch (error) {

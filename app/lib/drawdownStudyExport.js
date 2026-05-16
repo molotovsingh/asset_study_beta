@@ -1,4 +1,5 @@
 import { formatDateTime } from "./format.js";
+import { buildDrawdownMetricPresentation } from "./metricRegistry.js";
 import {
   buildXmlWorkbook,
   createCell,
@@ -54,6 +55,7 @@ function buildCsvRows(payload) {
 
 function buildSummaryRows(payload) {
   const { summary } = payload;
+  const metricPresentation = buildDrawdownMetricPresentation({ summary });
   const maxEpisode = summary.maxDrawdownEpisode;
   const longestEpisode = summary.longestEpisode;
   const longestRecovery = summary.longestRecovery;
@@ -70,6 +72,8 @@ function buildSummaryRows(payload) {
     [createCell("Actual Start"), createCell(payload.actualStartDate, "date")],
     [createCell("Actual End"), createCell(payload.actualEndDate, "date")],
     [createCell("Observations"), createCell(summary.observations, "integer")],
+    [createCell("Materiality Threshold"), createCell(summary.materialityThreshold, "percent")],
+    [createCell("Episode Role"), createCell(metricPresentation.materialEpisodes.note)],
     [createCell("Total Episodes"), createCell(summary.totalEpisodes, "integer")],
     [createCell("Recovered Episodes"), createCell(summary.recoveredEpisodes, "integer")],
     [createCell("Unrecovered Episodes"), createCell(summary.unrecoveredEpisodes, "integer")],

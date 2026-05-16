@@ -3,6 +3,7 @@ import {
   formatNumber,
   formatPercent,
 } from "../lib/format.js";
+import { buildSeasonalityMetricPresentation } from "../lib/metricRegistry.js";
 import { LOCAL_API_COMMAND } from "../lib/syncedData.js";
 import { renderSeasonalityInterpretation } from "./shared/interpretation.js";
 import { renderWarnings } from "./shared/resultsViewShared.js";
@@ -53,6 +54,18 @@ function renderSamplePill(bucket) {
       ${formatNumber(bucket.observations, 0)} · ${bucket.sampleQualityLabel}
     </span>
   `;
+}
+
+function formatSampleDepth(summary) {
+  if (!summary.observedBucketCount) {
+    return "No observed month buckets";
+  }
+
+  if (summary.minBucketObservations === summary.maxBucketObservations) {
+    return `${formatNumber(summary.minBucketObservations, 0)} samples per observed month`;
+  }
+
+  return `${formatNumber(summary.minBucketObservations, 0)}-${formatNumber(summary.maxBucketObservations, 0)} samples per observed month`;
 }
 
 function renderBucketTable(bucketStats) {
@@ -107,6 +120,7 @@ function renderBucketTable(bucketStats) {
 
 function renderSeasonalityResults(studyRun) {
   const { summary } = studyRun;
+  const metricPresentation = buildSeasonalityMetricPresentation({ summary });
 
   return `
     <div class="results-shell">
@@ -141,21 +155,21 @@ function renderSeasonalityResults(studyRun) {
             label: "Strongest Month",
             value: summary.strongestMonth?.monthLabel || "n/a",
             detail: summary.strongestMonth
-              ? `Avg ${formatPercent(summary.strongestMonth.averageLogReturn)}`
+              ? `Avg ${formatPercent(summary.strongestMonth.averageLogReturn)} across ${formatNumber(summary.strongestMonth.observations, 0)} samples`
               : "No observations",
           })}
           ${renderCard({
             label: "Weakest Month",
             value: summary.weakestMonth?.monthLabel || "n/a",
             detail: summary.weakestMonth
-              ? `Avg ${formatPercent(summary.weakestMonth.averageLogReturn)}`
+              ? `Avg ${formatPercent(summary.weakestMonth.averageLogReturn)} across ${formatNumber(summary.weakestMonth.observations, 0)} samples`
               : "No observations",
           })}
           ${renderCard({
             label: "Best Hit Rate",
             value: summary.bestHitRateMonth?.monthLabel || "n/a",
             detail: summary.bestHitRateMonth
-              ? `Win rate ${formatPercent(summary.bestHitRateMonth.winRate)}`
+              ? `Win rate ${formatPercent(summary.bestHitRateMonth.winRate)} across ${formatNumber(summary.bestHitRateMonth.observations, 0)} samples`
               : "No observations",
           })}
           ${renderCard({
@@ -171,9 +185,9 @@ function renderSeasonalityResults(studyRun) {
             detail: "Strongest minus weakest average month",
           })}
           ${renderCard({
-            label: "Years Observed",
-            value: formatNumber(summary.yearsObserved, 0),
-            detail: `${formatNumber(summary.monthsUsed, 0)} monthly rows used`,
+            label: metricPresentation.sampleDepth.label,
+            value: `${formatNumber(metricPresentation.sampleDepth.value, 0)} rows`,
+            detail: metricPresentation.sampleDepth.detail || formatSampleDepth(summary),
           })}
         </div>
       </section>
@@ -263,6 +277,9 @@ function renderSeasonalityResults(studyRun) {
           </p>
           <p class="result-detail">
             Years observed: ${formatNumber(summary.yearsObserved, 0)}
+          </p>
+          <p class="result-detail">
+            Per-month sample depth: ${formatSampleDepth(summary)}
           </p>
           <p class="result-detail">
             Skipped month gaps: ${formatNumber(summary.skippedTransitions, 0)}

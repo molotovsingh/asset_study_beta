@@ -7,6 +7,10 @@ from .yahoo_finance15 import (
     fetch_history as fetch_yahoo_finance15_history,
     fetch_profile as fetch_yahoo_finance15_profile,
 )
+from .finnhub import (
+    PROVIDER_ID as FINNHUB_PROVIDER_ID,
+    PROVIDER_NAME as FINNHUB_PROVIDER_NAME,
+)
 from .yfinance_provider import (
     PROVIDER_ID as YFINANCE_PROVIDER_ID,
     PROVIDER_NAME as YFINANCE_PROVIDER_NAME,
@@ -16,6 +20,7 @@ from .yfinance_provider import (
 
 
 PROVIDER_DISPLAY_NAMES = {
+    FINNHUB_PROVIDER_ID: FINNHUB_PROVIDER_NAME,
     YFINANCE_PROVIDER_ID: YFINANCE_PROVIDER_NAME,
     YAHOO_FINANCE15_PROVIDER_ID: YAHOO_FINANCE15_PROVIDER_NAME,
 }

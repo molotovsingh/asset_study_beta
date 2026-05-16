@@ -8,6 +8,12 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import quote
 
+import runtime_store_metadata as metadata_store
+import runtime_store_automation as automation_store
+import runtime_store_options as options_store
+import runtime_store_runs as runs_store
+import runtime_store_study_builder as study_builder_store
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CACHE_ROOT = REPO_ROOT / "data" / "local-cache" / "yfinance" / "index"
@@ -326,6 +332,7 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             universe_label TEXT NOT NULL,
             minimum_dte INTEGER NOT NULL,
             max_contracts INTEGER NOT NULL,
+            signal_version TEXT NOT NULL DEFAULT 'legacy-v0',
             requested_symbols_json TEXT NOT NULL,
             failure_json TEXT NOT NULL DEFAULT '[]',
             row_count INTEGER NOT NULL DEFAULT 0,
@@ -380,6 +387,26 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             confidence_score REAL,
             candidate_advisory TEXT,
             candidate_bucket TEXT,
+            signal_version TEXT NOT NULL DEFAULT 'legacy-v0',
+            rv_percentile REAL,
+            vrp REAL,
+            front_implied_volatility REAL,
+            back_implied_volatility REAL,
+            term_structure_steepness REAL,
+            term_structure_bucket TEXT,
+            term_structure_label TEXT,
+            atm_implied_volatility REAL,
+            put_25_delta_implied_volatility REAL,
+            call_25_delta_implied_volatility REAL,
+            normalized_skew REAL,
+            normalized_upside_skew REAL,
+            iv_rank REAL,
+            rv_rank REAL,
+            vrp_rank REAL,
+            term_structure_rank REAL,
+            skew_rank REAL,
+            primary_trade_idea TEXT,
+            trade_idea_labels_json TEXT NOT NULL DEFAULT '[]',
             warnings_json TEXT NOT NULL DEFAULT '[]',
             created_at TEXT NOT NULL,
             PRIMARY KEY (run_id, symbol_id),
@@ -389,6 +416,247 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_options_screener_rows_symbol_date
             ON options_screener_rows (symbol_id, as_of_date);
+
+        CREATE TABLE IF NOT EXISTS tracked_option_positions (
+            position_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_run_id INTEGER NOT NULL,
+            symbol_id INTEGER NOT NULL,
+            universe_id TEXT NOT NULL,
+            universe_label TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'yfinance',
+            strategy TEXT NOT NULL,
+            signal_version TEXT NOT NULL,
+            entry_as_of_date TEXT NOT NULL,
+            entry_base_date TEXT,
+            expiry TEXT NOT NULL,
+            strike REAL NOT NULL,
+            days_to_expiry INTEGER,
+            spot_price REAL,
+            call_entry_bid REAL,
+            call_entry_ask REAL,
+            call_entry_mid REAL,
+            put_entry_bid REAL,
+            put_entry_ask REAL,
+            put_entry_mid REAL,
+            entry_mark_source TEXT NOT NULL,
+            entry_executable_value REAL,
+            entry_reference_mid REAL,
+            candidate_bucket TEXT,
+            pricing_bucket TEXT,
+            direction_bucket TEXT,
+            primary_trade_idea TEXT,
+            created_at TEXT NOT NULL,
+            closed_at TEXT,
+            close_reason TEXT,
+            UNIQUE (
+                symbol_id,
+                provider,
+                entry_as_of_date,
+                expiry,
+                strike,
+                strategy,
+                signal_version
+            ),
+            FOREIGN KEY (source_run_id) REFERENCES options_screener_runs(run_id) ON DELETE CASCADE,
+            FOREIGN KEY (symbol_id) REFERENCES symbols(symbol_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tracked_option_positions_open
+            ON tracked_option_positions (closed_at, expiry, entry_as_of_date);
+
+        CREATE TABLE IF NOT EXISTS tracked_option_marks (
+            position_id INTEGER NOT NULL,
+            mark_date TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
+            underlying_close REAL,
+            underlying_close_date TEXT,
+            call_bid REAL,
+            call_ask REAL,
+            call_mid REAL,
+            put_bid REAL,
+            put_ask REAL,
+            put_mid REAL,
+            reference_straddle_mid REAL,
+            executable_mark_value REAL,
+            edge_vs_entry_premium REAL,
+            executable_return REAL,
+            mark_source TEXT NOT NULL,
+            mark_status TEXT NOT NULL,
+            reason TEXT,
+            PRIMARY KEY (position_id, mark_date),
+            FOREIGN KEY (position_id) REFERENCES tracked_option_positions(position_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tracked_option_marks_position_date
+            ON tracked_option_marks (position_id, mark_date);
+
+        CREATE TABLE IF NOT EXISTS symbol_universes (
+            universe_id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            selection_kind TEXT NOT NULL DEFAULT 'manual',
+            source_provider TEXT,
+            exchange TEXT,
+            mic TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS symbol_universe_members (
+            universe_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            label TEXT,
+            exchange TEXT,
+            mic TEXT,
+            instrument_type TEXT,
+            currency TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            source_provider TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (universe_id, symbol),
+            FOREIGN KEY (universe_id) REFERENCES symbol_universes(universe_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_symbol_universe_members_active
+            ON symbol_universe_members (universe_id, is_active, symbol);
+
+        CREATE TABLE IF NOT EXISTS market_collection_runs (
+            run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            universe_id TEXT NOT NULL,
+            universe_label TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            requested_provider_order_json TEXT NOT NULL,
+            symbol_count INTEGER NOT NULL DEFAULT 0,
+            success_count INTEGER NOT NULL DEFAULT 0,
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            skipped_count INTEGER NOT NULL DEFAULT 0,
+            refresh_symbol_master INTEGER NOT NULL DEFAULT 0,
+            full_sync INTEGER NOT NULL DEFAULT 0,
+            as_of_date TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            failure_json TEXT NOT NULL DEFAULT '[]',
+            FOREIGN KEY (universe_id) REFERENCES symbol_universes(universe_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_market_collection_runs_completed_at
+            ON market_collection_runs (completed_at DESC);
+
+        CREATE TABLE IF NOT EXISTS automation_configs (
+            automation_id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'data-maintenance',
+            schedule_type TEXT NOT NULL DEFAULT 'interval',
+            interval_minutes INTEGER NOT NULL DEFAULT 1440,
+            run_market_collection INTEGER NOT NULL DEFAULT 1,
+            market_universe_ids_json TEXT NOT NULL DEFAULT '[]',
+            run_options_collection INTEGER NOT NULL DEFAULT 1,
+            options_universe_ids_json TEXT NOT NULL DEFAULT '[]',
+            refresh_exchange_symbol_masters INTEGER NOT NULL DEFAULT 0,
+            market_provider_order_json TEXT NOT NULL DEFAULT '[]',
+            market_full_sync INTEGER NOT NULL DEFAULT 0,
+            market_limit INTEGER,
+            options_minimum_dte INTEGER,
+            options_max_contracts INTEGER,
+            health_stale_after_days INTEGER NOT NULL DEFAULT 7,
+            health_symbol_limit INTEGER NOT NULL DEFAULT 20,
+            health_universe_limit INTEGER NOT NULL DEFAULT 20,
+            health_run_limit INTEGER NOT NULL DEFAULT 10,
+            max_attention_symbols INTEGER,
+            max_sync_errors INTEGER,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            is_running INTEGER NOT NULL DEFAULT 0,
+            last_run_started_at TEXT,
+            last_run_completed_at TEXT,
+            last_run_status TEXT,
+            last_run_summary_json TEXT NOT NULL DEFAULT '{}',
+            last_run_error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_automation_configs_active
+            ON automation_configs (is_active, is_running, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS study_runs (
+            run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id TEXT NOT NULL,
+            study_title TEXT NOT NULL,
+            view_id TEXT,
+            selection_label TEXT NOT NULL,
+            subject_query TEXT NOT NULL,
+            symbol TEXT,
+            status TEXT NOT NULL DEFAULT 'success',
+            route_hash TEXT,
+            requested_start_date TEXT,
+            requested_end_date TEXT,
+            actual_start_date TEXT,
+            actual_end_date TEXT,
+            detail_label TEXT,
+            requested_params_json TEXT NOT NULL DEFAULT '{}',
+            resolved_params_json TEXT NOT NULL DEFAULT '{}',
+            provider_summary_json TEXT NOT NULL DEFAULT '{}',
+            data_snapshot_refs_json TEXT NOT NULL DEFAULT '[]',
+            warning_count INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            run_kind TEXT NOT NULL DEFAULT 'analysis',
+            started_at TEXT,
+            completed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_study_runs_completed_at
+            ON study_runs (completed_at DESC, run_id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_study_runs_study_id
+            ON study_runs (study_id, completed_at DESC);
+
+        CREATE TABLE IF NOT EXISTS study_run_summaries (
+            summary_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            summary_key TEXT NOT NULL,
+            label TEXT NOT NULL,
+            value_text TEXT,
+            value_number REAL,
+            value_kind TEXT NOT NULL DEFAULT 'text',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (run_id) REFERENCES study_runs(run_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_study_run_summaries_run_id
+            ON study_run_summaries (run_id, sort_order, summary_id);
+
+        CREATE TABLE IF NOT EXISTS study_run_links (
+            link_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            link_type TEXT NOT NULL,
+            target_kind TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            target_label TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (run_id) REFERENCES study_runs(run_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_study_run_links_run_id
+            ON study_run_links (run_id, sort_order, link_id);
+
+        CREATE TABLE IF NOT EXISTS study_plan_recipes (
+            recipe_id TEXT PRIMARY KEY,
+            version TEXT NOT NULL DEFAULT 'study-plan-recipes-v1',
+            name TEXT NOT NULL,
+            route_hash TEXT NOT NULL,
+            study_id TEXT NOT NULL,
+            view_id TEXT NOT NULL,
+            plan_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_study_plan_recipes_updated_at
+            ON study_plan_recipes (updated_at DESC, recipe_id ASC);
         """
     )
     existing_series_columns = {
@@ -410,6 +678,47 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE instrument_profiles ADD COLUMN provider_name TEXT NOT NULL DEFAULT 'Yahoo Finance (yfinance)'",
         )
+
+    existing_screener_run_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(options_screener_runs)")
+    }
+    for column_name, column_sql in [
+        ("signal_version", "TEXT NOT NULL DEFAULT 'legacy-v0'"),
+    ]:
+        if column_name not in existing_screener_run_columns:
+            connection.execute(
+                f"ALTER TABLE options_screener_runs ADD COLUMN {column_name} {column_sql}",
+            )
+
+    existing_screener_row_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(options_screener_rows)")
+    }
+    for column_name, column_sql in [
+        ("signal_version", "TEXT NOT NULL DEFAULT 'legacy-v0'"),
+        ("rv_percentile", "REAL"),
+        ("vrp", "REAL"),
+        ("front_implied_volatility", "REAL"),
+        ("back_implied_volatility", "REAL"),
+        ("term_structure_steepness", "REAL"),
+        ("term_structure_bucket", "TEXT"),
+        ("term_structure_label", "TEXT"),
+        ("atm_implied_volatility", "REAL"),
+        ("put_25_delta_implied_volatility", "REAL"),
+        ("call_25_delta_implied_volatility", "REAL"),
+        ("normalized_skew", "REAL"),
+        ("normalized_upside_skew", "REAL"),
+        ("iv_rank", "REAL"),
+        ("rv_rank", "REAL"),
+        ("vrp_rank", "REAL"),
+        ("term_structure_rank", "REAL"),
+        ("skew_rank", "REAL"),
+        ("primary_trade_idea", "TEXT"),
+        ("trade_idea_labels_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ]:
+        if column_name not in existing_screener_row_columns:
+            connection.execute(
+                f"ALTER TABLE options_screener_rows ADD COLUMN {column_name} {column_sql}",
+            )
 
     connection.commit()
 
@@ -456,34 +765,13 @@ def row_to_remembered_entry(row: sqlite3.Row) -> dict:
 
 
 def row_to_profile(row: sqlite3.Row) -> dict:
-    raw_info = _raw_info_from_row(row)
-    return {
-        "symbol": row["symbol"],
-        "fetchedAt": row["fetched_at"],
-        "providerName": row["provider_name"],
-        "quoteType": row["quote_type"],
-        "shortName": row["short_name"],
-        "longName": row["long_name"],
-        "sector": row["sector"],
-        "industry": row["industry"],
-        "country": row["country"],
-        "exchange": row["exchange"],
-        "exchangeName": row["exchange_name"],
-        "currency": row["currency"],
-        "marketCap": row["market_cap"],
-        "beta": row["beta"],
-        "trailingPE": row["trailing_pe"],
-        "forwardPE": row["forward_pe"],
-        "priceToBook": row["price_to_book"],
-        "dividendYield": (
-            _clean_dividend_yield(raw_info)
-            if raw_info
-            else _normalize_yield_ratio(row["dividend_yield"])
-        ),
-        "fullTimeEmployees": row["full_time_employees"],
-        "website": row["website"],
-        "sourceUrl": build_symbol_source_url(row["symbol"]),
-    }
+    return metadata_store.row_to_profile(
+        row,
+        raw_info_from_row=_raw_info_from_row,
+        clean_dividend_yield=_clean_dividend_yield,
+        normalize_yield_ratio=_normalize_yield_ratio,
+        build_symbol_source_url=build_symbol_source_url,
+    )
 
 
 def _clean_text(value) -> str | None:
@@ -571,34 +859,18 @@ def normalize_profile(
     *,
     provider_name: str | None = None,
 ) -> dict:
-    raw_info = info if isinstance(info, dict) else {}
-    normalized_symbol = normalize_symbol(symbol)
-
-    return {
-        "symbol": normalized_symbol,
-        "fetchedAt": to_iso(now_utc()),
-        "providerName": str(provider_name or "Yahoo Finance (yfinance)").strip()
-        or "Yahoo Finance (yfinance)",
-        "quoteType": _clean_text(raw_info.get("quoteType")),
-        "shortName": _clean_text(raw_info.get("shortName")),
-        "longName": _clean_text(raw_info.get("longName")),
-        "sector": _clean_text(raw_info.get("sector")),
-        "industry": _clean_text(raw_info.get("industry")),
-        "country": _clean_text(raw_info.get("country")),
-        "exchange": _clean_text(raw_info.get("exchange")),
-        "exchangeName": _clean_text(raw_info.get("fullExchangeName")),
-        "currency": _clean_text(raw_info.get("currency")),
-        "marketCap": _clean_number(raw_info.get("marketCap")),
-        "beta": _clean_number(raw_info.get("beta")),
-        "trailingPE": _clean_number(raw_info.get("trailingPE")),
-        "forwardPE": _clean_number(raw_info.get("forwardPE")),
-        "priceToBook": _clean_number(raw_info.get("priceToBook")),
-        "dividendYield": _clean_dividend_yield(raw_info),
-        "fullTimeEmployees": _clean_int(raw_info.get("fullTimeEmployees")),
-        "website": _clean_text(raw_info.get("website")),
-        "sourceUrl": build_symbol_source_url(normalized_symbol),
-        "rawInfo": raw_info,
-    }
+    return metadata_store.normalize_profile(
+        symbol,
+        info,
+        provider_name=provider_name,
+        normalize_symbol=normalize_symbol,
+        clean_text=_clean_text,
+        clean_number=_clean_number,
+        clean_int=_clean_int,
+        clean_dividend_yield=_clean_dividend_yield,
+        build_symbol_source_url=build_symbol_source_url,
+        now_iso=lambda: to_iso(now_utc()),
+    )
 
 
 def upsert_cached_snapshot(connection: sqlite3.Connection, snapshot: dict) -> None:
@@ -1300,149 +1572,25 @@ def update_cached_series_currency(symbol: str, currency: str | None) -> dict | N
 
 
 def upsert_remembered_dataset(connection: sqlite3.Connection, entry: dict) -> None:
-    range_data = entry.get("range") or {
-        "startDate": "",
-        "endDate": "",
-        "observations": 0,
-    }
-    symbol = normalize_symbol(entry.get("symbol"))
-    cache_key = (
-        entry.get("cacheKey")
-        or extract_cache_key_from_path(entry.get("path"))
-        or symbol_cache_key(symbol)
-    )
-
-    connection.execute(
-        """
-        INSERT INTO remembered_datasets (
-            dataset_id,
-            label,
-            symbol,
-            provider_name,
-            family,
-            currency,
-            target_series_type,
-            source_series_type,
-            source_url,
-            note,
-            generated_at,
-            range_start_date,
-            range_end_date,
-            observations,
-            cache_key
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(dataset_id) DO UPDATE SET
-            label = excluded.label,
-            symbol = excluded.symbol,
-            provider_name = excluded.provider_name,
-            family = excluded.family,
-            currency = excluded.currency,
-            target_series_type = excluded.target_series_type,
-            source_series_type = excluded.source_series_type,
-            source_url = excluded.source_url,
-            note = excluded.note,
-            generated_at = excluded.generated_at,
-            range_start_date = excluded.range_start_date,
-            range_end_date = excluded.range_end_date,
-            observations = excluded.observations,
-            cache_key = excluded.cache_key
-        """,
-        (
-            str(entry.get("datasetId") or cache_key).strip(),
-            str(entry.get("label") or symbol).strip() or symbol,
-            symbol,
-            str(entry.get("providerName") or "Yahoo Finance").strip() or "Yahoo Finance",
-            str(entry.get("family") or "Remembered").strip() or "Remembered",
-            str(entry.get("currency") or "").strip().upper() or None,
-            str(entry.get("targetSeriesType") or "Price").strip() or "Price",
-            str(entry.get("sourceSeriesType") or "Price").strip() or "Price",
-            str(entry.get("sourceUrl") or build_symbol_source_url(symbol)).strip(),
-            str(entry.get("note")).strip() if entry.get("note") else None,
-            str(entry.get("generatedAt") or to_iso(now_utc())).strip(),
-            str(range_data.get("startDate") or ""),
-            str(range_data.get("endDate") or ""),
-            int(range_data.get("observations") or 0),
-            cache_key,
-        ),
+    metadata_store.upsert_remembered_dataset(
+        connection,
+        entry,
+        normalize_symbol=normalize_symbol,
+        extract_cache_key_from_path=extract_cache_key_from_path,
+        symbol_cache_key=symbol_cache_key,
+        build_symbol_source_url=build_symbol_source_url,
+        to_iso=to_iso,
+        now_utc=now_utc,
     )
 
 
 def upsert_instrument_profile(connection: sqlite3.Connection, profile: dict) -> None:
-    connection.execute(
-        """
-        INSERT INTO instrument_profiles (
-            symbol,
-            fetched_at,
-            provider_name,
-            quote_type,
-            short_name,
-            long_name,
-            sector,
-            industry,
-            country,
-            exchange,
-            exchange_name,
-            currency,
-            market_cap,
-            beta,
-            trailing_pe,
-            forward_pe,
-            price_to_book,
-            dividend_yield,
-            full_time_employees,
-            website,
-            raw_info_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(symbol) DO UPDATE SET
-            fetched_at = excluded.fetched_at,
-            provider_name = excluded.provider_name,
-            quote_type = excluded.quote_type,
-            short_name = excluded.short_name,
-            long_name = excluded.long_name,
-            sector = excluded.sector,
-            industry = excluded.industry,
-            country = excluded.country,
-            exchange = excluded.exchange,
-            exchange_name = excluded.exchange_name,
-            currency = excluded.currency,
-            market_cap = excluded.market_cap,
-            beta = excluded.beta,
-            trailing_pe = excluded.trailing_pe,
-            forward_pe = excluded.forward_pe,
-            price_to_book = excluded.price_to_book,
-            dividend_yield = excluded.dividend_yield,
-            full_time_employees = excluded.full_time_employees,
-            website = excluded.website,
-            raw_info_json = excluded.raw_info_json
-        """,
-        (
-            normalize_symbol(profile.get("symbol")),
-            profile.get("fetchedAt") or to_iso(now_utc()),
-            str(profile.get("providerName") or "Yahoo Finance (yfinance)").strip()
-            or "Yahoo Finance (yfinance)",
-            profile.get("quoteType"),
-            profile.get("shortName"),
-            profile.get("longName"),
-            profile.get("sector"),
-            profile.get("industry"),
-            profile.get("country"),
-            profile.get("exchange"),
-            profile.get("exchangeName"),
-            str(profile.get("currency") or "").strip().upper() or None,
-            profile.get("marketCap"),
-            profile.get("beta"),
-            profile.get("trailingPE"),
-            profile.get("forwardPE"),
-            profile.get("priceToBook"),
-            profile.get("dividendYield"),
-            profile.get("fullTimeEmployees"),
-            profile.get("website"),
-            json.dumps(
-                profile.get("rawInfo") or {},
-                separators=(",", ":"),
-                default=str,
-            ),
-        ),
+    metadata_store.upsert_instrument_profile(
+        connection,
+        profile,
+        normalize_symbol=normalize_symbol,
+        to_iso=to_iso,
+        now_utc=now_utc,
     )
 
 
@@ -1472,24 +1620,13 @@ def should_import_remembered_dataset(
     dataset_id: str | None,
     generated_at: str | None,
 ) -> bool:
-    normalized_dataset_id = normalize_dataset_id(dataset_id)
-    if not normalized_dataset_id:
-        return False
-
-    existing = connection.execute(
-        "SELECT generated_at FROM remembered_datasets WHERE lower(dataset_id) = ?",
-        (normalized_dataset_id,),
-    ).fetchone()
-    if existing is None:
-        return True
-
-    incoming_dt = parse_iso_datetime(generated_at)
-    existing_dt = parse_iso_datetime(existing[0])
-    if incoming_dt is None:
-        return False
-    if existing_dt is None:
-        return True
-    return incoming_dt >= existing_dt
+    return metadata_store.should_import_remembered_dataset(
+        connection,
+        dataset_id,
+        generated_at,
+        normalize_dataset_id=normalize_dataset_id,
+        parse_iso_datetime=parse_iso_datetime,
+    )
 
 
 def migrate_legacy_local_cache(connection: sqlite3.Connection) -> None:
@@ -1639,121 +1776,265 @@ def write_cached_series(
 
 
 def find_remembered_entry(dataset_id: str | None, symbol: str | None) -> dict | None:
-    normalized_dataset_id = normalize_dataset_id(dataset_id)
-    normalized_symbol = normalize_symbol(symbol)
-
-    with open_runtime_store() as connection:
-        if normalized_dataset_id:
-            row = connection.execute(
-                """
-                SELECT
-                    dataset_id,
-                    label,
-                    symbol,
-                    provider_name,
-                    family,
-                    currency,
-                    target_series_type,
-                    source_series_type,
-                    source_url,
-                    note,
-                    generated_at,
-                    range_start_date,
-                    range_end_date,
-                    observations,
-                    cache_key
-                FROM remembered_datasets
-                WHERE lower(dataset_id) = ?
-                LIMIT 1
-                """,
-                (normalized_dataset_id,),
-            ).fetchone()
-            if row is not None:
-                return row_to_remembered_entry(row)
-
-        if normalized_symbol:
-            row = connection.execute(
-                """
-                SELECT
-                    dataset_id,
-                    label,
-                    symbol,
-                    provider_name,
-                    family,
-                    currency,
-                    target_series_type,
-                    source_series_type,
-                    source_url,
-                    note,
-                    generated_at,
-                    range_start_date,
-                    range_end_date,
-                    observations,
-                    cache_key
-                FROM remembered_datasets
-                WHERE symbol = ?
-                ORDER BY generated_at DESC, dataset_id ASC
-                LIMIT 1
-                """,
-                (normalized_symbol,),
-            ).fetchone()
-            if row is not None:
-                return row_to_remembered_entry(row)
-
-    return None
+    return metadata_store.find_remembered_entry(
+        dataset_id,
+        symbol,
+        open_runtime_store=open_runtime_store,
+        normalize_dataset_id=normalize_dataset_id,
+        normalize_symbol=normalize_symbol,
+    )
 
 
 def remember_symbol(snapshot: dict) -> dict:
-    entry = {
-        "datasetId": snapshot["datasetId"],
-        "label": snapshot["label"],
-        "symbol": snapshot["symbol"],
-        "currency": snapshot.get("currency"),
-        "providerName": snapshot["providerName"],
-        "family": snapshot["family"],
-        "targetSeriesType": snapshot["targetSeriesType"],
-        "sourceSeriesType": snapshot["sourceSeriesType"],
-        "sourceUrl": snapshot["sourceUrl"],
-        "note": snapshot["note"],
-        "generatedAt": snapshot["generatedAt"],
-        "range": snapshot["range"],
-        "cacheKey": snapshot.get("cache", {}).get("key"),
-        "path": snapshot.get("cache", {}).get("path"),
-    }
-
-    with open_runtime_store() as connection:
-        upsert_remembered_dataset(connection, entry)
-        connection.commit()
-
-    return find_remembered_entry(entry["datasetId"], entry["symbol"]) or entry
+    return metadata_store.remember_symbol(
+        snapshot,
+        open_runtime_store=open_runtime_store,
+        normalize_symbol=normalize_symbol,
+        extract_cache_key_from_path=extract_cache_key_from_path,
+        symbol_cache_key=symbol_cache_key,
+        build_symbol_source_url=build_symbol_source_url,
+        to_iso=to_iso,
+        now_utc=now_utc,
+        find_remembered_entry_fn=find_remembered_entry,
+    )
 
 
 def load_remembered_catalog() -> list[dict]:
-    with open_runtime_store() as connection:
-        rows = connection.execute(
-            """
-            SELECT
-                dataset_id,
-                label,
-                symbol,
-                provider_name,
-                family,
-                currency,
-                target_series_type,
-                source_series_type,
-                source_url,
-                note,
-                generated_at,
-                range_start_date,
-                range_end_date,
-                observations,
-                cache_key
-            FROM remembered_datasets
-            ORDER BY lower(label), symbol, dataset_id
-            """
-        ).fetchall()
+    return metadata_store.load_remembered_catalog(
+        open_runtime_store=open_runtime_store,
+    )
 
-    return [row_to_remembered_entry(row) for row in rows]
+
+def upsert_symbol_universe(
+    universe_id: str,
+    label: str,
+    *,
+    selection_kind: str = "manual",
+    source_provider: str | None = None,
+    exchange: str | None = None,
+    mic: str | None = None,
+    note: str | None = None,
+) -> dict:
+    return metadata_store.upsert_symbol_universe(
+        universe_id,
+        label,
+        selection_kind=selection_kind,
+        source_provider=source_provider,
+        exchange=exchange,
+        mic=mic,
+        note=note,
+        normalize_dataset_id=normalize_dataset_id,
+        to_iso=to_iso,
+        now_utc=now_utc,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def sync_symbol_universe_members(
+    universe_id: str,
+    entries: list[dict],
+    *,
+    source_provider: str | None = None,
+    replace: bool = False,
+) -> list[dict]:
+    return metadata_store.sync_symbol_universe_members(
+        universe_id,
+        entries,
+        source_provider=source_provider,
+        replace=replace,
+        normalize_dataset_id=normalize_dataset_id,
+        normalize_symbol=normalize_symbol,
+        to_iso=to_iso,
+        now_utc=now_utc,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_symbol_universe_members(
+    universe_id: str,
+    *,
+    include_inactive: bool = False,
+) -> list[dict]:
+    return metadata_store.load_symbol_universe_members(
+        universe_id,
+        include_inactive=include_inactive,
+        normalize_dataset_id=normalize_dataset_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def list_symbol_universes() -> list[dict]:
+    return metadata_store.list_symbol_universes(
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_symbol_sync_state(symbol: str) -> dict | None:
+    return metadata_store.load_symbol_sync_state(
+        symbol,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def record_market_collection_run(
+    *,
+    universe_id: str,
+    universe_label: str,
+    mode: str,
+    requested_provider_order: list[str],
+    symbol_count: int,
+    success_count: int,
+    failure_count: int,
+    skipped_count: int,
+    refresh_symbol_master: bool,
+    full_sync: bool,
+    as_of_date: str | None,
+    started_at: str,
+    completed_at: str,
+    failures: list[dict],
+) -> dict:
+    return metadata_store.record_market_collection_run(
+        universe_id=universe_id,
+        universe_label=universe_label,
+        mode=mode,
+        requested_provider_order=requested_provider_order,
+        symbol_count=symbol_count,
+        success_count=success_count,
+        failure_count=failure_count,
+        skipped_count=skipped_count,
+        refresh_symbol_master=refresh_symbol_master,
+        full_sync=full_sync,
+        as_of_date=as_of_date,
+        started_at=started_at,
+        completed_at=completed_at,
+        failures=failures,
+        normalize_dataset_id=normalize_dataset_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def list_automation_configs() -> list[dict]:
+    return automation_store.list_automation_configs(
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_automation_config(automation_id: str) -> dict | None:
+    return automation_store.load_automation_config(
+        automation_id,
+        open_runtime_store=open_runtime_store,
+        normalize_dataset_id=normalize_dataset_id,
+    )
+
+
+def upsert_automation_config(automation: dict) -> dict:
+    return automation_store.upsert_automation_config(
+        automation,
+        open_runtime_store=open_runtime_store,
+        normalize_dataset_id=normalize_dataset_id,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def delete_automation_config(automation_id: str) -> bool:
+    return automation_store.delete_automation_config(
+        automation_id,
+        open_runtime_store=open_runtime_store,
+        normalize_dataset_id=normalize_dataset_id,
+    )
+
+
+def update_automation_run_state(
+    automation_id: str,
+    *,
+    is_running: bool,
+    started_at: str | None = None,
+    completed_at: str | None = None,
+    status: str | None = None,
+    summary: dict | None = None,
+    error: str | None = None,
+) -> dict | None:
+    return automation_store.update_automation_run_state(
+        automation_id,
+        is_running=is_running,
+        started_at=started_at,
+        completed_at=completed_at,
+        status=status,
+        summary=summary,
+        error=error,
+        open_runtime_store=open_runtime_store,
+        normalize_dataset_id=normalize_dataset_id,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def load_due_automation_configs(*, reference_time_iso: str | None = None) -> list[dict]:
+    return automation_store.load_due_automation_configs(
+        open_runtime_store=open_runtime_store,
+        reference_time_iso=reference_time_iso,
+    )
+
+
+def list_study_runs(
+    *,
+    limit: int = 25,
+    study_id: str | None = None,
+    status: str | None = None,
+) -> list[dict]:
+    return runs_store.list_study_runs(
+        limit=limit,
+        study_id=study_id,
+        status=status,
+        open_runtime_store=open_runtime_store,
+        normalize_dataset_id=normalize_dataset_id,
+    )
+
+
+def load_study_run_by_id(run_id: int) -> dict | None:
+    return runs_store.load_study_run_by_id(
+        run_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def record_study_run(study_run: dict) -> dict:
+    return runs_store.record_study_run(
+        study_run,
+        open_runtime_store=open_runtime_store,
+        normalize_dataset_id=normalize_dataset_id,
+        normalize_symbol=normalize_symbol,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def list_study_plan_recipes(*, limit: int = 50) -> list[dict]:
+    return study_builder_store.list_study_plan_recipes(
+        limit=limit,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_study_plan_recipe(recipe_id: str) -> dict | None:
+    return study_builder_store.load_study_plan_recipe(
+        recipe_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def upsert_study_plan_recipe(recipe: dict) -> dict:
+    return study_builder_store.upsert_study_plan_recipe(
+        recipe,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def delete_study_plan_recipe(recipe_id: str) -> bool:
+    return study_builder_store.delete_study_plan_recipe(
+        recipe_id,
+        open_runtime_store=open_runtime_store,
+    )
 
 
 def load_instrument_profile(symbol: str) -> dict | None:
@@ -1819,129 +2100,14 @@ def load_option_monthly_snapshots(
     as_of_date: str | None = None,
     provider: str | None = None,
 ) -> list[dict]:
-    normalized_symbol = normalize_symbol(symbol)
-    if not normalized_symbol:
-        return []
-
-    with open_runtime_store() as connection:
-        symbol_row = _load_symbol_row(connection, normalized_symbol)
-        if symbol_row is None:
-            return []
-
-        clauses = ["symbol_id = ?"]
-        params: list[str | int] = [int(symbol_row["symbol_id"])]
-        if as_of_date:
-            clauses.append("as_of_date = ?")
-            params.append(str(as_of_date))
-        if provider:
-            clauses.append("provider = ?")
-            params.append(str(provider).strip().lower())
-
-        rows = connection.execute(
-            f"""
-            SELECT
-                provider,
-                as_of_date,
-                fetched_at,
-                expiry,
-                currency,
-                spot_date,
-                spot_price,
-                minimum_dte,
-                max_contracts,
-                days_to_expiry,
-                strike,
-                call_bid,
-                call_ask,
-                call_last_price,
-                call_mid_price,
-                call_price_source,
-                call_open_interest,
-                call_volume,
-                call_implied_volatility,
-                put_bid,
-                put_ask,
-                put_last_price,
-                put_mid_price,
-                put_price_source,
-                put_open_interest,
-                put_volume,
-                put_implied_volatility,
-                straddle_mid_price,
-                implied_move_price,
-                implied_move_percent,
-                straddle_implied_volatility,
-                chain_implied_volatility,
-                implied_volatility_gap,
-                historical_volatility_20,
-                historical_volatility_60,
-                historical_volatility_120,
-                iv_hv20_ratio,
-                iv_hv60_ratio,
-                iv_hv120_ratio,
-                iv_hv20_spread,
-                iv_hv60_spread,
-                iv_hv120_spread,
-                combined_open_interest,
-                combined_volume,
-                pricing_mode
-            FROM option_monthly_snapshots
-            WHERE {' AND '.join(clauses)}
-            ORDER BY as_of_date DESC, expiry ASC
-            """,
-            tuple(params),
-        ).fetchall()
-
-    return [
-        {
-            "provider": row["provider"],
-            "asOfDate": row["as_of_date"],
-            "fetchedAt": row["fetched_at"],
-            "expiry": row["expiry"],
-            "currency": row["currency"],
-            "spotDate": row["spot_date"],
-            "spotPrice": row["spot_price"],
-            "minimumDte": row["minimum_dte"],
-            "maxContracts": row["max_contracts"],
-            "daysToExpiry": row["days_to_expiry"],
-            "strike": row["strike"],
-            "callBid": row["call_bid"],
-            "callAsk": row["call_ask"],
-            "callLastPrice": row["call_last_price"],
-            "callMidPrice": row["call_mid_price"],
-            "callPriceSource": row["call_price_source"],
-            "callOpenInterest": row["call_open_interest"],
-            "callVolume": row["call_volume"],
-            "callImpliedVolatility": row["call_implied_volatility"],
-            "putBid": row["put_bid"],
-            "putAsk": row["put_ask"],
-            "putLastPrice": row["put_last_price"],
-            "putMidPrice": row["put_mid_price"],
-            "putPriceSource": row["put_price_source"],
-            "putOpenInterest": row["put_open_interest"],
-            "putVolume": row["put_volume"],
-            "putImpliedVolatility": row["put_implied_volatility"],
-            "straddleMidPrice": row["straddle_mid_price"],
-            "impliedMovePrice": row["implied_move_price"],
-            "impliedMovePercent": row["implied_move_percent"],
-            "straddleImpliedVolatility": row["straddle_implied_volatility"],
-            "chainImpliedVolatility": row["chain_implied_volatility"],
-            "impliedVolatilityGap": row["implied_volatility_gap"],
-            "historicalVolatility20": row["historical_volatility_20"],
-            "historicalVolatility60": row["historical_volatility_60"],
-            "historicalVolatility120": row["historical_volatility_120"],
-            "ivHv20Ratio": row["iv_hv20_ratio"],
-            "ivHv60Ratio": row["iv_hv60_ratio"],
-            "ivHv120Ratio": row["iv_hv120_ratio"],
-            "ivHv20Spread": row["iv_hv20_spread"],
-            "ivHv60Spread": row["iv_hv60_spread"],
-            "ivHv120Spread": row["iv_hv120_spread"],
-            "combinedOpenInterest": row["combined_open_interest"],
-            "combinedVolume": row["combined_volume"],
-            "pricingMode": row["pricing_mode"],
-        }
-        for row in rows
-    ]
+    return options_store.load_option_monthly_snapshots(
+        symbol,
+        as_of_date=as_of_date,
+        provider=provider,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+        load_symbol_row=_load_symbol_row,
+    )
 
 
 def load_option_front_history(
@@ -1950,113 +2116,14 @@ def load_option_front_history(
     provider: str | None = None,
     limit: int = 252,
 ) -> list[dict]:
-    normalized_symbol = normalize_symbol(symbol)
-    if not normalized_symbol:
-        return []
-
-    normalized_limit = max(1, int(limit or 252))
-    with open_runtime_store() as connection:
-        symbol_row = _load_symbol_row(connection, normalized_symbol)
-        if symbol_row is None:
-            return []
-
-        clauses = ["symbol_id = ?"]
-        params: list[str | int] = [int(symbol_row["symbol_id"])]
-        if provider:
-            clauses.append("provider = ?")
-            params.append(str(provider).strip().lower())
-
-        rows = connection.execute(
-            f"""
-            WITH ranked_rows AS (
-                SELECT
-                    provider,
-                    as_of_date,
-                    fetched_at,
-                    expiry,
-                    days_to_expiry,
-                    strike,
-                    spot_price,
-                    implied_move_percent,
-                    straddle_implied_volatility,
-                    chain_implied_volatility,
-                    implied_volatility_gap,
-                    historical_volatility_20,
-                    historical_volatility_60,
-                    historical_volatility_120,
-                    iv_hv20_ratio,
-                    iv_hv60_ratio,
-                    iv_hv120_ratio,
-                    iv_hv20_spread,
-                    iv_hv60_spread,
-                    iv_hv120_spread,
-                    combined_open_interest,
-                    combined_volume,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY symbol_id, provider, as_of_date
-                        ORDER BY days_to_expiry ASC, expiry ASC
-                    ) AS row_rank
-                FROM option_monthly_snapshots
-                WHERE {' AND '.join(clauses)}
-            )
-            SELECT
-                provider,
-                as_of_date,
-                fetched_at,
-                expiry,
-                days_to_expiry,
-                strike,
-                spot_price,
-                implied_move_percent,
-                straddle_implied_volatility,
-                chain_implied_volatility,
-                implied_volatility_gap,
-                historical_volatility_20,
-                historical_volatility_60,
-                historical_volatility_120,
-                iv_hv20_ratio,
-                iv_hv60_ratio,
-                iv_hv120_ratio,
-                iv_hv20_spread,
-                iv_hv60_spread,
-                iv_hv120_spread,
-                combined_open_interest,
-                combined_volume
-            FROM ranked_rows
-            WHERE row_rank = 1
-            ORDER BY as_of_date DESC
-            LIMIT ?
-            """,
-            tuple([*params, normalized_limit]),
-        ).fetchall()
-
-    return [
-        {
-            "provider": row["provider"],
-            "asOfDate": row["as_of_date"],
-            "fetchedAt": row["fetched_at"],
-            "expiry": row["expiry"],
-            "daysToExpiry": row["days_to_expiry"],
-            "strike": row["strike"],
-            "spotPrice": row["spot_price"],
-            "impliedMovePercent": row["implied_move_percent"],
-            "straddleImpliedVolatility": row["straddle_implied_volatility"],
-            "chainImpliedVolatility": row["chain_implied_volatility"],
-            "impliedVolatilityGap": row["implied_volatility_gap"],
-            "historicalVolatility20": row["historical_volatility_20"],
-            "historicalVolatility60": row["historical_volatility_60"],
-            "historicalVolatility120": row["historical_volatility_120"],
-            "ivHv20Ratio": row["iv_hv20_ratio"],
-            "ivHv60Ratio": row["iv_hv60_ratio"],
-            "ivHv120Ratio": row["iv_hv120_ratio"],
-            "ivHv20Spread": row["iv_hv20_spread"],
-            "ivHv60Spread": row["iv_hv60_spread"],
-            "ivHv120Spread": row["iv_hv120_spread"],
-            "combinedOpenInterest": row["combined_open_interest"],
-            "combinedVolume": row["combined_volume"],
-        }
-        for row in reversed(rows)
-    ]
+    return options_store.load_option_front_history(
+        symbol,
+        provider=provider,
+        limit=limit,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+        load_symbol_row=_load_symbol_row,
+    )
 
 
 def load_derived_daily_metrics(
@@ -2066,100 +2133,22 @@ def load_derived_daily_metrics(
     provider: str | None = None,
     metric_family: str | None = None,
 ) -> list[dict]:
-    normalized_symbol = normalize_symbol(symbol)
-    if not normalized_symbol:
-        return []
-
-    with open_runtime_store() as connection:
-        symbol_row = _load_symbol_row(connection, normalized_symbol)
-        if symbol_row is None:
-            return []
-
-        clauses = ["symbol_id = ?"]
-        params: list[str | int] = [int(symbol_row["symbol_id"])]
-        if metric_date:
-            clauses.append("metric_date = ?")
-            params.append(str(metric_date))
-        if provider:
-            clauses.append("provider = ?")
-            params.append(str(provider).strip().lower())
-        if metric_family:
-            clauses.append("metric_family = ?")
-            params.append(str(metric_family).strip())
-
-        rows = connection.execute(
-            f"""
-            SELECT
-                provider,
-                metric_date,
-                metric_family,
-                metric_key,
-                window_days,
-                metric_value,
-                source,
-                updated_at
-            FROM derived_daily_metrics
-            WHERE {' AND '.join(clauses)}
-            ORDER BY metric_date DESC, metric_family ASC, window_days ASC, metric_key ASC
-            """,
-            tuple(params),
-        ).fetchall()
-
-    return [
-        {
-            "provider": row["provider"],
-            "metricDate": row["metric_date"],
-            "metricFamily": row["metric_family"],
-            "metricKey": row["metric_key"],
-            "windowDays": row["window_days"],
-            "metricValue": row["metric_value"],
-            "source": row["source"],
-            "updatedAt": row["updated_at"],
-        }
-        for row in rows
-    ]
+    return options_store.load_derived_daily_metrics(
+        symbol,
+        metric_date=metric_date,
+        provider=provider,
+        metric_family=metric_family,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+        load_symbol_row=_load_symbol_row,
+    )
 
 
 def load_recent_options_screener_runs(limit: int = 20) -> list[dict]:
-    normalized_limit = max(1, int(limit or 20))
-    with open_runtime_store() as connection:
-        rows = connection.execute(
-            """
-            SELECT
-                run_id,
-                universe_id,
-                universe_label,
-                minimum_dte,
-                max_contracts,
-                requested_symbols_json,
-                failure_json,
-                row_count,
-                failure_count,
-                as_of_date,
-                created_at
-            FROM options_screener_runs
-            ORDER BY created_at DESC, run_id DESC
-            LIMIT ?
-            """,
-            (normalized_limit,),
-        ).fetchall()
-
-    return [
-        {
-            "runId": row["run_id"],
-            "universeId": row["universe_id"],
-            "universeLabel": row["universe_label"],
-            "minimumDte": row["minimum_dte"],
-            "maxContracts": row["max_contracts"],
-            "requestedSymbols": json.loads(row["requested_symbols_json"] or "[]"),
-            "failures": json.loads(row["failure_json"] or "[]"),
-            "rowCount": row["row_count"],
-            "failureCount": row["failure_count"],
-            "asOfDate": row["as_of_date"],
-            "createdAt": row["created_at"],
-        }
-        for row in rows
-    ]
+    return options_store.load_recent_options_screener_runs(
+        limit,
+        open_runtime_store=open_runtime_store,
+    )
 
 
 def load_options_screener_rows(
@@ -2169,138 +2158,14 @@ def load_options_screener_rows(
     run_id: int | None = None,
     limit: int = 100,
 ) -> list[dict]:
-    normalized_limit = max(1, int(limit or 100))
-    with open_runtime_store() as connection:
-        clauses = []
-        params: list[str | int] = []
-        if symbol:
-            symbol_row = _load_symbol_row(connection, symbol)
-            if symbol_row is None:
-                return []
-            clauses.append("rows.symbol_id = ?")
-            params.append(int(symbol_row["symbol_id"]))
-        if universe_id:
-            clauses.append("runs.universe_id = ?")
-            params.append(str(universe_id).strip())
-        if run_id is not None:
-            clauses.append("rows.run_id = ?")
-            params.append(int(run_id))
-
-        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        rows = connection.execute(
-            f"""
-            SELECT
-                runs.run_id,
-                runs.universe_id,
-                runs.universe_label,
-                runs.created_at,
-                runs.as_of_date AS run_as_of_date,
-                symbols.symbol,
-                rows.provider,
-                rows.as_of_date,
-                rows.expiry,
-                rows.spot_price,
-                rows.strike,
-                rows.days_to_expiry,
-                rows.straddle_mid_price,
-                rows.implied_move_percent,
-                rows.straddle_implied_volatility,
-                rows.chain_implied_volatility,
-                rows.historical_volatility_20,
-                rows.historical_volatility_60,
-                rows.iv_hv20_ratio,
-                rows.iv_hv60_ratio,
-                rows.iv_percentile,
-                rows.iv_hv20_percentile,
-                rows.combined_open_interest,
-                rows.combined_volume,
-                rows.spread_share,
-                rows.pricing_label,
-                rows.pricing_bucket,
-                rows.direction_score,
-                rows.direction_label,
-                rows.trend_score,
-                rows.trend_label,
-                rows.trend_return_63,
-                rows.trend_return_252,
-                rows.seasonality_score,
-                rows.seasonality_label,
-                rows.seasonality_month_label,
-                rows.seasonality_mean_return,
-                rows.seasonality_median_return,
-                rows.seasonality_win_rate,
-                rows.seasonality_average_absolute_return,
-                rows.seasonality_observations,
-                rows.vol_pricing_score,
-                rows.execution_score,
-                rows.confidence_score,
-                rows.candidate_advisory,
-                rows.candidate_bucket,
-                rows.warnings_json
-            FROM options_screener_rows AS rows
-            INNER JOIN options_screener_runs AS runs
-                ON runs.run_id = rows.run_id
-            INNER JOIN symbols
-                ON symbols.symbol_id = rows.symbol_id
-            {where_clause}
-            ORDER BY runs.created_at DESC, rows.symbol_id ASC
-            LIMIT ?
-            """,
-            tuple([*params, normalized_limit]),
-        ).fetchall()
-
-    return [
-        {
-            "runId": row["run_id"],
-            "universeId": row["universe_id"],
-            "universeLabel": row["universe_label"],
-            "createdAt": row["created_at"],
-            "runAsOfDate": row["run_as_of_date"],
-            "symbol": row["symbol"],
-            "provider": row["provider"],
-            "asOfDate": row["as_of_date"],
-            "expiry": row["expiry"],
-            "spotPrice": row["spot_price"],
-            "strike": row["strike"],
-            "daysToExpiry": row["days_to_expiry"],
-            "straddleMidPrice": row["straddle_mid_price"],
-            "impliedMovePercent": row["implied_move_percent"],
-            "straddleImpliedVolatility": row["straddle_implied_volatility"],
-            "chainImpliedVolatility": row["chain_implied_volatility"],
-            "historicalVolatility20": row["historical_volatility_20"],
-            "historicalVolatility60": row["historical_volatility_60"],
-            "ivHv20Ratio": row["iv_hv20_ratio"],
-            "ivHv60Ratio": row["iv_hv60_ratio"],
-            "ivPercentile": row["iv_percentile"],
-            "ivHv20Percentile": row["iv_hv20_percentile"],
-            "combinedOpenInterest": row["combined_open_interest"],
-            "combinedVolume": row["combined_volume"],
-            "spreadShare": row["spread_share"],
-            "pricingLabel": row["pricing_label"],
-            "pricingBucket": row["pricing_bucket"],
-            "directionScore": row["direction_score"],
-            "directionLabel": row["direction_label"],
-            "trendScore": row["trend_score"],
-            "trendLabel": row["trend_label"],
-            "trendReturn63": row["trend_return_63"],
-            "trendReturn252": row["trend_return_252"],
-            "seasonalityScore": row["seasonality_score"],
-            "seasonalityLabel": row["seasonality_label"],
-            "seasonalityMonthLabel": row["seasonality_month_label"],
-            "seasonalityMeanReturn": row["seasonality_mean_return"],
-            "seasonalityMedianReturn": row["seasonality_median_return"],
-            "seasonalityWinRate": row["seasonality_win_rate"],
-            "seasonalityAverageAbsoluteReturn": row["seasonality_average_absolute_return"],
-            "seasonalityObservations": row["seasonality_observations"],
-            "volPricingScore": row["vol_pricing_score"],
-            "executionScore": row["execution_score"],
-            "confidenceScore": row["confidence_score"],
-            "candidateAdvisory": row["candidate_advisory"],
-            "candidateBucket": row["candidate_bucket"],
-            "warnings": json.loads(row["warnings_json"] or "[]"),
-        }
-        for row in rows
-    ]
+    return options_store.load_options_screener_rows(
+        symbol=symbol,
+        universe_id=universe_id,
+        run_id=run_id,
+        limit=limit,
+        open_runtime_store=open_runtime_store,
+        load_symbol_row=_load_symbol_row,
+    )
 
 
 def record_options_screener_run(
@@ -2312,376 +2177,111 @@ def record_options_screener_run(
     requested_symbols: list[str],
     failures: list[dict],
     rows: list[dict],
+    signal_version: str | None = None,
     created_at: str | None = None,
 ) -> dict:
-    if not rows:
-        raise RuntimeError("At least one screener row is required to record a run.")
-
-    timestamp = str(created_at or to_iso(now_utc())).strip()
-    normalized_requested_symbols = [
-        normalize_symbol(symbol)
-        for symbol in requested_symbols
-        if normalize_symbol(symbol)
-    ]
-    as_of_date = max(
-        (str(row.get("asOfDate") or "").strip() for row in rows if row.get("asOfDate")),
-        default=None,
+    return options_store.record_options_screener_run(
+        universe_id=universe_id,
+        universe_label=universe_label,
+        minimum_dte=minimum_dte,
+        max_contracts=max_contracts,
+        requested_symbols=requested_symbols,
+        failures=failures,
+        rows=rows,
+        signal_version=signal_version,
+        created_at=created_at,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+        ensure_symbol_row=_ensure_symbol_row,
+        clean_text=_clean_text,
+        clean_number=_clean_number,
+        clean_int=_clean_int,
+        to_iso=to_iso,
+        now_utc=now_utc,
     )
-
-    with open_runtime_store() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO options_screener_runs (
-                universe_id,
-                universe_label,
-                minimum_dte,
-                max_contracts,
-                requested_symbols_json,
-                failure_json,
-                row_count,
-                failure_count,
-                as_of_date,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(universe_id or "custom").strip() or "custom",
-                str(universe_label or "Custom Universe").strip() or "Custom Universe",
-                int(minimum_dte or 25),
-                int(max_contracts or 1),
-                json.dumps(normalized_requested_symbols, separators=(",", ":")),
-                json.dumps(failures or [], separators=(",", ":")),
-                len(rows),
-                len(failures or []),
-                as_of_date,
-                timestamp,
-            ),
-        )
-        run_id = int(cursor.lastrowid)
-
-        row_payloads = []
-        for row in rows:
-            normalized_symbol = normalize_symbol(row.get("symbol"))
-            if not normalized_symbol:
-                continue
-            symbol_id = _ensure_symbol_row(
-                connection,
-                normalized_symbol,
-                currency=row.get("currency"),
-                provider=row.get("provider"),
-                source_series_type="Price",
-                timestamp=timestamp,
-            )
-            row_payloads.append(
-                (
-                    run_id,
-                    symbol_id,
-                    str(row.get("provider") or "yfinance").strip().lower() or "yfinance",
-                    str(row.get("asOfDate") or "").strip(),
-                    str(row.get("expiry") or "").strip() or None,
-                    _clean_number(row.get("spotPrice")),
-                    _clean_number(row.get("strike")),
-                    _clean_int(row.get("daysToExpiry")),
-                    _clean_number(row.get("straddleMidPrice")),
-                    _clean_number(row.get("impliedMovePercent")),
-                    _clean_number(row.get("straddleImpliedVolatility")),
-                    _clean_number(row.get("chainImpliedVolatility")),
-                    _clean_number(row.get("historicalVolatility20")),
-                    _clean_number(row.get("historicalVolatility60")),
-                    _clean_number(row.get("ivHv20Ratio")),
-                    _clean_number(row.get("ivHv60Ratio")),
-                    _clean_number(row.get("ivPercentile")),
-                    _clean_number(row.get("ivHv20Percentile")),
-                    _clean_int(row.get("combinedOpenInterest")),
-                    _clean_int(row.get("combinedVolume")),
-                    _clean_number(row.get("spreadShare")),
-                    _clean_text(row.get("pricingLabel")),
-                    _clean_text(row.get("pricingBucket")),
-                    _clean_number(row.get("directionScore")),
-                    _clean_text(row.get("directionLabel")),
-                    _clean_number(row.get("trendScore")),
-                    _clean_text(row.get("trendLabel")),
-                    _clean_number(row.get("trendReturn63")),
-                    _clean_number(row.get("trendReturn252")),
-                    _clean_number(row.get("seasonalityScore")),
-                    _clean_text(row.get("seasonalityLabel")),
-                    _clean_text(row.get("seasonalityMonthLabel")),
-                    _clean_number(row.get("seasonalityMeanReturn")),
-                    _clean_number(row.get("seasonalityMedianReturn")),
-                    _clean_number(row.get("seasonalityWinRate")),
-                    _clean_number(row.get("seasonalityAverageAbsoluteReturn")),
-                    _clean_int(row.get("seasonalityObservations")),
-                    _clean_number(row.get("volPricingScore")),
-                    _clean_number(row.get("executionScore")),
-                    _clean_number(row.get("confidenceScore")),
-                    _clean_text(row.get("candidateAdvisory")),
-                    _clean_text(row.get("candidateBucket")),
-                    json.dumps(row.get("warnings") or [], separators=(",", ":")),
-                    timestamp,
-                )
-            )
-
-        if not row_payloads:
-            raise RuntimeError("No valid screener rows were available to record.")
-
-        connection.executemany(
-            """
-            INSERT INTO options_screener_rows (
-                run_id,
-                symbol_id,
-                provider,
-                as_of_date,
-                expiry,
-                spot_price,
-                strike,
-                days_to_expiry,
-                straddle_mid_price,
-                implied_move_percent,
-                straddle_implied_volatility,
-                chain_implied_volatility,
-                historical_volatility_20,
-                historical_volatility_60,
-                iv_hv20_ratio,
-                iv_hv60_ratio,
-                iv_percentile,
-                iv_hv20_percentile,
-                combined_open_interest,
-                combined_volume,
-                spread_share,
-                pricing_label,
-                pricing_bucket,
-                direction_score,
-                direction_label,
-                trend_score,
-                trend_label,
-                trend_return_63,
-                trend_return_252,
-                seasonality_score,
-                seasonality_label,
-                seasonality_month_label,
-                seasonality_mean_return,
-                seasonality_median_return,
-                seasonality_win_rate,
-                seasonality_average_absolute_return,
-                seasonality_observations,
-                vol_pricing_score,
-                execution_score,
-                confidence_score,
-                candidate_advisory,
-                candidate_bucket,
-                warnings_json,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            row_payloads,
-        )
-        connection.commit()
-
-    return {
-        "runId": run_id,
-        "universeId": str(universe_id or "custom").strip() or "custom",
-        "universeLabel": str(universe_label or "Custom Universe").strip() or "Custom Universe",
-        "asOfDate": as_of_date,
-        "rowCount": len(row_payloads),
-        "failureCount": len(failures or []),
-        "createdAt": timestamp,
-    }
 
 
 def write_option_monthly_snapshot(symbol: str, snapshot: dict) -> list[dict]:
-    normalized_symbol = normalize_symbol(symbol or snapshot.get("symbol"))
-    if not normalized_symbol:
-        raise RuntimeError("symbol is required to cache option snapshots.")
+    return options_store.write_option_monthly_snapshot(
+        symbol,
+        snapshot,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+        load_symbol_row=_load_symbol_row,
+        ensure_symbol_row=_ensure_symbol_row,
+        to_iso=to_iso,
+        now_utc=now_utc,
+    )
 
-    as_of_date = str(snapshot.get("asOfDate") or "").strip()
-    contracts = snapshot.get("monthlyContracts") or []
-    if not as_of_date:
-        raise RuntimeError("monthly straddle snapshot is missing an as-of date.")
-    if not isinstance(contracts, list) or not contracts:
-        raise RuntimeError("monthly straddle snapshot is missing contract rows.")
 
-    provider = str(snapshot.get("provider") or "yfinance").strip().lower() or "yfinance"
-    currency = str(snapshot.get("currency") or "").strip().upper() or None
-    timestamp = str(snapshot.get("fetchedAt") or to_iso(now_utc())).strip()
-    realized_volatility = snapshot.get("realizedVolatility") or {}
+def _tracked_position_from_row(row: sqlite3.Row) -> dict:
+    return options_store._tracked_position_from_row(row)
 
-    with open_runtime_store() as connection:
-        symbol_id = _ensure_symbol_row(
-            connection,
-            normalized_symbol,
-            currency=currency,
-            provider=provider,
-            source_series_type="Price",
-            timestamp=timestamp,
-        )
-        connection.execute(
-            """
-            DELETE FROM option_monthly_snapshots
-            WHERE symbol_id = ?
-              AND provider = ?
-              AND as_of_date = ?
-            """,
-            (symbol_id, provider, as_of_date),
-        )
-        connection.executemany(
-            """
-            INSERT INTO option_monthly_snapshots (
-                symbol_id,
-                provider,
-                as_of_date,
-                fetched_at,
-                expiry,
-                currency,
-                spot_date,
-                spot_price,
-                minimum_dte,
-                max_contracts,
-                days_to_expiry,
-                strike,
-                call_bid,
-                call_ask,
-                call_last_price,
-                call_mid_price,
-                call_price_source,
-                call_open_interest,
-                call_volume,
-                call_implied_volatility,
-                put_bid,
-                put_ask,
-                put_last_price,
-                put_mid_price,
-                put_price_source,
-                put_open_interest,
-                put_volume,
-                put_implied_volatility,
-                straddle_mid_price,
-                implied_move_price,
-                implied_move_percent,
-                straddle_implied_volatility,
-                chain_implied_volatility,
-                implied_volatility_gap,
-                historical_volatility_20,
-                historical_volatility_60,
-                historical_volatility_120,
-                iv_hv20_ratio,
-                iv_hv60_ratio,
-                iv_hv120_ratio,
-                iv_hv20_spread,
-                iv_hv60_spread,
-                iv_hv120_spread,
-                combined_open_interest,
-                combined_volume,
-                pricing_mode,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    symbol_id,
-                    provider,
-                    as_of_date,
-                    timestamp,
-                    str(contract.get("expiry") or "").strip(),
-                    currency,
-                    snapshot.get("spotDate"),
-                    snapshot.get("spotPrice"),
-                    int(snapshot.get("minimumDte") or 25),
-                    int(snapshot.get("maxContracts") or 4),
-                    int(contract.get("daysToExpiry") or 0),
-                    contract.get("strike"),
-                    contract.get("callBid"),
-                    contract.get("callAsk"),
-                    contract.get("callLastPrice"),
-                    contract.get("callMidPrice"),
-                    contract.get("callPriceSource"),
-                    int(contract.get("callOpenInterest") or 0),
-                    int(contract.get("callVolume") or 0),
-                    contract.get("callImpliedVolatility"),
-                    contract.get("putBid"),
-                    contract.get("putAsk"),
-                    contract.get("putLastPrice"),
-                    contract.get("putMidPrice"),
-                    contract.get("putPriceSource"),
-                    int(contract.get("putOpenInterest") or 0),
-                    int(contract.get("putVolume") or 0),
-                    contract.get("putImpliedVolatility"),
-                    contract.get("straddleMidPrice"),
-                    contract.get("impliedMovePrice"),
-                    contract.get("impliedMovePercent"),
-                    contract.get("straddleImpliedVolatility"),
-                    contract.get("chainImpliedVolatility"),
-                    contract.get("impliedVolatilityGap"),
-                    contract.get("historicalVolatility20"),
-                    contract.get("historicalVolatility60"),
-                    contract.get("historicalVolatility120"),
-                    contract.get("ivHv20Ratio"),
-                    contract.get("ivHv60Ratio"),
-                    contract.get("ivHv120Ratio"),
-                    contract.get("ivHv20Spread"),
-                    contract.get("ivHv60Spread"),
-                    contract.get("ivHv120Spread"),
-                    int(contract.get("combinedOpenInterest") or 0),
-                    int(contract.get("combinedVolume") or 0),
-                    str(contract.get("pricingMode") or "unknown"),
-                    timestamp,
-                )
-                for contract in contracts
-                if str(contract.get("expiry") or "").strip()
-            ],
-        )
 
-        metrics = []
-        for metric_key, window_days in (("hv20", 20), ("hv60", 60), ("hv120", 120)):
-            metric_value = realized_volatility.get(metric_key)
-            if metric_value is None:
-                continue
-            metrics.append(
-                {
-                    "metricFamily": "realized_volatility",
-                    "metricKey": metric_key,
-                    "windowDays": window_days,
-                    "metricValue": metric_value,
-                }
-            )
-        if metrics:
-            connection.executemany(
-                """
-                INSERT INTO derived_daily_metrics (
-                    symbol_id,
-                    provider,
-                    metric_date,
-                    metric_family,
-                    metric_key,
-                    window_days,
-                    metric_value,
-                    source,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(symbol_id, provider, metric_date, metric_family, metric_key, window_days)
-                DO UPDATE SET
-                    metric_value = excluded.metric_value,
-                    source = excluded.source,
-                    updated_at = excluded.updated_at
-                """,
-                [
-                    (
-                        symbol_id,
-                        provider,
-                        as_of_date,
-                        metric["metricFamily"],
-                        metric["metricKey"],
-                        int(metric["windowDays"] or 0),
-                        metric["metricValue"],
-                        "monthly_straddle",
-                        timestamp,
-                    )
-                    for metric in metrics
-                ],
-            )
-        connection.commit()
+def load_tracked_option_positions(
+    *,
+    position_id: int | None = None,
+    universe_id: str | None = None,
+    strategy: str | None = None,
+    signal_version: str | None = None,
+    open_only: bool = False,
+    limit: int = 500,
+) -> list[dict]:
+    return options_store.load_tracked_option_positions(
+        position_id=position_id,
+        universe_id=universe_id,
+        strategy=strategy,
+        signal_version=signal_version,
+        open_only=open_only,
+        limit=limit,
+        open_runtime_store=open_runtime_store,
+    )
 
-    return load_option_monthly_snapshots(
-        normalized_symbol,
-        as_of_date=as_of_date,
-        provider=provider,
+
+def load_tracked_option_marks(
+    *,
+    position_id: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    limit: int = 1000,
+) -> list[dict]:
+    return options_store.load_tracked_option_marks(
+        position_id=position_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def upsert_tracked_option_position(position: dict, *, created_at: str | None = None) -> dict:
+    return options_store.upsert_tracked_option_position(
+        position,
+        created_at=created_at,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+        ensure_symbol_row=_ensure_symbol_row,
+        clean_text=_clean_text,
+        clean_number=_clean_number,
+        clean_int=_clean_int,
+        to_iso=to_iso,
+        now_utc=now_utc,
+    )
+
+
+def upsert_tracked_option_mark(
+    position_id: int,
+    mark: dict,
+    *,
+    recorded_at: str | None = None,
+) -> dict:
+    return options_store.upsert_tracked_option_mark(
+        position_id,
+        mark,
+        recorded_at=recorded_at,
+        open_runtime_store=open_runtime_store,
+        clean_text=_clean_text,
+        clean_number=_clean_number,
+        to_iso=to_iso,
+        now_utc=now_utc,
     )

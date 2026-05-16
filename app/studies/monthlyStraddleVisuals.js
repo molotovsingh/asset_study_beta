@@ -1,4 +1,5 @@
 import { formatDate, formatNumber, formatPercent } from "../lib/format.js";
+import { MIN_CREDIBLE_PERCENTILE_HISTORY } from "../lib/monthlyStraddle.js";
 import {
   exportMonthlyStraddleCsv,
   exportMonthlyStraddleXls,
@@ -290,6 +291,7 @@ function renderFrontHistory(studyRun) {
 
 function renderVisualsShell(studyRun) {
   const focus = studyRun.focusContract;
+  const history = studyRun.historySummary;
   return `
     <div class="visuals-shell straddle-visuals-shell">
       <section class="card visuals-hero">
@@ -337,9 +339,21 @@ function renderVisualsShell(studyRun) {
           <p class="summary-meta">${studyRun.focusVolComparison ? `IV/HV${studyRun.focusVolComparison.windowDays}` : "No IV/HV read"}</p>
         </section>
         <section class="card visuals-summary-card">
-          <p class="meta-label">IV Percentile</p>
-          <strong class="visuals-summary-value">${formatPercent(studyRun.historySummary.ivPercentile)}</strong>
-          <p class="summary-meta">${formatNumber(studyRun.historySummary.observations, 0)} stored front snapshots</p>
+          <p class="meta-label">${history.hasCrediblePercentiles ? "IV Percentile" : "History Depth"}</p>
+          <strong class="visuals-summary-value">${
+            history.hasCrediblePercentiles
+              ? formatPercent(history.ivPercentile)
+              : history.observations > 0
+                ? formatNumber(history.observations, 0)
+                : "Build"
+          }</strong>
+          <p class="summary-meta">${
+            history.hasCrediblePercentiles
+              ? `${formatNumber(history.observations, 0)} stored front snapshots`
+              : history.observations > 0
+                ? `${formatNumber(history.observations, 0)} of ${formatNumber(MIN_CREDIBLE_PERCENTILE_HISTORY, 0)} stored snapshots before percentile context is shown`
+                : "Persist front-month snapshots to unlock percentile context"
+          }</p>
         </section>
       </div>
 

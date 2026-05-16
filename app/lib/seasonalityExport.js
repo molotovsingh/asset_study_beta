@@ -1,4 +1,5 @@
 import { formatDateTime } from "./format.js";
+import { buildSeasonalityMetricPresentation } from "./metricRegistry.js";
 import {
   buildXmlWorkbook,
   createCell,
@@ -80,6 +81,7 @@ function buildCsvRows(payload) {
 
 function buildSummaryRows(payload) {
   const { summary } = payload;
+  const metricPresentation = buildSeasonalityMetricPresentation({ summary });
 
   return [
     [createCell("Field", "header"), createCell("Value", "header")],
@@ -101,7 +103,12 @@ function buildSummaryRows(payload) {
       createCell(summary.confidenceLevel, "percent"),
     ],
     [createCell("Years Observed"), createCell(summary.yearsObserved, "integer")],
+    [createCell("Years Observed Role"), createCell(metricPresentation.yearsObserved.note)],
     [createCell("Months Used"), createCell(summary.monthsUsed, "integer")],
+    [createCell("Sample Depth Role"), createCell(metricPresentation.sampleDepth.note)],
+    [createCell("Min Bucket Observations"), createCell(summary.minBucketObservations, "integer")],
+    [createCell("Median Bucket Observations"), createCell(summary.medianBucketObservations, "number2")],
+    [createCell("Max Bucket Observations"), createCell(summary.maxBucketObservations, "integer")],
     [
       createCell("Seasonality Spread"),
       createCell(summary.seasonalitySpread, "percent"),

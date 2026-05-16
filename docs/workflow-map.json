@@ -1,0 +1,952 @@
+{
+  "metadata": {
+    "title": "Index Study Lab Workflow Map",
+    "repo": "/Users/aksingh/asset_study_beta",
+    "updated": "2026-05-13",
+    "description": "A JSON source of truth for the packages, components, and action flows in the app. The companion workflow-map.html page renders this file and highlights how data moves between components.",
+    "notes": [
+      "This repo is a static ES-module frontend with an optional Python local backend.",
+      "There is no package.json, React workspace, invite-user system, auth package, Electron app, or ToDesktop config in this checkout.",
+      "Flows marked not-implemented are included only to make those requested example actions explicit."
+    ]
+  },
+  "components": [
+    {
+      "id": "index-html",
+      "title": "Static HTML App Shell",
+      "group": "Frontend",
+      "type": "entrypoint",
+      "files": ["index.html", "app/styles.css"],
+      "role": "Hosts the sidebar, active-asset form, study selector, recent-run area, and main study workspace.",
+      "details": "This is the first browser-visible surface. It loads app/main.js as an ES module and does not need a frontend build step.",
+      "x": 9,
+      "y": 22
+    },
+    {
+      "id": "main-js",
+      "title": "App Orchestrator",
+      "group": "Frontend",
+      "type": "module",
+      "files": ["app/main.js"],
+      "role": "Coordinates study selection, active subject state, hash routing, symbol suggestions, run history, and mounted study views.",
+      "details": "Think of this as the browser control room. It does not calculate finance metrics itself; it wires user actions to the registry, study shell, active-subject store, and data-loading helpers.",
+      "x": 25,
+      "y": 18
+    },
+    {
+      "id": "active-subject",
+      "title": "Active Subject Store",
+      "group": "Frontend",
+      "type": "state",
+      "files": ["app/studies/shared/activeSubject.js"],
+      "role": "Stores the current asset query shared across studies.",
+      "details": "The selected subject follows the user from study to study. Route params can also adopt or restore it.",
+      "x": 25,
+      "y": 38
+    },
+    {
+      "id": "study-registry",
+      "title": "Study Registry",
+      "group": "Frontend",
+      "type": "registry",
+      "files": ["app/studies/registry.js"],
+      "role": "Lists the available studies and gives the shell a stable id-to-study lookup.",
+      "details": "Current studies include risk-adjusted return, sector snapshot, monthly straddle, options screener, options validation, seasonality, rolling returns, SIP simulator, Lumpsum vs SIP, and drawdown study.",
+      "x": 41,
+      "y": 15
+    },
+    {
+      "id": "study-shell",
+      "title": "Study Shell and Router",
+      "group": "Frontend",
+      "type": "router",
+      "files": ["app/studies/studyShell.js"],
+      "role": "Builds and parses hashes like #studyId/viewId?subject=Nifty+50 and renders the study view toolbar.",
+      "details": "This layer lets each study expose overview, visuals, relative, exports, or planned views without app/main.js knowing their internals.",
+      "x": 55,
+      "y": 15
+    },
+    {
+      "id": "study-modules",
+      "title": "Study UI Modules",
+      "group": "Frontend",
+      "type": "feature modules",
+      "files": [
+        "app/studies/riskAdjustedReturn.js",
+        "app/studies/sectorSnapshot.js",
+        "app/studies/monthlyStraddle.js",
+        "app/studies/optionsScreener.js",
+        "app/studies/optionsValidation.js",
+        "app/studies/seasonality.js",
+        "app/studies/rollingReturns.js",
+        "app/studies/sipSimulator.js",
+        "app/studies/lumpsumVsSip.js",
+        "app/studies/drawdownStudy.js"
+      ],
+      "role": "Own per-study forms, validation, run buttons, status messages, and mounted result views.",
+      "details": "These modules are the user-facing brains of each study. They collect inputs, call shared loading code, invoke pure calculation libraries, then render result HTML.",
+      "x": 69,
+      "y": 22
+    },
+    {
+      "id": "selection-catalog",
+      "title": "Selection and Catalog Layer",
+      "group": "Frontend",
+      "type": "catalog",
+      "files": [
+        "app/catalog/indexCatalog.js",
+        "app/catalog/sectorSnapshotCatalog.js",
+        "app/catalog/optionsScreenerCatalog.js",
+        "app/studies/shared/indexSelection.js",
+        "app/lib/symbolDiscovery.js"
+      ],
+      "role": "Turns user text into built-in, bundled, remembered, manual, or ad hoc asset selections.",
+      "details": "This layer decides whether Nifty 50 is a bundled snapshot, Nifty 500 is a backend-loaded built-in, or Apple | AAPL is a manual local entry.",
+      "x": 42,
+      "y": 38
+    },
+    {
+      "id": "synced-data",
+      "title": "Browser Data Gateway",
+      "group": "Frontend",
+      "type": "client API",
+      "files": ["app/lib/syncedData.js"],
+      "role": "Loads bundled manifests/snapshots and calls the local backend API for raw symbols, profiles, options snapshots, and symbol discovery.",
+      "details": "The browser never talks to Yahoo or Finnhub directly. All live provider work goes through this module and the Python backend.",
+      "x": 56,
+      "y": 39
+    },
+    {
+      "id": "study-engines",
+      "title": "Pure Study Engines",
+      "group": "Frontend",
+      "type": "calculation",
+      "files": [
+        "app/lib/stats.js",
+        "app/lib/sectorSnapshot.js",
+        "app/lib/monthlyStraddle.js",
+        "app/lib/optionsScreener.js",
+        "app/lib/optionsValidation.js",
+        "app/lib/seasonality.js",
+        "app/lib/rollingReturns.js",
+        "app/lib/sipSimulator.js",
+        "app/lib/lumpsumVsSip.js",
+        "app/lib/drawdownStudy.js"
+      ],
+      "role": "Compute metrics, summaries, tables, charts inputs, rankings, and interpretation payloads from already-loaded data.",
+      "details": "These modules should stay mostly pure. They are easier to test because they do not fetch provider data or manipulate the DOM.",
+      "x": 83,
+      "y": 35
+    },
+    {
+      "id": "exports",
+      "title": "Export Layer",
+      "group": "Frontend",
+      "type": "download",
+      "files": [
+        "app/studies/shared/exportClickHandler.js",
+        "app/lib/studyExport.js",
+        "app/lib/relativeStudyExport.js",
+        "app/lib/sectorSnapshotExport.js",
+        "app/lib/monthlyStraddleExport.js",
+        "app/lib/optionsScreenerExport.js",
+        "app/lib/optionsValidationExport.js",
+        "app/lib/seasonalityExport.js",
+        "app/lib/rollingReturnsExport.js",
+        "app/lib/sipSimulatorExport.js",
+        "app/lib/lumpsumVsSipExport.js",
+        "app/lib/drawdownStudyExport.js"
+      ],
+      "role": "Converts the latest study payload into CSV or Excel-compatible XML and triggers a browser download.",
+      "details": "Exports depend on the completed study run. They do not reload data themselves.",
+      "x": 84,
+      "y": 53
+    },
+    {
+      "id": "run-history",
+      "title": "Share Links and Run History",
+      "group": "Frontend",
+      "type": "browser storage",
+      "files": [
+        "app/studies/shared/runHistory.js",
+        "app/studies/shared/shareableInputs.js",
+        "app/studies/studyShell.js"
+      ],
+      "role": "Persists recent completed runs in browser storage and builds shareable hash URLs.",
+      "details": "This is local browser state, not backend state. A copied link carries the route and inputs, not the generated result payload.",
+      "x": 69,
+      "y": 65
+    },
+    {
+      "id": "bundled-snapshots",
+      "title": "Bundled Snapshot Data",
+      "group": "Data",
+      "type": "repo data",
+      "files": [
+        "data/snapshots/yfinance/index/manifest.json",
+        "data/snapshots/yfinance/index/*.json",
+        "data/config/yfinance-datasets.json"
+      ],
+      "role": "Committed JSON market-data snapshots that the static app can load without the Python backend.",
+      "details": "Bundled snapshots are the stable demo and baseline data path. They are refreshed by scripts, not by the browser UI.",
+      "x": 55,
+      "y": 62
+    },
+    {
+      "id": "dev-server",
+      "title": "Local Python Dev Server",
+      "group": "Backend",
+      "type": "server",
+      "files": ["scripts/dev_server.py"],
+      "role": "Serves static files and handles /api/* requests for local provider-backed workflows.",
+      "details": "Run it with ./.venv/bin/python scripts/dev_server.py --port 8000 when raw symbols, remembered catalog entries, options data, or local SQLite caching are needed.",
+      "x": 40,
+      "y": 62
+    },
+    {
+      "id": "api-routes",
+      "title": "API Route Dispatcher",
+      "group": "Backend",
+      "type": "routing",
+      "files": ["scripts/server/routes.py"],
+      "role": "Maps backend paths to service functions.",
+      "details": "Routes include /api/yfinance/catalog, /api/symbols/discover, /api/yfinance/index-series, /api/yfinance/instrument-profile, /api/yfinance/monthly-straddle, /api/options/screener-snapshot, /api/options/screener-history, /api/options/screener-validation, and /api/options/trade-validation.",
+      "x": 25,
+      "y": 62
+    },
+    {
+      "id": "index-service",
+      "title": "Index Service",
+      "group": "Backend",
+      "type": "service",
+      "files": ["scripts/server/index_service.py"],
+      "role": "Fetches, validates, refreshes, normalizes, and caches price history and instrument profiles.",
+      "details": "This owns full-vs-incremental cache refresh behavior, overlap validation, provider fallback calls, and response snapshot construction.",
+      "x": 25,
+      "y": 80
+    },
+    {
+      "id": "options-service",
+      "title": "Options Service",
+      "group": "Backend",
+      "type": "service",
+      "files": ["scripts/server/options_service.py"],
+      "role": "Builds options snapshots, screener candidates, evidence records, history summaries, and validation payloads.",
+      "details": "This backend service feeds the options screener, monthly straddle, and validation studies.",
+      "x": 41,
+      "y": 80
+    },
+    {
+      "id": "provider-router",
+      "title": "Provider Router",
+      "group": "Backend",
+      "type": "provider abstraction",
+      "files": ["scripts/providers/router.py"],
+      "role": "Chooses provider order, honors a preferred provider, and returns a normalized provider result.",
+      "details": "The default app fetch path uses yfinance first, then yahoo_finance15. Finnhub appears in display names and collector flows.",
+      "x": 9,
+      "y": 80
+    },
+    {
+      "id": "providers",
+      "title": "Provider Adapters",
+      "group": "Backend",
+      "type": "external adapters",
+      "files": [
+        "scripts/providers/yfinance_provider.py",
+        "scripts/providers/yahoo_finance15.py",
+        "scripts/providers/finnhub.py",
+        "scripts/providers/base.py"
+      ],
+      "role": "Translate external provider responses into the app's HistoryResult, ProfileResult, symbol-search, and options shapes.",
+      "details": "This is the outside-world edge. Failures here should be surfaced as provider failures, not confused with study calculation bugs.",
+      "x": 9,
+      "y": 62
+    },
+    {
+      "id": "runtime-store",
+      "title": "SQLite Runtime Store",
+      "group": "Data",
+      "type": "local database",
+      "files": ["scripts/runtime_store.py", "data/local-cache/yfinance/index/cache.sqlite3"],
+      "role": "Stores symbols, daily prices, corporate actions, sync state, remembered datasets, profiles, options snapshots, derived metrics, universes, and collection runs.",
+      "details": "This is machine-local mutable state. It is intentionally outside the committed snapshot data path.",
+      "x": 56,
+      "y": 82
+    },
+    {
+      "id": "snapshot-tools",
+      "title": "Snapshot Tooling",
+      "group": "Tooling",
+      "type": "scripts",
+      "files": [
+        "scripts/sync_yfinance.py",
+        "scripts/add_yfinance_symbol.py",
+        "scripts/refresh_yfinance.sh",
+        "scripts/validate_yfinance_snapshots.py",
+        "scripts/audit_yfinance_quality.py"
+      ],
+      "role": "Creates, refreshes, validates, and audits committed yfinance snapshot JSON.",
+      "details": "Use this when a dataset should become part of the repo, not just a remembered local symbol.",
+      "x": 70,
+      "y": 82
+    },
+    {
+      "id": "market-collector",
+      "title": "Bounded Market Collector",
+      "group": "Tooling",
+      "type": "CLI plus service",
+      "files": [
+        "scripts/collect_market_universe.py",
+        "scripts/server/market_collector.py"
+      ],
+      "role": "Collects daily history for a bounded symbol universe, optionally refreshing Finnhub exchange symbol masters.",
+      "details": "This is the scheduled-ingestion path. It reuses the runtime store and index-service cache logic instead of inventing a second history store.",
+      "x": 84,
+      "y": 78
+    },
+    {
+      "id": "tests-ci",
+      "title": "Regression and CI Checks",
+      "group": "Tooling",
+      "type": "quality gate",
+      "files": [
+        "scripts/run_frontend_regression_checks.mjs",
+        "scripts/test_*.py",
+        "scripts/test_*.mjs",
+        ".github/workflows/validate.yml"
+      ],
+      "role": "Catches calculation, routing, export, provider-router, runtime-store, collector, options, and snapshot regressions.",
+      "details": "The strongest tests in this repo exercise pure JS engines, route parsing, export builders, Python store behavior, and provider-fallback logic.",
+      "x": 83,
+      "y": 64
+    },
+    {
+      "id": "missing-product-systems",
+      "title": "Not Present: Auth/Desktop Build",
+      "group": "Not implemented",
+      "type": "missing package",
+      "files": [],
+      "role": "Placeholder node for requested example flows that do not exist in this repo.",
+      "details": "There is no invite-user package, auth backend, package.json build script, Electron app, or ToDesktop config here.",
+      "x": 10,
+      "y": 43
+    }
+  ],
+  "flows": [
+    {
+      "id": "set-active-asset",
+      "title": "Set active asset or discover symbol",
+      "category": "User action",
+      "status": "implemented",
+      "trigger": "User types an asset into the Active Asset field and chooses a suggestion or presses Enter.",
+      "summary": "The browser combines local catalog matches, remembered local symbols, and optional remote Finnhub symbol search, then writes the resolved subject into shared state and the route.",
+      "primaryFiles": [
+        "app/main.js",
+        "app/lib/symbolDiscovery.js",
+        "app/studies/shared/indexSelection.js",
+        "app/lib/syncedData.js",
+        "scripts/server/routes.py",
+        "scripts/providers/finnhub.py"
+      ],
+      "result": "The selected subject becomes the study-wide active asset and is added to the current hash route as subject=...",
+      "steps": [
+        {
+          "from": "index-html",
+          "to": "main-js",
+          "label": "input/submit",
+          "passes": "Raw query text, for example Nifty 500, AAPL, or Apple | AAPL.",
+          "details": "app/main.js listens to the sidebar input and debounces suggestion refreshes."
+        },
+        {
+          "from": "main-js",
+          "to": "selection-catalog",
+          "label": "local match",
+          "passes": "Built-in catalog entries, remembered local symbols, manual-entry parse result, match scores.",
+          "details": "Local suggestions are tried first so known repo data and remembered symbols feel instant."
+        },
+        {
+          "from": "main-js",
+          "to": "synced-data",
+          "label": "remote search",
+          "passes": "POST /api/symbols/discover with { query, limit } when the query should search providers.",
+          "details": "Caret-prefixed symbols and manual Label | SYMBOL inputs can skip remote search."
+        },
+        {
+          "from": "synced-data",
+          "to": "dev-server",
+          "label": "fetch JSON",
+          "passes": "Browser fetch request under /api/...",
+          "details": "The app must be served by scripts/dev_server.py for this backend call to work."
+        },
+        {
+          "from": "dev-server",
+          "to": "api-routes",
+          "label": "dispatch",
+          "passes": "method=POST, path=/api/symbols/discover, parsed JSON request.",
+          "details": "The route dispatcher selects post_symbols_discover()."
+        },
+        {
+          "from": "api-routes",
+          "to": "providers",
+          "label": "Finnhub search",
+          "passes": "query and limit.",
+          "details": "Finnhub search results are normalized into suggestion objects; provider errors come back as warnings."
+        },
+        {
+          "from": "main-js",
+          "to": "active-subject",
+          "label": "commit choice",
+          "passes": "subjectQuery chosen by auto-resolve, suggestion click, manual entry, or raw symbol fallback.",
+          "details": "setActiveSubjectQuery() notifies subscribers and updates the visible control."
+        },
+        {
+          "from": "main-js",
+          "to": "study-shell",
+          "label": "route update",
+          "passes": "Hash route with subject parameter.",
+          "details": "The active study remounts if the route changes."
+        }
+      ]
+    },
+    {
+      "id": "run-bundled-study",
+      "title": "Run study from bundled snapshot",
+      "category": "Study run",
+      "status": "implemented",
+      "trigger": "User runs a study for a bundled dataset such as Nifty 50 or Sensex.",
+      "summary": "The selected study resolves the subject to a synced catalog entry, loads committed JSON snapshot data, filters it by date, computes the study, renders results, and records the run locally.",
+      "primaryFiles": [
+        "app/studies/*.js",
+        "app/studies/shared/indexStudyOverviewRuntime.js",
+        "app/studies/shared/indexStudyPipeline.js",
+        "app/studies/shared/indexSelection.js",
+        "app/lib/syncedData.js",
+        "data/snapshots/yfinance/index/*.json"
+      ],
+      "result": "The study renders result tables/visuals without requiring the Python backend.",
+      "steps": [
+        {
+          "from": "main-js",
+          "to": "study-registry",
+          "label": "pick study",
+          "passes": "study id from select or hash route.",
+          "details": "The registry returns the study module definition."
+        },
+        {
+          "from": "study-registry",
+          "to": "study-shell",
+          "label": "mount view",
+          "passes": "Study object, active view id, URLSearchParams.",
+          "details": "The shell renders tabs and mounts the view root."
+        },
+        {
+          "from": "study-shell",
+          "to": "study-modules",
+          "label": "view mount",
+          "passes": "DOM root and route params.",
+          "details": "Each study owns its form defaults, status updates, and run button behavior."
+        },
+        {
+          "from": "study-modules",
+          "to": "selection-catalog",
+          "label": "resolve subject",
+          "passes": "subject query, built-in catalog, bundled manifest entries.",
+          "details": "A bundled selection carries a sync config pointing at data/snapshots/..."
+        },
+        {
+          "from": "study-modules",
+          "to": "synced-data",
+          "label": "load data",
+          "passes": "syncConfig with provider, datasetType, datasetId, symbol, and sourceSeriesType.",
+          "details": "loadSyncManifest() and loadSyncedSeries() fetch repo JSON files."
+        },
+        {
+          "from": "synced-data",
+          "to": "bundled-snapshots",
+          "label": "read JSON",
+          "passes": "Manifest entry plus snapshot points array.",
+          "details": "Snapshot points are normalized into sorted { date, value } rows."
+        },
+        {
+          "from": "study-modules",
+          "to": "study-engines",
+          "label": "compute",
+          "passes": "Filtered time series, study-specific form params, warnings array.",
+          "details": "The engine returns metrics, rows, chart inputs, and interpretation payloads."
+        },
+        {
+          "from": "study-modules",
+          "to": "run-history",
+          "label": "record run",
+          "passes": "study id/title, subject query, selection label, date window, completion timestamp.",
+          "details": "Recent runs are browser-local and capped."
+        }
+      ]
+    },
+    {
+      "id": "run-local-symbol-study",
+      "title": "Run study from raw local symbol",
+      "category": "Study run",
+      "status": "implemented",
+      "trigger": "User runs a study for a raw or remembered symbol such as AAPL, ^NSEI, or Apple | AAPL.",
+      "summary": "The browser asks the local Python API for a symbol series. The backend refreshes or reuses the SQLite cache, calls provider adapters if needed, remembers successful manual labels, and returns a normalized snapshot.",
+      "primaryFiles": [
+        "app/lib/syncedData.js",
+        "scripts/dev_server.py",
+        "scripts/server/routes.py",
+        "scripts/server/index_service.py",
+        "scripts/providers/router.py",
+        "scripts/providers/yfinance_provider.py",
+        "scripts/providers/yahoo_finance15.py",
+        "scripts/runtime_store.py"
+      ],
+      "result": "The study receives the same snapshot shape as bundled data, plus cache/provider metadata.",
+      "steps": [
+        {
+          "from": "study-modules",
+          "to": "selection-catalog",
+          "label": "adhoc selection",
+          "passes": "Raw symbol or manual label+symbol pair.",
+          "details": "Ad hoc selections do not have a committed snapshot path."
+        },
+        {
+          "from": "study-modules",
+          "to": "synced-data",
+          "label": "request series",
+          "passes": "POST /api/yfinance/index-series with symbol, label, period/date window, and source metadata.",
+          "details": "The frontend treats backend-loaded series and bundled snapshots through a common normalized series shape."
+        },
+        {
+          "from": "synced-data",
+          "to": "dev-server",
+          "label": "local API",
+          "passes": "JSON request body.",
+          "details": "If this server is not running, the UI explains the command needed to start it."
+        },
+        {
+          "from": "dev-server",
+          "to": "api-routes",
+          "label": "dispatch",
+          "passes": "path=/api/yfinance/index-series.",
+          "details": "The route calls index_service.build_index_series_payload()."
+        },
+        {
+          "from": "api-routes",
+          "to": "index-service",
+          "label": "load/refresh",
+          "passes": "symbol plus provider preference and cache dependencies.",
+          "details": "The service decides whether cache is fresh, needs incremental refresh, or needs a full rebuild."
+        },
+        {
+          "from": "index-service",
+          "to": "provider-router",
+          "label": "provider order",
+          "passes": "symbol and period/start/end.",
+          "details": "The router tries the preferred/cached provider first, then fallback providers."
+        },
+        {
+          "from": "provider-router",
+          "to": "providers",
+          "label": "external fetch",
+          "passes": "Provider-specific HTTP/library call.",
+          "details": "Adapters normalize provider output into HistoryResult rows and metadata."
+        },
+        {
+          "from": "index-service",
+          "to": "runtime-store",
+          "label": "persist cache",
+          "passes": "symbols, daily_prices, corporate_actions, sync_state, remembered_datasets.",
+          "details": "Overlap validation protects against silently stitching incompatible price histories."
+        },
+        {
+          "from": "index-service",
+          "to": "synced-data",
+          "label": "return snapshot",
+          "passes": "snapshot, normalized points, providerName, cache status, rememberedEntry.",
+          "details": "The browser receives a normalized snapshot and continues through the same study engine path."
+        },
+        {
+          "from": "study-modules",
+          "to": "study-engines",
+          "label": "compute",
+          "passes": "Filtered local/backend series and study params.",
+          "details": "The pure engine does not care whether the data came from bundled JSON or SQLite-backed provider refresh."
+        }
+      ]
+    },
+    {
+      "id": "options-screener",
+      "title": "Run options screener",
+      "category": "Options workflow",
+      "status": "implemented",
+      "trigger": "User opens Options Screener and runs the preset universe scan.",
+      "summary": "The frontend requests a screener snapshot. The backend fetches options/price context, builds candidate rows, stores evidence where applicable, and returns a payload for tables, visuals, export, and validation.",
+      "primaryFiles": [
+        "app/studies/optionsScreener.js",
+        "app/lib/optionsScreener.js",
+        "scripts/server/options_service.py",
+        "scripts/server/routes.py",
+        "scripts/runtime_store.py"
+      ],
+      "result": "The screener returns ranked candidates with vol-pricing, execution, confidence, and provider summaries.",
+      "steps": [
+        {
+          "from": "study-shell",
+          "to": "study-modules",
+          "label": "mount screener",
+          "passes": "Selected options-screener view and form defaults.",
+          "details": "The study module owns preset selection, filters, and result status."
+        },
+        {
+          "from": "study-modules",
+          "to": "synced-data",
+          "label": "request snapshot",
+          "passes": "POST /api/options/screener-snapshot with universe and filter settings.",
+          "details": "The frontend API client validates that snapshots and failures arrays are present."
+        },
+        {
+          "from": "synced-data",
+          "to": "api-routes",
+          "label": "backend route",
+          "passes": "Parsed JSON request.",
+          "details": "routes.py dispatches to options_service.build_options_screener_snapshot_payload()."
+        },
+        {
+          "from": "api-routes",
+          "to": "options-service",
+          "label": "build candidates",
+          "passes": "Universe symbols, options constraints, direction context, pricing context.",
+          "details": "The service assembles current option snapshots and derived advisory fields."
+        },
+        {
+          "from": "options-service",
+          "to": "index-service",
+          "label": "price context",
+          "passes": "Symbols needed for trend, realized volatility, and validation context.",
+          "details": "Options workflows still depend on reliable underlying price history."
+        },
+        {
+          "from": "options-service",
+          "to": "runtime-store",
+          "label": "store evidence",
+          "passes": "Option monthly snapshots, derived metrics, screener run metadata, tracked positions where applicable.",
+          "details": "The local store becomes the archive for later validation and evidence views."
+        },
+        {
+          "from": "study-modules",
+          "to": "study-engines",
+          "label": "shape UI rows",
+          "passes": "Backend snapshots and failures.",
+          "details": "The JS layer builds filtered rows, summaries, and visual-ready payloads."
+        },
+        {
+          "from": "study-modules",
+          "to": "exports",
+          "label": "optional download",
+          "passes": "Latest screener studyRun.",
+          "details": "Export buttons use the same completed payload instead of refetching."
+        }
+      ]
+    },
+    {
+      "id": "export-study",
+      "title": "Export latest study result",
+      "category": "User action",
+      "status": "implemented",
+      "trigger": "User clicks CSV or XLS export after a study has completed.",
+      "summary": "The mounted study hands its latest payload to a shared click handler. A format-specific export builder serializes rows or workbook XML and the browser downloads the file.",
+      "primaryFiles": [
+        "app/studies/shared/exportClickHandler.js",
+        "app/lib/*Export.js",
+        "app/lib/studyExport.js"
+      ],
+      "result": "A CSV or Excel-compatible XLS file downloads locally.",
+      "steps": [
+        {
+          "from": "study-modules",
+          "to": "exports",
+          "label": "click handler",
+          "passes": "trigger dataset key, latest study payload, exporter map.",
+          "details": "If no study has run yet, the handler sets an informational status instead of creating an empty export."
+        },
+        {
+          "from": "exports",
+          "to": "study-engines",
+          "label": "read payload shape",
+          "passes": "Rows, summary, warnings, metadata, chart data as produced by the study.",
+          "details": "Export builders stay aligned with study payloads rather than scraping rendered HTML."
+        },
+        {
+          "from": "exports",
+          "to": "index-html",
+          "label": "download",
+          "passes": "Blob content and generated filename.",
+          "details": "The browser owns the final file save."
+        }
+      ]
+    },
+    {
+      "id": "share-and-reopen-run",
+      "title": "Copy link or reopen recent run",
+      "category": "User action",
+      "status": "implemented",
+      "trigger": "User clicks Copy Link or clicks a Recent Runs item.",
+      "summary": "Copy Link serializes study/view/inputs into the URL hash. Recent Runs stores a small completed-run record in browser local storage and can restore the subject and route.",
+      "primaryFiles": [
+        "app/main.js",
+        "app/studies/studyShell.js",
+        "app/studies/shared/shareableInputs.js",
+        "app/studies/shared/runHistory.js"
+      ],
+      "result": "A route can be shared or restored, but generated results are recomputed, not stored in the URL.",
+      "steps": [
+        {
+          "from": "study-modules",
+          "to": "run-history",
+          "label": "record",
+          "passes": "Completed run metadata.",
+          "details": "recordStudyRun() keeps the recent-run list small and local."
+        },
+        {
+          "from": "study-shell",
+          "to": "index-html",
+          "label": "copy URL",
+          "passes": "window.location.href containing #studyId/viewId?subject=...",
+          "details": "The copied link is an input recipe, not a stored report."
+        },
+        {
+          "from": "run-history",
+          "to": "main-js",
+          "label": "reopen",
+          "passes": "studyId, subjectQuery, requested date window.",
+          "details": "app/main.js rebuilds the hash route and remounts the study."
+        },
+        {
+          "from": "main-js",
+          "to": "study-shell",
+          "label": "route",
+          "passes": "Hash route parsed into study id, view id, and params.",
+          "details": "The target study receives the restored params on mount."
+        }
+      ]
+    },
+    {
+      "id": "refresh-bundled-snapshots",
+      "title": "Refresh bundled yfinance snapshots",
+      "category": "Maintenance",
+      "status": "implemented",
+      "trigger": "Developer runs ./scripts/refresh_yfinance.sh --period 5y or the sync script directly.",
+      "summary": "The snapshot tooling fetches configured datasets, normalizes them into committed JSON files, writes the manifest, and validation/regression checks keep the data shape honest.",
+      "primaryFiles": [
+        "scripts/refresh_yfinance.sh",
+        "scripts/sync_yfinance.py",
+        "scripts/validate_yfinance_snapshots.py",
+        "data/config/yfinance-datasets.json",
+        "data/snapshots/yfinance/index/*.json"
+      ],
+      "result": "Repo-tracked snapshot JSON is updated for static app runs.",
+      "steps": [
+        {
+          "from": "snapshot-tools",
+          "to": "providers",
+          "label": "fetch yfinance",
+          "passes": "Dataset config: datasetId, label, symbol, providerName, sourceUrl, period.",
+          "details": "sync_yfinance.py owns normalized snapshot construction."
+        },
+        {
+          "from": "snapshot-tools",
+          "to": "bundled-snapshots",
+          "label": "write JSON",
+          "passes": "Snapshot files plus manifest entry with range, generatedAt, provider, currency, and path.",
+          "details": "The manifest lets the browser discover bundled datasets without scanning files."
+        },
+        {
+          "from": "bundled-snapshots",
+          "to": "tests-ci",
+          "label": "validate",
+          "passes": "Snapshot shape, manifest consistency, observations, provider metadata.",
+          "details": "validate_yfinance_snapshots.py catches broken snapshot files before they reach the UI."
+        },
+        {
+          "from": "tests-ci",
+          "to": "study-engines",
+          "label": "regression",
+          "passes": "Known fixture series and snapshot data.",
+          "details": "Frontend regressions verify calculators, exports, route parsing, and symbol discovery."
+        }
+      ]
+    },
+    {
+      "id": "collect-market-universe",
+      "title": "Collect bounded market universe",
+      "category": "Maintenance",
+      "status": "implemented",
+      "trigger": "Developer runs scripts/collect_market_universe.py with --universe-id, --symbols or --exchange, provider order, and optional limit.",
+      "summary": "The collector seeds or refreshes a bounded symbol universe, fetches each active member through the chosen provider order, reuses index-service cache rules, writes SQLite state, and prints a JSON run summary.",
+      "primaryFiles": [
+        "scripts/collect_market_universe.py",
+        "scripts/server/market_collector.py",
+        "scripts/runtime_store.py",
+        "scripts/providers/finnhub.py",
+        "scripts/providers/yfinance_provider.py"
+      ],
+      "result": "SQLite contains updated universe members, daily price cache, sync state, and collection run metadata.",
+      "steps": [
+        {
+          "from": "market-collector",
+          "to": "runtime-store",
+          "label": "seed/load universe",
+          "passes": "universe_id, label, manual symbols, or Finnhub exchange metadata.",
+          "details": "Manual --symbols appends members; --refresh-symbol-master replaces exchange-backed membership."
+        },
+        {
+          "from": "market-collector",
+          "to": "providers",
+          "label": "optional symbol master",
+          "passes": "exchange and mic filters.",
+          "details": "Finnhub is used for exchange-backed symbol discovery."
+        },
+        {
+          "from": "market-collector",
+          "to": "index-service",
+          "label": "collect symbol",
+          "passes": "symbol, provider_order, full_sync flag.",
+          "details": "The collector calls the same get_or_refresh_cached_series_core() behavior used by the local API."
+        },
+        {
+          "from": "index-service",
+          "to": "providers",
+          "label": "provider order",
+          "passes": "finnhub,yfinance or explicit order.",
+          "details": "The collector has its own provider priority and can use Finnhub for history collection."
+        },
+        {
+          "from": "index-service",
+          "to": "runtime-store",
+          "label": "write prices",
+          "passes": "daily prices, corporate actions, sync state, provider, ranges.",
+          "details": "The collector does not create a separate price-history database."
+        },
+        {
+          "from": "market-collector",
+          "to": "tests-ci",
+          "label": "covered by tests",
+          "passes": "Provider-order behavior, stored run metadata, helper behavior.",
+          "details": "scripts/test_market_collector.py and scripts/test_finnhub_search_helpers.py cover the slice."
+        }
+      ]
+    },
+    {
+      "id": "run-regression-suite",
+      "title": "Run regression checks",
+      "category": "Quality gate",
+      "status": "implemented",
+      "trigger": "Developer or CI runs Node and Python regression scripts.",
+      "summary": "The tests exercise pure financial engines, exports, routing, active subject state, symbol discovery, backend routing, runtime store behavior, providers, options, collector logic, and snapshot validation.",
+      "primaryFiles": [
+        "scripts/run_frontend_regression_checks.mjs",
+        "scripts/test_*.py",
+        "scripts/test_*.mjs",
+        ".github/workflows/validate.yml"
+      ],
+      "result": "A failing test usually points to a specific contract break between UI, engine, backend, provider, or storage layers.",
+      "steps": [
+        {
+          "from": "tests-ci",
+          "to": "study-engines",
+          "label": "engine tests",
+          "passes": "Fixture series and expected metrics.",
+          "details": "Pure modules are the easiest place to verify correctness without browser noise."
+        },
+        {
+          "from": "tests-ci",
+          "to": "study-shell",
+          "label": "route tests",
+          "passes": "Hash strings and URLSearchParams.",
+          "details": "Shareable routes are treated as a contract."
+        },
+        {
+          "from": "tests-ci",
+          "to": "exports",
+          "label": "export tests",
+          "passes": "Study payloads, CSV rows, workbook XML.",
+          "details": "Exports are verified from data payloads, not UI snapshots."
+        },
+        {
+          "from": "tests-ci",
+          "to": "api-routes",
+          "label": "route dispatch",
+          "passes": "HTTP method, path, request bodies.",
+          "details": "Backend tests keep endpoint names and handler contracts from drifting."
+        },
+        {
+          "from": "tests-ci",
+          "to": "runtime-store",
+          "label": "storage tests",
+          "passes": "Temporary SQLite rows and cache state.",
+          "details": "Store tests protect migrations, cache refresh behavior, and remembered catalog contracts."
+        }
+      ]
+    },
+    {
+      "id": "invite-new-user",
+      "title": "Invite new user",
+      "category": "Requested example",
+      "status": "not-implemented",
+      "trigger": "Example action from the request.",
+      "summary": "This app has no auth package, user model, invite route, email service, team workspace, or admin UI. The flow is shown so it is obvious nothing in this repo completes it yet.",
+      "primaryFiles": [],
+      "result": "No working invite flow exists in this checkout.",
+      "steps": [
+        {
+          "from": "index-html",
+          "to": "missing-product-systems",
+          "label": "missing UI",
+          "passes": "No invite form or admin screen exists.",
+          "details": "index.html only hosts the research workspace sidebar and study root."
+        },
+        {
+          "from": "missing-product-systems",
+          "to": "api-routes",
+          "label": "missing API",
+          "passes": "No /api/users, /api/invites, /api/auth, or email endpoint.",
+          "details": "routes.py only contains market-data and options endpoints."
+        },
+        {
+          "from": "missing-product-systems",
+          "to": "runtime-store",
+          "label": "missing tables",
+          "passes": "No users, teams, invitations, sessions, or audit-log schema.",
+          "details": "runtime_store.py is focused on market data, options evidence, profiles, universes, and cache state."
+        }
+      ]
+    },
+    {
+      "id": "todesktop-build",
+      "title": "todesktop build",
+      "category": "Requested example",
+      "status": "not-implemented",
+      "trigger": "Example action from the request.",
+      "summary": "This repo is not configured as a ToDesktop or Electron project. There is no package.json, Node build script, desktop manifest, or packaged-app entrypoint.",
+      "primaryFiles": [],
+      "result": "No ToDesktop build flow exists in this checkout.",
+      "steps": [
+        {
+          "from": "index-html",
+          "to": "missing-product-systems",
+          "label": "static web only",
+          "passes": "A browser-served index.html file and ES modules.",
+          "details": "The current app can run from a static server or the Python dev server."
+        },
+        {
+          "from": "missing-product-systems",
+          "to": "tests-ci",
+          "label": "missing build gate",
+          "passes": "No package.json scripts, npm lockfile, Electron main process, or ToDesktop config.",
+          "details": "The quality gates are currently Python/Node scripts, not a packaged desktop app build."
+        }
+      ]
+    }
+  ]
+}

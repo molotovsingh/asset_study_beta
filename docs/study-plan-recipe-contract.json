@@ -1,0 +1,23 @@
+{
+  "version": "study-plan-recipes-v1",
+  "storageKey": "indexStudyLab.studyBuilder.recipes.v1",
+  "limit": 50,
+  "recordFields": [
+    "id",
+    "version",
+    "name",
+    "routeHash",
+    "studyId",
+    "viewId",
+    "plan",
+    "createdAt",
+    "updatedAt"
+  ],
+  "invariants": [
+    "Only StudyPlans that pass validateStudyPlan() are saved.",
+    "Saved recipe routeHash is derived from the normalized StudyPlan.",
+    "Saving the same name and route updates the existing recipe.",
+    "Recipes may be stored by backend settings endpoints, with browser-local storage as offline fallback.",
+    "Recipes are reusable assistant inputs, not completed-run evidence."
+  ]
+}

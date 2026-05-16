@@ -502,6 +502,9 @@ function buildHeatmap(monthlyRows) {
 
 function buildSeasonalitySummary(bucketStats, monthlyRows, skippedTransitions) {
   const populatedBuckets = bucketStats.filter((bucket) => bucket.observations > 0);
+  const bucketObservationCounts = populatedBuckets.map(
+    (bucket) => bucket.observations,
+  );
   const strongestMonth = pickBucket(
     bucketStats,
     (bucket) => bucket.averageLogReturn,
@@ -571,6 +574,13 @@ function buildSeasonalitySummary(bucketStats, monthlyRows, skippedTransitions) {
         : null,
     monthsUsed: monthlyRows.length,
     yearsObserved: new Set(monthlyRows.map((row) => row.year)).size,
+    minBucketObservations: bucketObservationCounts.length
+      ? Math.min(...bucketObservationCounts)
+      : 0,
+    maxBucketObservations: bucketObservationCounts.length
+      ? Math.max(...bucketObservationCounts)
+      : 0,
+    medianBucketObservations: median(bucketObservationCounts) ?? 0,
     skippedTransitions,
     thinMonthCount,
     clearSignalCount,

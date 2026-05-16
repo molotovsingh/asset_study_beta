@@ -1,0 +1,331 @@
+{
+  "version": "study-catalog-manifest-v1",
+  "purpose": "JSON-safe catalog of app-supported studies and views for deterministic assistant planning.",
+  "studies": [
+    {
+      "id": "risk-adjusted-return",
+      "title": "Risk-Adjusted Return",
+      "description": "Measure return, risk, and drawdown for the active asset.",
+      "inputSummary": "Active asset from the sidebar, date range, and annual risk-free rate.",
+      "capabilities": {
+        "visuals": "ready",
+        "relative": "ready",
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Inputs, diagnostics, and export actions for one filtered series.",
+          "description": "Run the current study, review the diagnostics, and export the aligned dataset.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Study-specific charts and rolling views.",
+          "description": "Inspect the last completed run through growth, drawdown, rolling volatility, and return-distribution charts.",
+          "status": "ready",
+          "default": false
+        },
+        {
+          "id": "relative",
+          "label": "Relative",
+          "summary": "Benchmark comparison against any other dataset or symbol.",
+          "description": "Compare the last completed study run against any other dataset or symbol using aligned overlapping dates only.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "sector-snapshot",
+      "title": "Sector Snapshot",
+      "description": "Cross-sectional sector performance by market preset with same-end-date benchmark-relative comparisons across 1Y, 5Y, 10Y, and 20Y windows.",
+      "inputSummary": "Market preset, focus horizon, focus metric, and annual risk-free rate.",
+      "capabilities": {
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Preset sector universe, benchmark-relative heatmaps, and a sortable focus-horizon table.",
+          "description": "Run a market preset and compare sector leaders, laggards, and relative spreads versus the broad benchmark.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Heatmaps, leadership matrix, and risk/return scatter for the last completed snapshot.",
+          "description": "Inspect the focus metric across horizons and compare sector return/volatility positioning.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "monthly-straddle",
+      "title": "Monthly Straddle",
+      "description": "Live snapshot of ATM monthly straddles, implied move, annualized IV, and IV/HV context for the active symbol.",
+      "inputSummary": "Active symbol, minimum days to expiry, and number of monthly contracts to load.",
+      "capabilities": {
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Front monthly straddle summary, contract table, and warnings for the active symbol.",
+          "description": "Use the active symbol from the sidebar, then compare the next standard monthly contracts.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "IV curve, implied move bars, and liquidity bars for the loaded monthly contracts.",
+          "description": "Visualize the current monthly term structure once the overview has been run.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "options-screener",
+      "title": "Options Screener",
+      "description": "Front-month daily options screen for a small preset universe, ranking rich-versus-cheap volatility reads with drilldowns into the monthly straddle study.",
+      "inputSummary": "Universe preset, bias filter, sort key, and minimum days to expiry.",
+      "capabilities": {
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Preset universe, ranked rich/cheap volatility rows, and direct drilldowns to single-name monthly straddles.",
+          "description": "Run a small liquid universe and screen front-month straddles by IV/HV, percentile context, liquidity, and spread quality.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Pricing mix, rich/cheap leaderboards, and cross-sectional context for the last completed screen.",
+          "description": "Visualize the latest screener run once the overview has been completed.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "options-validation",
+      "title": "Options Validation",
+      "description": "Archived screener rows grouped by pricing, candidate, or direction buckets and measured against forward underlying outcomes.",
+      "inputSummary": "Universe preset, grouping bucket, and forward trading-day horizon.",
+      "capabilities": {
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Grouped forward outcomes from archived screener rows for the selected universe and horizon.",
+          "description": "Use the local screener archive to see which evidence buckets have actually worked in the underlying.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Grouped forward-return bars, win-rate context, and return-versus-move maps from archived screener rows.",
+          "description": "Use the archive to see how validation buckets have behaved visually before drilling into the grouped tables.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "seasonality",
+      "title": "Seasonality",
+      "description": "Inspect month-of-year tendencies for the active asset.",
+      "inputSummary": "Active asset from the sidebar, date range, and partial-month handling.",
+      "capabilities": {
+        "visuals": "ready",
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Inputs, month buckets, and export actions for one series.",
+          "description": "Run the seasonality study, inspect the month table, and export the monthly panel.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Heatmap and month-bucket charts for the last completed run.",
+          "description": "Inspect the heatmap, average month return, win rate, and volatility by month.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "rolling-returns",
+      "title": "Rolling Returns",
+      "description": "Track how rolling 1Y, 3Y, 5Y, and 10Y CAGR changed across historical market dates.",
+      "inputSummary": "Active asset from the sidebar plus the date range that defines which rolling windows can form.",
+      "capabilities": {
+        "visuals": "ready",
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Inputs, rolling horizon table, and export actions for one filtered series.",
+          "description": "Run the rolling returns study, compare historical CAGR ranges by horizon, and export the full rolling panel.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Rolling CAGR paths and horizon-level comparison charts.",
+          "description": "Inspect how different rolling horizons behaved through time and compare latest, median, and positive-rate reads.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "sip-simulator",
+      "title": "SIP Simulator",
+      "description": "Simulate a fixed monthly SIP across every eligible start month and compare XIRR, terminal value, and cohort spread.",
+      "inputSummary": "Active asset from the sidebar, date range, and fixed monthly contribution amount.",
+      "capabilities": {
+        "visuals": "ready",
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Inputs, cohort table, and export actions for one filtered series.",
+          "description": "Run the SIP simulator, compare historical start-month cohorts, and export the cohort table.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Cohort XIRR, wealth multiple, and full-window SIP path charts.",
+          "description": "Read cohort XIRR, wealth multiple, and full-window invested-versus-value charts.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "lumpsum-vs-sip",
+      "title": "Lumpsum vs SIP",
+      "description": "Compare the same total capital invested upfront versus spread monthly across historical start cohorts.",
+      "inputSummary": "Active asset from the sidebar, date range, total investment amount, and fixed horizon.",
+      "capabilities": {
+        "visuals": "ready",
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Inputs, win rates, cohort table, and export actions.",
+          "description": "Run the comparison, inspect terminal-value differences, and export the cohort panel.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Advantage and terminal-value charts by start month.",
+          "description": "Read Lumpsum vs SIP advantage and terminal-value paths across historical start cohorts.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "drawdown-study",
+      "title": "Drawdown Study",
+      "description": "Inspect underwater depth, drawdown durations, and recovery behavior for the active asset.",
+      "inputSummary": "Active asset from the sidebar plus date range; output ranks depth and duration episodes on observed market dates.",
+      "capabilities": {
+        "visuals": "ready",
+        "exports": [
+          "csv",
+          "xls"
+        ]
+      },
+      "defaultViewId": "overview",
+      "views": [
+        {
+          "id": "overview",
+          "label": "Overview",
+          "summary": "Inputs, drawdown snapshot cards, ranked episodes, and exports.",
+          "description": "Run the drawdown study, inspect the worst peak-to-trough episodes, and export ranked events and underwater data.",
+          "status": "ready",
+          "default": true
+        },
+        {
+          "id": "visuals",
+          "label": "Visuals",
+          "summary": "Underwater path plus ranked depth and duration visual breakdowns.",
+          "description": "Use charts to see drawdown clustering, episode depth ranking, and duration concentration.",
+          "status": "ready",
+          "default": false
+        }
+      ]
+    }
+  ]
+}

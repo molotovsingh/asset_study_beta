@@ -12,6 +12,7 @@ import {
 } from "./riskAdjustedReturnView.js";
 import {
   appendCoverageWarnings,
+  buildAvailableStudyWindow,
   buildDefaultStudyWindow,
   toInputDate,
 } from "./shared/overviewUtils.js";
@@ -144,6 +145,7 @@ function renderStudyRunResults(resultsRoot, studyRun) {
 
 function mountRiskAdjustedReturnOverview(root) {
     const routeParamsApplied = applyRiskAdjustedRouteParams();
+    const routeHasExplicitWindow = routeParamsApplied.start || routeParamsApplied.end;
     if (routeParamsApplied.changed) {
       clearRiskAdjustedRuns();
     }
@@ -196,6 +198,8 @@ function mountRiskAdjustedReturnOverview(root) {
       loadBundledManifest,
       loadRememberedSymbols,
       updateIndexSummary,
+      getRuntimeSnapshot,
+      getBundledDatasetForSelection,
     } = runtime;
     const handleExportClick = createExportClickHandler({
       triggerSelector: "[data-results-export]",
@@ -220,6 +224,42 @@ function mountRiskAdjustedReturnOverview(root) {
         clearRiskAdjustedRuns();
       }
       replaceRiskAdjustedRouteParams();
+    }
+
+    function applyAvailableWindow({ announce = false, force = false } = {}) {
+      if (!force && routeHasExplicitWindow) {
+        return false;
+      }
+
+      const selection = getCurrentSelection();
+      const manifestDataset = getBundledDatasetForSelection(selection);
+      const nextWindow = buildAvailableStudyWindow({
+        selection: manifestDataset
+          ? { ...selection, range: manifestDataset.range || selection.range }
+          : selection,
+        runtimeSnapshot: getRuntimeSnapshot(selection),
+      });
+      const nextStartValue = toInputDate(nextWindow.startDate);
+      const nextEndValue = toInputDate(nextWindow.endDate);
+      if (
+        startDateInput.value === nextStartValue &&
+        endDateInput.value === nextEndValue
+      ) {
+        return false;
+      }
+
+      startDateInput.value = nextStartValue;
+      endDateInput.value = nextEndValue;
+      persistFormState();
+      if (announce) {
+        setStatus(
+          nextWindow.anchoredToAvailableEndDate
+            ? "Loaded the last 5 available market years."
+            : "Loaded a trailing 5-year window.",
+          "info",
+        );
+      }
+      return true;
     }
 
     function activateResultsTab(tabId) {
@@ -343,23 +383,13 @@ function mountRiskAdjustedReturnOverview(root) {
         setStatus("Study completed.", "success");
       } catch (error) {
         state.lastStudyRun = null;
-        resultsRoot.innerHTML = `
-          <div class="empty-state">
-            ${error.message}
-          </div>
-        `;
+        resultsRoot.innerHTML = "";
         setStatus(error.message, "error");
       }
     }
 
     function applyLastFiveYears() {
-      const end = new Date();
-      const start = new Date(end);
-      start.setFullYear(start.getFullYear() - 5);
-      startDateInput.value = toInputDate(start);
-      endDateInput.value = toInputDate(end);
-      persistFormState();
-      setStatus("Loaded a trailing 5-year window.", "info");
+      applyAvailableWindow({ announce: true, force: true });
     }
 
     function handleFormFieldChange() {
@@ -376,11 +406,21 @@ function mountRiskAdjustedReturnOverview(root) {
     resultsRoot.addEventListener("click", handleResultsClick);
 
     refreshSelectionUi();
-    loadBundledManifest();
-    loadRememberedSymbols();
+    loadBundledManifest().finally(() => {
+      if (!state.lastStudyRun) {
+        applyAvailableWindow();
+      }
+    });
+    loadRememberedSymbols().finally(() => {
+      if (!state.lastStudyRun) {
+        applyAvailableWindow();
+      }
+    });
     if (state.lastStudyRun) {
       renderStudyRunResults(resultsRoot, state.lastStudyRun);
       setStatus("Loaded the last completed study run.", "success");
+    } else {
+      applyAvailableWindow();
     }
 
     return () => {

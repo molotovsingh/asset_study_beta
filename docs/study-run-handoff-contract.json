@@ -1,0 +1,540 @@
+{
+  "version": "study-run-handoff-v1",
+  "purpose": "Single deterministic payload for future assistant result explanation and rerun handoff.",
+  "sourceRecord": "study_runs ledger payload returned by GET /api/study-runs",
+  "dependsOn": [
+    "app/studyBuilder/studyRunExplanation.js",
+    "app/studyBuilder/studyPlan.js"
+  ],
+  "outputFields": [
+    "version",
+    "source",
+    "contractVersions",
+    "readyForResultExplanation",
+    "readyForReplay",
+    "attentionRequired",
+    "runId",
+    "explanationSeed",
+    "replayStudyPlan",
+    "issues",
+    "consumerInstructions"
+  ],
+  "issueCodes": [
+    "run.missing",
+    "replay.route_missing",
+    "replay.route_blocked",
+    "explanation.blocked",
+    "explanation.caveats_present"
+  ],
+  "helperFunctions": [
+    "buildStudyRunAssistantHandoff(run)",
+    "serializeStudyRunAssistantHandoff(run)"
+  ],
+  "examples": [
+    {
+      "id": "clean-ledger-run",
+      "description": "Successful full-window run with summaries and evidence references.",
+      "handoff": {
+        "version": "study-run-handoff-v1",
+        "source": "study_run_ledger",
+        "contractVersions": {
+          "studyPlan": "study-plan-v1",
+          "studyRunExplanation": "study-run-explanation-v1"
+        },
+        "readyForResultExplanation": true,
+        "readyForReplay": true,
+        "attentionRequired": false,
+        "runId": 101,
+        "explanationSeed": {
+          "version": "study-run-explanation-v1",
+          "source": "study_run_ledger",
+          "canExplain": true,
+          "confidence": "high",
+          "run": {
+            "runId": 101,
+            "studyId": "rolling-returns",
+            "studyTitle": "Rolling Returns",
+            "viewId": "overview",
+            "selectionLabel": "Nifty 50",
+            "subjectQuery": "Nifty 50",
+            "symbol": "",
+            "status": "success",
+            "routeHash": "#rolling-returns/overview?subject=Nifty+50&start=2021-04-08&end=2026-04-08",
+            "detailLabel": "",
+            "warningCount": 0,
+            "errorMessage": "",
+            "runKind": "analysis",
+            "completedAt": "2026-05-15T10:00:00+00:00"
+          },
+          "window": {
+            "requestedStartDate": "2021-04-08",
+            "requestedEndDate": "2026-04-08",
+            "actualStartDate": "2021-04-08",
+            "actualEndDate": "2026-04-08",
+            "effectiveStartDate": "2021-04-08",
+            "effectiveEndDate": "2026-04-08",
+            "effectiveDays": 1827,
+            "clipped": false
+          },
+          "summaryItems": [
+            {
+              "summaryKey": "median-return",
+              "label": "Median Rolling Return",
+              "valueText": "12.4%",
+              "valueNumber": null,
+              "valueKind": "percent",
+              "displayValue": "12.4%",
+              "sortOrder": 0
+            }
+          ],
+          "evidence": {
+            "linkCount": 1,
+            "snapshotRefCount": 1,
+            "links": [
+              {
+                "linkType": "evidence-source",
+                "targetKind": "study_run",
+                "targetId": "101",
+                "targetLabel": "Rolling Returns run 101",
+                "metadata": {},
+                "sortOrder": 0
+              }
+            ],
+            "dataSnapshotRefs": [
+              {
+                "kind": "cache-series",
+                "symbol": "NIFTY50"
+              }
+            ]
+          },
+          "issues": [],
+          "caveats": [],
+          "explanationBullets": [
+            "Run 101 recorded Rolling Returns for Nifty 50.",
+            "Effective window: 2021-04-08 to 2026-04-08.",
+            "Recorded summaries: Median Rolling Return 12.4%.",
+            "Evidence recorded: 1 link(s), 1 snapshot reference(s)."
+          ]
+        },
+        "replayStudyPlan": {
+          "routeHash": "#rolling-returns/overview?subject=Nifty+50&start=2021-04-08&end=2026-04-08",
+          "ok": true,
+          "normalizedRouteHash": "#rolling-returns/overview?subject=Nifty+50&start=2021-04-08&end=2026-04-08",
+          "rawPlan": {
+            "version": "study-plan-v1",
+            "studyId": "rolling-returns",
+            "viewId": "overview",
+            "params": {
+              "subject": "Nifty 50",
+              "start": "2021-04-08",
+              "end": "2026-04-08"
+            },
+            "requiresConfirmation": true
+          },
+          "normalizedPlan": {
+            "version": "study-plan-v1",
+            "studyId": "rolling-returns",
+            "viewId": "overview",
+            "params": {
+              "subject": "Nifty 50",
+              "start": "2021-04-08",
+              "end": "2026-04-08"
+            },
+            "requiresConfirmation": true,
+            "metricProposals": []
+          },
+          "issues": [],
+          "errors": [],
+          "warnings": []
+        },
+        "issues": [],
+        "consumerInstructions": [
+          "Use explanationSeed for result commentary; do not infer from rendered UI text.",
+          "Use replayStudyPlan.normalizedPlan for rerun handoff; do not rebuild params manually.",
+          "If readyForResultExplanation is false, explain the failure state only.",
+          "If explanation caveats exist, include them explicitly in assistant output.",
+          "If readyForReplay is false, do not offer a one-click rerun without user correction."
+        ]
+      }
+    },
+    {
+      "id": "short-window-annualized-caveat",
+      "description": "Successful but clipped sub-1-year run with an annualized metric caveat.",
+      "handoff": {
+        "version": "study-run-handoff-v1",
+        "source": "study_run_ledger",
+        "contractVersions": {
+          "studyPlan": "study-plan-v1",
+          "studyRunExplanation": "study-run-explanation-v1"
+        },
+        "readyForResultExplanation": true,
+        "readyForReplay": true,
+        "attentionRequired": true,
+        "runId": 102,
+        "explanationSeed": {
+          "version": "study-run-explanation-v1",
+          "source": "study_run_ledger",
+          "canExplain": true,
+          "confidence": "medium",
+          "run": {
+            "runId": 102,
+            "studyId": "risk-adjusted-return",
+            "studyTitle": "Risk-Adjusted Return",
+            "viewId": "overview",
+            "selectionLabel": "Nifty 50",
+            "subjectQuery": "Nifty 50",
+            "symbol": "",
+            "status": "success",
+            "routeHash": "#risk-adjusted-return/overview?subject=Nifty+50&start=2026-01-01&end=2026-05-15",
+            "detailLabel": "",
+            "warningCount": 1,
+            "errorMessage": "",
+            "runKind": "analysis",
+            "completedAt": "2026-05-15T10:00:00+00:00"
+          },
+          "window": {
+            "requestedStartDate": "2026-01-01",
+            "requestedEndDate": "2026-05-15",
+            "actualStartDate": "2026-01-02",
+            "actualEndDate": "2026-04-08",
+            "effectiveStartDate": "2026-01-02",
+            "effectiveEndDate": "2026-04-08",
+            "effectiveDays": 97,
+            "clipped": true
+          },
+          "summaryItems": [
+            {
+              "summaryKey": "cagr",
+              "label": "CAGR",
+              "valueText": "42.0%",
+              "valueNumber": null,
+              "valueKind": "percent",
+              "displayValue": "42.0%",
+              "sortOrder": 0
+            }
+          ],
+          "evidence": {
+            "linkCount": 1,
+            "snapshotRefCount": 1,
+            "links": [
+              {
+                "linkType": "evidence-source",
+                "targetKind": "study_run",
+                "targetId": "102",
+                "targetLabel": "",
+                "metadata": {},
+                "sortOrder": 0
+              }
+            ],
+            "dataSnapshotRefs": [
+              {
+                "kind": "cache-series",
+                "symbol": "NIFTY50"
+              }
+            ]
+          },
+          "issues": [
+            {
+              "code": "run.warnings_recorded",
+              "severity": "warning",
+              "message": "The run recorded warning(s); an explanation must mention that caveat.",
+              "metadata": {
+                "warningCount": 1
+              }
+            },
+            {
+              "code": "window.clipped",
+              "severity": "warning",
+              "message": "Requested and actual date windows differ; explain the actual loaded window.",
+              "metadata": {
+                "requestedStartDate": "2026-01-01",
+                "requestedEndDate": "2026-05-15",
+                "actualStartDate": "2026-01-02",
+                "actualEndDate": "2026-04-08"
+              }
+            },
+            {
+              "code": "metric.short_window_annualized",
+              "severity": "warning",
+              "message": "Annualized metrics were recorded on a sub-1-year effective window; do not treat them as long-run compounding evidence.",
+              "metadata": {
+                "effectiveDays": 97
+              }
+            }
+          ],
+          "caveats": [
+            {
+              "code": "run.warnings_recorded",
+              "severity": "warning",
+              "message": "The run recorded warning(s); an explanation must mention that caveat.",
+              "metadata": {
+                "warningCount": 1
+              }
+            },
+            {
+              "code": "window.clipped",
+              "severity": "warning",
+              "message": "Requested and actual date windows differ; explain the actual loaded window.",
+              "metadata": {
+                "requestedStartDate": "2026-01-01",
+                "requestedEndDate": "2026-05-15",
+                "actualStartDate": "2026-01-02",
+                "actualEndDate": "2026-04-08"
+              }
+            },
+            {
+              "code": "metric.short_window_annualized",
+              "severity": "warning",
+              "message": "Annualized metrics were recorded on a sub-1-year effective window; do not treat them as long-run compounding evidence.",
+              "metadata": {
+                "effectiveDays": 97
+              }
+            }
+          ],
+          "explanationBullets": [
+            "Run 102 recorded Risk-Adjusted Return for Nifty 50.",
+            "Effective window: 2026-01-02 to 2026-04-08.",
+            "Recorded summaries: CAGR 42.0%.",
+            "Evidence recorded: 1 link(s), 1 snapshot reference(s)."
+          ]
+        },
+        "replayStudyPlan": {
+          "routeHash": "#risk-adjusted-return/overview?subject=Nifty+50&start=2026-01-01&end=2026-05-15",
+          "ok": true,
+          "normalizedRouteHash": "#risk-adjusted-return/overview?subject=Nifty+50&start=2026-01-01&end=2026-05-15",
+          "rawPlan": {
+            "version": "study-plan-v1",
+            "studyId": "risk-adjusted-return",
+            "viewId": "overview",
+            "params": {
+              "subject": "Nifty 50",
+              "start": "2026-01-01",
+              "end": "2026-05-15"
+            },
+            "requiresConfirmation": true
+          },
+          "normalizedPlan": {
+            "version": "study-plan-v1",
+            "studyId": "risk-adjusted-return",
+            "viewId": "overview",
+            "params": {
+              "subject": "Nifty 50",
+              "start": "2026-01-01",
+              "end": "2026-05-15"
+            },
+            "requiresConfirmation": true,
+            "metricProposals": []
+          },
+          "issues": [],
+          "errors": [],
+          "warnings": []
+        },
+        "issues": [
+          {
+            "code": "explanation.caveats_present",
+            "severity": "warning",
+            "message": "The explanation seed contains caveats that must be included in assistant prose.",
+            "metadata": {
+              "caveatCodes": [
+                "run.warnings_recorded",
+                "window.clipped",
+                "metric.short_window_annualized"
+              ]
+            }
+          }
+        ],
+        "consumerInstructions": [
+          "Use explanationSeed for result commentary; do not infer from rendered UI text.",
+          "Use replayStudyPlan.normalizedPlan for rerun handoff; do not rebuild params manually.",
+          "If readyForResultExplanation is false, explain the failure state only.",
+          "If explanation caveats exist, include them explicitly in assistant output.",
+          "If readyForReplay is false, do not offer a one-click rerun without user correction."
+        ]
+      }
+    },
+    {
+      "id": "failed-ledger-run",
+      "description": "Failed run that must not be explained as an investment conclusion.",
+      "handoff": {
+        "version": "study-run-handoff-v1",
+        "source": "study_run_ledger",
+        "contractVersions": {
+          "studyPlan": "study-plan-v1",
+          "studyRunExplanation": "study-run-explanation-v1"
+        },
+        "readyForResultExplanation": false,
+        "readyForReplay": false,
+        "attentionRequired": true,
+        "runId": 103,
+        "explanationSeed": {
+          "version": "study-run-explanation-v1",
+          "source": "study_run_ledger",
+          "canExplain": false,
+          "confidence": "blocked",
+          "run": {
+            "runId": 103,
+            "studyId": "risk-adjusted-return",
+            "studyTitle": "Risk-Adjusted Return",
+            "viewId": "",
+            "selectionLabel": "Fake Symbol",
+            "subjectQuery": "ZZZNOTREAL123",
+            "symbol": "",
+            "status": "failed",
+            "routeHash": "",
+            "detailLabel": "",
+            "warningCount": 0,
+            "errorMessage": "No history found.",
+            "runKind": "analysis",
+            "completedAt": "2026-05-15T10:00:00+00:00"
+          },
+          "window": {
+            "requestedStartDate": null,
+            "requestedEndDate": null,
+            "actualStartDate": null,
+            "actualEndDate": null,
+            "effectiveStartDate": null,
+            "effectiveEndDate": null,
+            "effectiveDays": null,
+            "clipped": false
+          },
+          "summaryItems": [],
+          "evidence": {
+            "linkCount": 0,
+            "snapshotRefCount": 0,
+            "links": [],
+            "dataSnapshotRefs": []
+          },
+          "issues": [
+            {
+              "code": "run.status_failed",
+              "severity": "error",
+              "message": "This run did not complete successfully; explain the failure, not study conclusions.",
+              "metadata": {
+                "status": "failed"
+              }
+            },
+            {
+              "code": "run.error_recorded",
+              "severity": "error",
+              "message": "The run recorded an error message.",
+              "metadata": {
+                "errorMessage": "No history found."
+              }
+            },
+            {
+              "code": "window.missing",
+              "severity": "warning",
+              "message": "No complete effective date window was recorded for this run.",
+              "metadata": {}
+            },
+            {
+              "code": "summary.missing",
+              "severity": "warning",
+              "message": "No summary items were recorded; avoid drawing metric-level conclusions.",
+              "metadata": {}
+            },
+            {
+              "code": "evidence_links.missing",
+              "severity": "info",
+              "message": "No durable evidence links were attached to this run.",
+              "metadata": {}
+            },
+            {
+              "code": "snapshot_refs.missing",
+              "severity": "info",
+              "message": "No data snapshot references were attached to this run.",
+              "metadata": {}
+            }
+          ],
+          "caveats": [
+            {
+              "code": "window.missing",
+              "severity": "warning",
+              "message": "No complete effective date window was recorded for this run.",
+              "metadata": {}
+            },
+            {
+              "code": "summary.missing",
+              "severity": "warning",
+              "message": "No summary items were recorded; avoid drawing metric-level conclusions.",
+              "metadata": {}
+            },
+            {
+              "code": "evidence_links.missing",
+              "severity": "info",
+              "message": "No durable evidence links were attached to this run.",
+              "metadata": {}
+            },
+            {
+              "code": "snapshot_refs.missing",
+              "severity": "info",
+              "message": "No data snapshot references were attached to this run.",
+              "metadata": {}
+            }
+          ],
+          "explanationBullets": []
+        },
+        "replayStudyPlan": {
+          "routeHash": "",
+          "ok": false,
+          "normalizedRouteHash": "",
+          "rawPlan": null,
+          "normalizedPlan": null,
+          "issues": [
+            {
+              "code": "replay.route_missing",
+              "severity": "warning",
+              "message": "No route hash was recorded, so the run cannot be replayed as a StudyPlan.",
+              "metadata": {}
+            }
+          ],
+          "errors": [],
+          "warnings": [
+            "No route hash was recorded."
+          ]
+        },
+        "issues": [
+          {
+            "code": "replay.route_missing",
+            "severity": "warning",
+            "message": "No route hash was recorded, so the run cannot be replayed as a StudyPlan.",
+            "metadata": {}
+          },
+          {
+            "code": "explanation.blocked",
+            "severity": "error",
+            "message": "The run cannot be explained as a completed result conclusion.",
+            "metadata": {}
+          },
+          {
+            "code": "explanation.caveats_present",
+            "severity": "warning",
+            "message": "The explanation seed contains caveats that must be included in assistant prose.",
+            "metadata": {
+              "caveatCodes": [
+                "window.missing",
+                "summary.missing",
+                "evidence_links.missing",
+                "snapshot_refs.missing"
+              ]
+            }
+          }
+        ],
+        "consumerInstructions": [
+          "Use explanationSeed for result commentary; do not infer from rendered UI text.",
+          "Use replayStudyPlan.normalizedPlan for rerun handoff; do not rebuild params manually.",
+          "If readyForResultExplanation is false, explain the failure state only.",
+          "If explanation caveats exist, include them explicitly in assistant output.",
+          "If readyForReplay is false, do not offer a one-click rerun without user correction."
+        ]
+      }
+    }
+  ],
+  "invariants": [
+    "The handoff must come from a durable study-run ledger record.",
+    "Result explanation must use explanationSeed, not rendered UI prose.",
+    "Replay handoff must use replayStudyPlan.normalizedPlan from the StudyPlan validator.",
+    "Failed runs may be explained only as failures, not as investment conclusions.",
+    "Caveats in explanationSeed are mandatory assistant context."
+  ]
+}

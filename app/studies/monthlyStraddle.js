@@ -20,6 +20,10 @@ import {
   replaceRouteInputParams,
 } from "./shared/shareableInputs.js";
 import {
+  createSummaryItem,
+  recordLocalStudyRun,
+} from "./shared/studyRunHistory.js";
+import {
   monthlyStraddleTemplate,
   renderMonthlyStraddleResults,
 } from "./monthlyStraddleView.js";
@@ -189,6 +193,59 @@ function mountMonthlyStraddleOverview(root) {
       monthlyStraddleSession.lastRunSignature = buildRunSignature(
         monthlyStraddleSession,
       );
+      recordLocalStudyRun({
+        study: monthlyStraddleStudy,
+        subjectQuery: symbol,
+        selectionLabel: symbol,
+        symbol: studyRun.symbol,
+        actualEndDate: studyRun.asOfDate,
+        detailLabel: `${minimumDte}D minimum · ${contractCount} contract${contractCount === 1 ? "" : "s"}`,
+        requestedParams: {
+          symbol,
+          minimumDte,
+          contractCount,
+        },
+        resolvedParams: {
+          asOfDate: studyRun.asOfDate?.toISOString?.()?.slice(0, 10) || "",
+          provider: studyRun.provider || "",
+          loadedContracts: studyRun.contracts.length,
+        },
+        providerSummary: {
+          provider: studyRun.provider,
+          providerName: studyRun.providerName,
+        },
+        summaryItems: [
+          createSummaryItem({
+            key: "spot-price",
+            label: "Spot Price",
+            valueNumber: studyRun.spotPrice,
+            valueKind: "currency",
+            sortOrder: 0,
+          }),
+          createSummaryItem({
+            key: "front-iv",
+            label: "Front IV",
+            valueNumber: studyRun.focusContract?.straddleImpliedVolatility,
+            valueKind: "percent",
+            sortOrder: 1,
+          }),
+          createSummaryItem({
+            key: "implied-move",
+            label: "Implied Move",
+            valueNumber: studyRun.focusContract?.impliedMovePercent,
+            valueKind: "percent",
+            sortOrder: 2,
+          }),
+          createSummaryItem({
+            key: "curve-shape",
+            label: "Curve Shape",
+            valueText: studyRun.curveShape,
+            sortOrder: 3,
+          }),
+        ],
+        warningCount: Array.isArray(studyRun.warnings) ? studyRun.warnings.length : 0,
+        completedAt: studyRun.exportedAt?.toISOString?.() || new Date().toISOString(),
+      });
       resultsRoot.innerHTML = renderMonthlyStraddleResults(studyRun);
       setStatus("Monthly straddle snapshot completed.", "success");
     } catch (error) {

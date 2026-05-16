@@ -89,7 +89,7 @@ function renderPendingBlock(studyRun) {
         ${pendingRows
           .map(
             (row) => `
-              <li><strong>${row.symbol}</strong>: ${row.availableTradingDays} trading days elapsed${row.reason ? ` · ${row.reason}` : ""}</li>
+              <li><strong>${row.symbol}</strong>: ${row.availableTradingDays} trading days elapsed${row.duplicateCount > 1 ? ` · ${formatNumber(row.duplicateCount, 0)} reruns collapsed` : ""}${row.reason ? ` · ${row.reason}` : ""}</li>
             `,
           )
           .join("")}
@@ -270,6 +270,11 @@ function renderOptionsValidationResults(studyRun) {
           <p class="result-detail">Forward horizon: ${studyRun.horizonLabel}</p>
           <p class="result-detail">Sample quality: ${studyRun.sampleQualityLabel}</p>
           <p class="result-detail">Latest archived row: ${studyRun.latestAsOfDate ? formatDate(studyRun.latestAsOfDate) : "n/a"}</p>
+          ${
+            studyRun.rerunCountCollapsed > 0
+              ? `<p class="result-detail">${formatNumber(studyRun.rerunCountCollapsed, 0)} same-day reruns were collapsed so validation counts reflect distinct evidence rows.</p>`
+              : ""
+          }
         </div>
         <div class="detail-block">
           <h3>Methods</h3>
