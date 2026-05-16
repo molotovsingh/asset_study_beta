@@ -86,7 +86,11 @@ def test_study_factory_rejects_wrong_nested_contract_versions():
             "version": "study-proposal-response-v1",
             "mode": "read-only",
             "proposal": {"version": "wrong-study-proposal-v1"},
-            "execution": {"executed": False, "generatedCode": False},
+            "execution": {
+                "executed": False,
+                "generatedCode": False,
+                "fetchedExternalData": False,
+            },
         }
 
     study_factory_service._run_study_proposal_bridge = wrong_proposal_bridge
@@ -95,6 +99,32 @@ def test_study_factory_rejects_wrong_nested_contract_versions():
             RuntimeError,
             lambda: study_factory_service.build_study_proposal_payload({"idea": "risk"}),
             "proposal payload should reject wrong nested proposal version",
+        )
+    finally:
+        study_factory_service._run_study_proposal_bridge = original_bridge
+
+
+def test_study_factory_rejects_executing_bridge_payloads():
+    original_bridge = study_factory_service._run_study_proposal_bridge
+
+    def executing_bridge(_request):
+        return {
+            "version": "study-proposal-response-v1",
+            "mode": "read-only",
+            "proposal": {"version": "study-proposal-v1"},
+            "execution": {
+                "executed": True,
+                "generatedCode": False,
+                "fetchedExternalData": False,
+            },
+        }
+
+    study_factory_service._run_study_proposal_bridge = executing_bridge
+    try:
+        assert_raises(
+            RuntimeError,
+            lambda: study_factory_service.build_study_proposal_payload({"idea": "risk"}),
+            "proposal payload should reject bridge output that claims execution",
         )
     finally:
         study_factory_service._run_study_proposal_bridge = original_bridge
@@ -136,6 +166,7 @@ def main():
     test_study_factory_proposal_payload_news_tool_gap()
     test_study_factory_rejects_invalid_requests()
     test_study_factory_rejects_wrong_nested_contract_versions()
+    test_study_factory_rejects_executing_bridge_payloads()
     test_study_factory_bridge_failure_and_timeout_are_bad_gateway_class_errors()
     print("ok study factory service")
 

@@ -60,12 +60,16 @@ def build_study_proposal_payload(request: dict | None) -> dict:
     request = _require_request_object(request)
     _require_idea(request)
     payload = _run_study_proposal_bridge(request)
+    execution = payload.get("execution")
     if (
         payload.get("version") != STUDY_PROPOSAL_RESPONSE_VERSION
         or payload.get("mode") != "read-only"
         or not isinstance(payload.get("proposal"), dict)
         or payload["proposal"].get("version") != STUDY_PROPOSAL_VERSION
-        or not isinstance(payload.get("execution"), dict)
+        or not isinstance(execution, dict)
+        or execution.get("executed") is not False
+        or execution.get("generatedCode") is not False
+        or execution.get("fetchedExternalData") is not False
     ):
         raise RuntimeError("Study proposal bridge returned an incomplete payload.")
     return payload
