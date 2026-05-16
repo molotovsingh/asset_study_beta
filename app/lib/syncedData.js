@@ -374,8 +374,8 @@ async function fetchStudyRunBrief(request) {
   });
   if (
     !payload?.run?.runId ||
-    !payload?.handoff ||
-    !payload?.explanationBrief
+    payload?.handoff?.version !== "study-run-handoff-v1" ||
+    payload?.explanationBrief?.version !== "study-run-explanation-brief-v1"
   ) {
     throw new Error("The local data API returned an invalid assistant run brief payload.");
   }
