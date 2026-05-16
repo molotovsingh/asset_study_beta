@@ -357,8 +357,11 @@ async function testRunHistoryStore() {
       study: { id: "risk-adjusted-return", title: "Risk-Adjusted Return" },
       subjectQuery: "Nifty 50",
       selectionLabel: "Nifty 50",
-      resolvedParams: { warnings: 1 },
+      resolvedParams: {
+        warningMessages: ["Loaded data is marked as a Price proxy for TRI."],
+      },
       warnings: ["Loaded data is marked as a Price proxy for TRI."],
+      warningCount: 0,
       completedAt: "2026-04-10T10:30:00.000Z",
     }) === true,
     "local study-run recording should accept warning messages",
@@ -368,6 +371,14 @@ async function testRunHistoryStore() {
   assert(
     capturedLedgerRequest.resolvedParams.warningMessages[0].includes("proxy for TRI"),
     "durable ledger request should preserve warning message text in resolved params",
+  );
+  assert(
+    capturedLedgerRequest.resolvedParams.warningMessages.length === 1,
+    "durable ledger request should dedupe warning messages before persistence",
+  );
+  assert(
+    capturedLedgerRequest.warningCount === 1,
+    "durable ledger request should not undercount warning messages",
   );
 
   unsubscribe();
