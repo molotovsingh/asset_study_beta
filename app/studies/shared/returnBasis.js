@@ -4,6 +4,8 @@ const RETURN_BASIS = Object.freeze({
   PROXY: "proxy",
 });
 
+const TOTAL_RETURN_SERIES_TYPES = new Set(["tri", "total_return", "total return"]);
+
 function normalizeSeriesType(value) {
   return String(value || "").trim();
 }
@@ -19,7 +21,7 @@ function deriveReturnBasis({ targetSeriesType, sourceSeriesType }) {
   if (target && source && target !== source) {
     return RETURN_BASIS.PROXY;
   }
-  if (["tri", "total_return", "total return"].includes(target)) {
+  if (TOTAL_RETURN_SERIES_TYPES.has(target)) {
     return RETURN_BASIS.TOTAL_RETURN;
   }
   return RETURN_BASIS.PRICE;
@@ -27,10 +29,21 @@ function deriveReturnBasis({ targetSeriesType, sourceSeriesType }) {
 
 function normalizeReturnBasis({ returnBasis, targetSeriesType, sourceSeriesType }) {
   const normalized = normalizeReturnBasisValue(returnBasis);
-  if (Object.values(RETURN_BASIS).includes(normalized)) {
+  const derived = deriveReturnBasis({ targetSeriesType, sourceSeriesType });
+  if (normalized === RETURN_BASIS.PROXY) {
     return normalized;
   }
-  return deriveReturnBasis({ targetSeriesType, sourceSeriesType });
+  if (normalized === derived) {
+    return normalized;
+  }
+  return derived;
+}
+
+function isReturnBasisProxy({ returnBasis, targetSeriesType, sourceSeriesType }) {
+  return (
+    normalizeReturnBasis({ returnBasis, targetSeriesType, sourceSeriesType }) ===
+    RETURN_BASIS.PROXY
+  );
 }
 
 function getReturnBasisLabel(returnBasis) {
@@ -70,5 +83,6 @@ export {
   buildReturnBasisWarning,
   deriveReturnBasis,
   getReturnBasisLabel,
+  isReturnBasisProxy,
   normalizeReturnBasis,
 };
