@@ -21,11 +21,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
       - name: Install sync dependencies
         run: pip install -r requirements-sync.txt
 
       - name: Refresh snapshots
         run: ./scripts/refresh_yfinance.sh --period 5y
+
+      - name: Run frontend regressions against refreshed snapshots
+        run: node scripts/run_frontend_regression_checks.mjs
 
       - name: Commit refreshed snapshots
         run: |

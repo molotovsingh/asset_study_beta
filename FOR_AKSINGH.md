@@ -431,6 +431,9 @@ useful truths:
   matched the old snapshot window.
 - The snapshot sync itself needed idempotence: if market data did not change,
   rerunning automation should not create a timestamp-only commit.
+- The sync workflow now runs frontend regressions before committing refreshed
+  snapshots because bot-pushed data commits do not reliably get a second
+  push-triggered validation pass.
 
 The engineering lesson is simple: when automation refreshes real data, rerun
 the product tests against the refreshed data, not just against the code change.
