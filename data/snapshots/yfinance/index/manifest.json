@@ -1,22 +1,23 @@
 {
   "provider": "yfinance",
   "datasetType": "index",
-  "generatedAt": "2026-04-08T10:33:03.727574Z",
+  "generatedAt": "2026-05-16T00:58:35.399543Z",
   "datasets": [
     {
       "datasetId": "nifty-50",
       "label": "Nifty 50",
       "symbol": "^NSEI",
+      "currency": "INR",
       "targetSeriesType": "Price",
       "sourceSeriesType": "Price",
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-04-08T10:33:03.327893Z",
+      "generatedAt": "2026-05-16T00:58:35.037506Z",
       "range": {
-        "startDate": "2021-04-08",
-        "endDate": "2026-04-08",
-        "observations": 1235
+        "startDate": "2021-05-17",
+        "endDate": "2026-05-15",
+        "observations": 1236
       },
       "note": null,
       "path": "yfinance/index/nifty-50.json"
@@ -25,16 +26,17 @@
       "datasetId": "nifty-50-tri",
       "label": "Nifty 50 TRI",
       "symbol": "^NSEI",
+      "currency": "INR",
       "targetSeriesType": "TRI",
       "sourceSeriesType": "Price",
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-04-08T10:33:03.392654Z",
+      "generatedAt": "2026-05-16T00:58:35.062364Z",
       "range": {
-        "startDate": "2021-04-08",
-        "endDate": "2026-04-08",
-        "observations": 1235
+        "startDate": "2021-05-17",
+        "endDate": "2026-05-15",
+        "observations": 1236
       },
       "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
       "path": "yfinance/index/nifty-50-tri.json"
@@ -43,16 +45,17 @@
       "datasetId": "sensex",
       "label": "S&P BSE Sensex",
       "symbol": "^BSESN",
+      "currency": "INR",
       "targetSeriesType": "Price",
       "sourceSeriesType": "Price",
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-04-08T10:33:03.666475Z",
+      "generatedAt": "2026-05-16T00:58:35.369008Z",
       "range": {
-        "startDate": "2021-04-08",
-        "endDate": "2026-04-08",
-        "observations": 1232
+        "startDate": "2021-05-17",
+        "endDate": "2026-05-15",
+        "observations": 1234
       },
       "note": null,
       "path": "yfinance/index/sensex.json"
@@ -61,16 +64,17 @@
       "datasetId": "sensex-tri",
       "label": "S&P BSE Sensex TRI",
       "symbol": "^BSESN",
+      "currency": "INR",
       "targetSeriesType": "TRI",
       "sourceSeriesType": "Price",
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-04-08T10:33:03.724571Z",
+      "generatedAt": "2026-05-16T00:58:35.394118Z",
       "range": {
-        "startDate": "2021-04-08",
-        "endDate": "2026-04-08",
-        "observations": 1232
+        "startDate": "2021-05-17",
+        "endDate": "2026-05-15",
+        "observations": 1234
       },
       "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
       "path": "yfinance/index/sensex-tri.json"
