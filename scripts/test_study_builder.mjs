@@ -429,6 +429,11 @@ function runStudyBuilderChecks() {
     requestedEndDate: "2026-05-15",
     actualStartDate: "2026-01-02",
     actualEndDate: "2026-04-08",
+    resolvedParams: {
+      warningMessages: [
+        "Loaded data is marked as a Price proxy for TRI.",
+      ],
+    },
     warningCount: 1,
     summaryItems: [
       {
@@ -466,6 +471,14 @@ function runStudyBuilderChecks() {
       ) &&
       explanationSeed.explanationBullets.some((bullet) => bullet.includes("Run 42")),
     "study-run explanation seed should expose real window, warning, and annualization caveats",
+  );
+  const warningBullet = explanationSeed.explanationBullets.find((bullet) =>
+    bullet.startsWith("Recorded warning(s):"),
+  );
+  assert(
+    warningBullet ===
+      "Recorded warning(s): Loaded data is marked as a Price proxy for TRI.",
+    "study-run explanation warning bullets should not add duplicate punctuation",
   );
   const serializedExplanationSeed = serializeStudyRunExplanationSeed({
     runId: 42,
