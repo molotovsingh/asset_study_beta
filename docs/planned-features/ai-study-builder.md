@@ -144,6 +144,7 @@ Shared contract:
 
 - top-level entrypoint: `docs/assistant-contract.json`, generated from `app/studyBuilder/assistantContract.js`; backend consumers can fetch the same contract through `GET /api/assistant/contract`
 - full backend contract bundle: `GET /api/assistant/contract-bundle`, built by `scripts/build_assistant_contract_bundle.mjs`, so in-app assistant consumers can load all deterministic contracts without scraping generated JSON files or UI text
+- JS-side assistant API response versions are shared through `app/studyBuilder/assistantApiContract.js`; frontend API helpers and Node bundle builders should import those constants instead of repeating local strings
 - assistant readiness: `GET /api/assistant/readiness` and `python3 scripts/check_assistant_readiness.py`, so development and CI can prove the deterministic assistant boundary is aligned before any live AI key or model call is introduced
 - assistant dry run: `POST /api/assistant/study-plan-dry-run`, so a future assistant can exercise the backend planning boundary end-to-end without executing a study, writing evidence, or requiring a model key
 - live planner smoke: `python3 scripts/run_assistant_live_planner_smoke.py --env-file /path/to/.env`, which uses `POST /api/assistant/study-plan-live-draft` semantics without printing the key, executing a study, or generating result prose
