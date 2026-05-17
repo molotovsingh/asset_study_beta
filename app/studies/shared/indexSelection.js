@@ -6,6 +6,27 @@ function buildYahooQuoteUrl(symbol) {
   return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`;
 }
 
+const SOURCE_METADATA_KEYS = [
+  "sourcePolicy",
+  "sourceName",
+  "licenseNote",
+  "retrievalMethod",
+  "updateCadence",
+  "lastVerifiedDate",
+];
+
+function buildSourceMetadata(...sources) {
+  return SOURCE_METADATA_KEYS.reduce((metadata, key) => {
+    const value = sources
+      .map((source) => source?.[key])
+      .find((candidate) => candidate !== undefined && candidate !== null && candidate !== "");
+    return {
+      ...metadata,
+      [key]: value || null,
+    };
+  }, {});
+}
+
 function normalizeQuery(value) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -64,6 +85,7 @@ function buildBuiltInSelection(entry, bundledDataset = null) {
     }),
     sourceUrl: bundledDataset?.sourceUrl || entry.sourceUrl,
     note: bundledDataset?.note || entry.sync?.note || entry.note || null,
+    ...buildSourceMetadata(bundledDataset, entry.sync, entry),
     aliases: entry.aliases || [],
     generatedAt: bundledDataset?.generatedAt || null,
     range: bundledDataset?.range || null,
@@ -92,6 +114,7 @@ function buildBundledSelection(entry) {
     }),
     sourceUrl: entry.sourceUrl || buildYahooQuoteUrl(entry.symbol),
     note: entry.note || null,
+    ...buildSourceMetadata(entry),
     aliases: [],
     generatedAt: entry.generatedAt || null,
     range: entry.range || null,
@@ -106,6 +129,7 @@ function buildBundledSelection(entry) {
         targetSeriesType,
         sourceSeriesType,
       }),
+      ...buildSourceMetadata(entry),
     },
     path: entry.path || null,
   };
@@ -131,6 +155,7 @@ function buildRememberedSelection(entry) {
     }),
     sourceUrl: entry.sourceUrl || buildYahooQuoteUrl(entry.symbol),
     note: entry.note || null,
+    ...buildSourceMetadata(entry),
     aliases: [],
     generatedAt: entry.generatedAt || null,
     range: entry.range || null,
@@ -155,6 +180,12 @@ function buildAdHocSelection(rawValue, { label = null } = {}) {
     targetSeriesType: "Price",
     sourceSeriesType: "Price",
     returnBasis: "price",
+    sourcePolicy: "price_only",
+    sourceName: "Yahoo Finance via local backend",
+    licenseNote: "Local yfinance fetch; price-return evidence only.",
+    retrievalMethod: "Local backend yfinance history fetch",
+    updateCadence: null,
+    lastVerifiedDate: null,
     sourceUrl: buildYahooQuoteUrl(symbol),
     note: isManualEntry
       ? "Manual symbol entry. This label is stored locally after the first successful load."
@@ -352,6 +383,7 @@ function discoverSelectionSuggestions(query, suggestions, { limit = 8 } = {}) {
         targetSeriesType: entry.targetSeriesType || null,
         sourceSeriesType: entry.sourceSeriesType || null,
         returnBasis: entry.returnBasis || null,
+        sourcePolicy: entry.sourcePolicy || null,
         note: entry.note || null,
         matchKind: scored.matchKind,
         matchScore: scored.score,
@@ -513,6 +545,12 @@ function buildSeriesRequest(selection) {
     returnBasis: selection.returnBasis,
     sourceUrl: selection.sourceUrl,
     note: selection.note,
+    sourcePolicy: selection.sourcePolicy,
+    sourceName: selection.sourceName,
+    licenseNote: selection.licenseNote,
+    retrievalMethod: selection.retrievalMethod,
+    updateCadence: selection.updateCadence,
+    lastVerifiedDate: selection.lastVerifiedDate,
     remember: selection.kind !== "builtin" && selection.kind !== "bundled",
   };
 }

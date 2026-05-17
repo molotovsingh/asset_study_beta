@@ -53,3 +53,10 @@ bootstrap datasets are proxies and are blocked for TRI-labeled runs until a
 licensed true TRI source is wired in. The remaining source-approval decision is
 documented in
 `docs/planned-features/true-total-return-sourcing.md`.
+
+Snapshots and manifest entries also carry `sourcePolicy` metadata. Current values
+are `price_only` for ordinary price-index snapshots and `blocked_proxy_tri` for
+TRI labels backed by Yahoo Finance close data. The fields `sourceName`,
+`licenseNote`, `retrievalMethod`, `updateCadence`, and `lastVerifiedDate` are
+there so exports, run history, and future assistant flows can explain what source
+claim is actually allowed without inferring policy from the display label.

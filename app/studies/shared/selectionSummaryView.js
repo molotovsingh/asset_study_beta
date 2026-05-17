@@ -11,7 +11,9 @@ import { renderInstrumentProfile } from "./instrumentProfileView.js";
 import {
   buildReturnBasisWarning,
   getReturnBasisLabel,
+  getSourcePolicyLabel,
   normalizeReturnBasis,
+  normalizeSourcePolicy,
 } from "./returnBasis.js";
 
 function renderFreshnessDetails(snapshot, prefixLabel, extraMeta = "") {
@@ -73,6 +75,20 @@ function renderSelectionDetails(
     targetSeriesType,
     sourceSeriesType,
   });
+  const sourcePolicy = normalizeSourcePolicy({
+    sourcePolicy: runtimeSnapshot?.sourcePolicy || selection.sourcePolicy,
+    returnBasis,
+    targetSeriesType,
+    sourceSeriesType,
+  });
+  const sourceName = runtimeSnapshot?.sourceName || selection.sourceName || null;
+  const licenseNote = runtimeSnapshot?.licenseNote || selection.licenseNote || null;
+  const retrievalMethod =
+    runtimeSnapshot?.retrievalMethod || selection.retrievalMethod || null;
+  const updateCadence =
+    runtimeSnapshot?.updateCadence || selection.updateCadence || null;
+  const lastVerifiedDate =
+    runtimeSnapshot?.lastVerifiedDate || selection.lastVerifiedDate || null;
   const note = runtimeSnapshot?.note || selection.note || null;
   const sourceLabel =
     selection.kind === "builtin"
@@ -146,6 +162,16 @@ function renderSelectionDetails(
   const proxyWarning = proxyWarningMessage
     ? `<p class="summary-meta">${proxyWarningMessage}</p>`
     : "";
+  const sourcePolicyMeta = [
+    `Source policy: ${getSourcePolicyLabel(sourcePolicy)}`,
+    sourceName,
+  ].filter(Boolean).join(" · ");
+  const sourceEvidenceMeta = [
+    licenseNote,
+    retrievalMethod ? `Retrieval: ${retrievalMethod}` : "",
+    updateCadence ? `Cadence: ${updateCadence}` : "",
+    lastVerifiedDate ? `Policy verified: ${lastVerifiedDate}` : "",
+  ].filter(Boolean).join(" · ");
 
   return `
     <div class="note-box selection-panel">
@@ -158,11 +184,14 @@ function renderSelectionDetails(
           <span class="selection-chip">${family}</span>
           <span class="selection-chip">${targetSeriesType}</span>
           <span class="selection-chip">${getReturnBasisLabel(returnBasis)}</span>
+          <span class="selection-chip">${getSourcePolicyLabel(sourcePolicy)}</span>
           ${currency ? `<span class="selection-chip">${currency}</span>` : ""}
         </div>
       </div>
       <p class="summary-meta">${providerName} · Symbol <span class="mono">${selection.symbol}</span></p>
       <p class="summary-meta">History source: <a href="${sourceUrl}" target="_blank" rel="noreferrer">Open source</a></p>
+      <p class="summary-meta">${sourcePolicyMeta}</p>
+      ${sourceEvidenceMeta ? `<p class="summary-meta">${sourceEvidenceMeta}</p>` : ""}
       ${proxyWarning}
       ${note ? `<p class="summary-meta">${note}</p>` : ""}
       ${runtimeMeta}

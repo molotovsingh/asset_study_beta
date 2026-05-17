@@ -21,6 +21,7 @@ These are not the final source-approval policy. They are the safety rails that p
 | Guardrail | Where It Lives | What It Prevents |
 | --- | --- | --- |
 | Return-basis normalization | `app/studies/shared/returnBasis.js` | Price data cannot claim `total_return` when source and target series types differ. |
+| Source-policy metadata | `scripts/sync_yfinance.py` and bundled yfinance snapshots | Current datasets expose whether they are `price_only`, `approved_total_return`, or `blocked_proxy_tri`. |
 | Strict TRI run block | `app/studies/shared/indexStudyPipeline.js` | TRI-labeled runs stop before study calculation when the loaded data is not true total-return data. |
 | Index-study warning injection | `app/studies/shared/indexStudyPipeline.js` | Non-blocking proxy contexts still carry explicit warnings into study results. |
 | Selection display caveat | `app/studies/shared/selectionSummaryView.js` | Users see the return-basis label and proxy warning near the selected asset. |
@@ -90,12 +91,12 @@ Tradeoff:
 ## Implementation Slices After Decision
 
 1. Strict run blocking for TRI labels when `returnBasis !== "total_return"` is implemented.
-2. Add a source-policy registry for index datasets.
-3. Mark each catalog entry as `approved_total_return`, `price_only`, or `blocked_proxy_tri`.
-4. Add source metadata fields: source name, license note, retrieval method, update cadence, and last verified date.
+2. Source-policy metadata for bundled yfinance datasets is implemented.
+3. Current catalog entries are marked as `price_only` or `blocked_proxy_tri`.
+4. Source metadata fields now cover source name, license note, retrieval method, update cadence, and last verified date.
 5. Add a true-TRI ingestion path for the approved source.
-6. Update exports and assistant briefs to include source policy and return-basis caveats.
-7. Add fixture tests covering true TRI, price-only, blocked proxy, stale source, and missing source cases.
+6. Update assistant briefs to include source policy and return-basis caveats explicitly.
+7. Add fixture tests covering true TRI, stale approved sources, and missing source cases.
 
 ## Non-Goals
 

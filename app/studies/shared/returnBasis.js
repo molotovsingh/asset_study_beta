@@ -5,6 +5,12 @@ const RETURN_BASIS = Object.freeze({
 });
 
 const TOTAL_RETURN_SERIES_TYPES = new Set(["tri", "total_return", "total return"]);
+const SOURCE_POLICY = Object.freeze({
+  PRICE_ONLY: "price_only",
+  APPROVED_TOTAL_RETURN: "approved_total_return",
+  BLOCKED_PROXY_TRI: "blocked_proxy_tri",
+});
+const SOURCE_POLICY_VALUES = new Set(Object.values(SOURCE_POLICY));
 
 function normalizeSeriesType(value) {
   return String(value || "").trim();
@@ -15,6 +21,10 @@ function isTotalReturnSeriesType(value) {
 }
 
 function normalizeReturnBasisValue(value) {
+  return String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function normalizePolicyValue(value) {
   return String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
@@ -63,6 +73,67 @@ function getReturnBasisLabel(returnBasis) {
   }
 }
 
+function deriveSourcePolicy({
+  returnBasis,
+  targetSeriesType,
+  sourceSeriesType,
+}) {
+  const normalizedReturnBasis = normalizeReturnBasis({
+    returnBasis,
+    targetSeriesType,
+    sourceSeriesType,
+  });
+  if (
+    normalizedReturnBasis === RETURN_BASIS.PROXY &&
+    isTotalReturnSeriesType(targetSeriesType)
+  ) {
+    return SOURCE_POLICY.BLOCKED_PROXY_TRI;
+  }
+  if (
+    normalizedReturnBasis === RETURN_BASIS.TOTAL_RETURN &&
+    isTotalReturnSeriesType(targetSeriesType)
+  ) {
+    return SOURCE_POLICY.APPROVED_TOTAL_RETURN;
+  }
+  return SOURCE_POLICY.PRICE_ONLY;
+}
+
+function normalizeSourcePolicy({
+  sourcePolicy,
+  returnBasis,
+  targetSeriesType,
+  sourceSeriesType,
+}) {
+  const normalized = normalizePolicyValue(sourcePolicy);
+  const derivedPolicy = deriveSourcePolicy({
+    returnBasis,
+    targetSeriesType,
+    sourceSeriesType,
+  });
+  if (!normalized) {
+    return derivedPolicy === SOURCE_POLICY.APPROVED_TOTAL_RETURN
+      ? ""
+      : derivedPolicy;
+  }
+  if (!SOURCE_POLICY_VALUES.has(normalized) || normalized !== derivedPolicy) {
+    return "";
+  }
+  return normalized;
+}
+
+function getSourcePolicyLabel(sourcePolicy) {
+  switch (normalizePolicyValue(sourcePolicy)) {
+    case SOURCE_POLICY.APPROVED_TOTAL_RETURN:
+      return "Approved total return";
+    case SOURCE_POLICY.BLOCKED_PROXY_TRI:
+      return "Blocked proxy TRI";
+    case SOURCE_POLICY.PRICE_ONLY:
+      return "Price only";
+    default:
+      return "Unknown source policy";
+  }
+}
+
 function buildReturnBasisWarning({
   returnBasis,
   targetSeriesType,
@@ -108,11 +179,15 @@ function buildStrictTotalReturnBlockMessage({
 
 export {
   RETURN_BASIS,
+  SOURCE_POLICY,
   buildStrictTotalReturnBlockMessage,
   buildReturnBasisWarning,
   deriveReturnBasis,
+  deriveSourcePolicy,
   getReturnBasisLabel,
+  getSourcePolicyLabel,
   isTotalReturnSeriesType,
   isReturnBasisProxy,
   normalizeReturnBasis,
+  normalizeSourcePolicy,
 };

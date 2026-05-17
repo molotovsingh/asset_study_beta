@@ -25,6 +25,12 @@ class DatasetConfig:
     provider_name: str = "Yahoo Finance"
     family: str = "Custom"
     source_url: str | None = None
+    source_policy: str | None = None
+    source_name: str | None = None
+    license_note: str | None = None
+    retrieval_method: str | None = None
+    update_cadence: str | None = None
+    last_verified_date: str | None = None
 
 
 RETURN_BASIS_PRICE = "price"
@@ -36,6 +42,20 @@ RETURN_BASIS_VALUES = {
     RETURN_BASIS_PROXY,
 }
 TOTAL_RETURN_SERIES_TYPES = {"tri", "total_return", "total return"}
+SOURCE_POLICY_PRICE_ONLY = "price_only"
+SOURCE_POLICY_APPROVED_TOTAL_RETURN = "approved_total_return"
+SOURCE_POLICY_BLOCKED_PROXY_TRI = "blocked_proxy_tri"
+SOURCE_POLICY_VALUES = {
+    SOURCE_POLICY_PRICE_ONLY,
+    SOURCE_POLICY_APPROVED_TOTAL_RETURN,
+    SOURCE_POLICY_BLOCKED_PROXY_TRI,
+}
+DEFAULT_YFINANCE_SOURCE_NAME = "Yahoo Finance Close via yfinance"
+DEFAULT_YFINANCE_RETRIEVAL_METHOD = (
+    "yfinance daily history Close with auto_adjust=false and actions=false"
+)
+DEFAULT_SNAPSHOT_UPDATE_CADENCE = "Manual repository snapshot sync"
+DEFAULT_SOURCE_POLICY_VERIFIED_DATE = "2026-05-17"
 
 
 def derive_return_basis(target_series_type: str, source_series_type: str) -> str:
@@ -73,6 +93,67 @@ def normalize_return_basis(
     return normalized
 
 
+def normalize_token(value: str | None) -> str:
+    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def is_total_return_series_type(value: str | None) -> bool:
+    return str(value or "").strip().lower() in TOTAL_RETURN_SERIES_TYPES
+
+
+def derive_source_policy(
+    *,
+    return_basis: str,
+    target_series_type: str,
+) -> str:
+    if (
+        return_basis == RETURN_BASIS_PROXY
+        and is_total_return_series_type(target_series_type)
+    ):
+        return SOURCE_POLICY_BLOCKED_PROXY_TRI
+    if (
+        return_basis == RETURN_BASIS_TOTAL_RETURN
+        and is_total_return_series_type(target_series_type)
+    ):
+        return SOURCE_POLICY_APPROVED_TOTAL_RETURN
+    return SOURCE_POLICY_PRICE_ONLY
+
+
+def normalize_source_policy(
+    value: str | None,
+    *,
+    return_basis: str | None,
+    target_series_type: str,
+    source_series_type: str,
+) -> str:
+    normalized_return_basis = normalize_return_basis(
+        return_basis,
+        target_series_type=target_series_type,
+        source_series_type=source_series_type,
+    )
+    derived = derive_source_policy(
+        return_basis=normalized_return_basis,
+        target_series_type=target_series_type,
+    )
+    normalized = normalize_token(value)
+    if not normalized:
+        if derived == SOURCE_POLICY_APPROVED_TOTAL_RETURN:
+            raise RuntimeError(
+                "sourcePolicy must explicitly approve total-return datasets",
+            )
+        return derived
+    if normalized not in SOURCE_POLICY_VALUES:
+        allowed = ", ".join(sorted(SOURCE_POLICY_VALUES))
+        raise RuntimeError(f"sourcePolicy must be one of: {allowed}")
+    if normalized != derived:
+        raise RuntimeError(
+            f"sourcePolicy {normalized!r} is inconsistent with "
+            f"returnBasis={normalized_return_basis!r} and "
+            f"targetSeriesType={target_series_type!r}"
+        )
+    return normalized
+
+
 DATASETS: dict[str, DatasetConfig] = {
     "nifty-50": DatasetConfig(
         dataset_id="nifty-50",
@@ -85,6 +166,12 @@ DATASETS: dict[str, DatasetConfig] = {
         provider_name="NSE Indices",
         family="Broad Market",
         source_url="https://www.niftyindices.com/reports/historical-data",
+        source_policy=SOURCE_POLICY_PRICE_ONLY,
+        source_name=DEFAULT_YFINANCE_SOURCE_NAME,
+        license_note="Local yfinance snapshot; price-return evidence only.",
+        retrieval_method=DEFAULT_YFINANCE_RETRIEVAL_METHOD,
+        update_cadence=DEFAULT_SNAPSHOT_UPDATE_CADENCE,
+        last_verified_date=DEFAULT_SOURCE_POLICY_VERIFIED_DATE,
     ),
     "nifty-50-tri": DatasetConfig(
         dataset_id="nifty-50-tri",
@@ -98,6 +185,14 @@ DATASETS: dict[str, DatasetConfig] = {
         provider_name="NSE Indices",
         family="Broad Market",
         source_url="https://www.niftyindices.com/reports/historical-data",
+        source_policy=SOURCE_POLICY_BLOCKED_PROXY_TRI,
+        source_name=DEFAULT_YFINANCE_SOURCE_NAME,
+        license_note=(
+            "Local yfinance snapshot; not an approved true total-return feed."
+        ),
+        retrieval_method=DEFAULT_YFINANCE_RETRIEVAL_METHOD,
+        update_cadence=DEFAULT_SNAPSHOT_UPDATE_CADENCE,
+        last_verified_date=DEFAULT_SOURCE_POLICY_VERIFIED_DATE,
     ),
     "sensex": DatasetConfig(
         dataset_id="sensex",
@@ -110,6 +205,12 @@ DATASETS: dict[str, DatasetConfig] = {
         provider_name="BSE",
         family="Broad Market",
         source_url="https://www.bseindia.com/indices/IndexArchiveData.html",
+        source_policy=SOURCE_POLICY_PRICE_ONLY,
+        source_name=DEFAULT_YFINANCE_SOURCE_NAME,
+        license_note="Local yfinance snapshot; price-return evidence only.",
+        retrieval_method=DEFAULT_YFINANCE_RETRIEVAL_METHOD,
+        update_cadence=DEFAULT_SNAPSHOT_UPDATE_CADENCE,
+        last_verified_date=DEFAULT_SOURCE_POLICY_VERIFIED_DATE,
     ),
     "sensex-tri": DatasetConfig(
         dataset_id="sensex-tri",
@@ -123,6 +224,14 @@ DATASETS: dict[str, DatasetConfig] = {
         provider_name="BSE",
         family="Broad Market",
         source_url="https://www.bseindia.com/indices/IndexArchiveData.html",
+        source_policy=SOURCE_POLICY_BLOCKED_PROXY_TRI,
+        source_name=DEFAULT_YFINANCE_SOURCE_NAME,
+        license_note=(
+            "Local yfinance snapshot; not an approved true total-return feed."
+        ),
+        retrieval_method=DEFAULT_YFINANCE_RETRIEVAL_METHOD,
+        update_cadence=DEFAULT_SNAPSHOT_UPDATE_CADENCE,
+        last_verified_date=DEFAULT_SOURCE_POLICY_VERIFIED_DATE,
     ),
 }
 
@@ -231,10 +340,25 @@ def dataset_from_dict(raw: dict) -> DatasetConfig:
         target_series_type=target_series_type,
         source_series_type=source_series_type,
     )
+    source_policy = normalize_source_policy(
+        raw.get("sourcePolicy"),
+        return_basis=return_basis,
+        target_series_type=target_series_type,
+        source_series_type=source_series_type,
+    )
     currency = str(raw.get("currency") or "").strip().upper() or None
     provider_name = str(raw.get("providerName") or "Yahoo Finance").strip() or "Yahoo Finance"
     family = str(raw.get("family") or "Custom").strip() or "Custom"
     source_url = str(raw.get("sourceUrl") or build_yahoo_quote_url(symbol)).strip()
+    source_name = str(raw.get("sourceName") or DEFAULT_YFINANCE_SOURCE_NAME).strip()
+    license_note = str(raw.get("licenseNote") or "").strip() or None
+    retrieval_method = str(
+        raw.get("retrievalMethod") or DEFAULT_YFINANCE_RETRIEVAL_METHOD,
+    ).strip()
+    update_cadence = str(
+        raw.get("updateCadence") or DEFAULT_SNAPSHOT_UPDATE_CADENCE,
+    ).strip()
+    last_verified_date = str(raw.get("lastVerifiedDate") or "").strip() or None
     note = raw.get("note")
     if note is not None:
       note = str(note).strip() or None
@@ -251,6 +375,12 @@ def dataset_from_dict(raw: dict) -> DatasetConfig:
         provider_name=provider_name,
         family=family,
         source_url=source_url,
+        source_policy=source_policy,
+        source_name=source_name,
+        license_note=license_note,
+        retrieval_method=retrieval_method,
+        update_cadence=update_cadence,
+        last_verified_date=last_verified_date,
     )
 
 
@@ -414,6 +544,17 @@ def build_snapshot(
             target_series_type=config.target_series_type,
             source_series_type=config.source_series_type,
         ),
+        "sourcePolicy": normalize_source_policy(
+            config.source_policy,
+            return_basis=config.return_basis,
+            target_series_type=config.target_series_type,
+            source_series_type=config.source_series_type,
+        ),
+        "sourceName": config.source_name or DEFAULT_YFINANCE_SOURCE_NAME,
+        "licenseNote": config.license_note,
+        "retrievalMethod": config.retrieval_method or DEFAULT_YFINANCE_RETRIEVAL_METHOD,
+        "updateCadence": config.update_cadence or DEFAULT_SNAPSHOT_UPDATE_CADENCE,
+        "lastVerifiedDate": config.last_verified_date,
         "providerName": config.provider_name,
         "family": config.family,
         "sourceUrl": config.source_url or build_yahoo_quote_url(config.symbol),
@@ -484,6 +625,12 @@ def build_manifest_entry(snapshot: dict, output_path: Path, output_root: Path) -
         "targetSeriesType": snapshot["targetSeriesType"],
         "sourceSeriesType": snapshot["sourceSeriesType"],
         "returnBasis": snapshot["returnBasis"],
+        "sourcePolicy": snapshot.get("sourcePolicy"),
+        "sourceName": snapshot.get("sourceName"),
+        "licenseNote": snapshot.get("licenseNote"),
+        "retrievalMethod": snapshot.get("retrievalMethod"),
+        "updateCadence": snapshot.get("updateCadence"),
+        "lastVerifiedDate": snapshot.get("lastVerifiedDate"),
         "providerName": snapshot.get("providerName"),
         "family": snapshot.get("family"),
         "sourceUrl": snapshot.get("sourceUrl"),

@@ -10,6 +10,7 @@ from sync_yfinance import (
     build_snapshot,
     collect_manifest_entries,
     normalize_return_basis,
+    normalize_source_policy,
     write_manifest,
     write_snapshot,
 )
@@ -98,9 +99,19 @@ def test_snapshot_and_manifest_include_return_basis():
             "TRI backed by price data should be marked as a proxy in the snapshot",
         )
         assert_equal(
+            '"sourcePolicy": "blocked_proxy_tri"' in written_snapshot,
+            True,
+            "TRI proxy snapshots should expose their blocked source policy",
+        )
+        assert_equal(
             '"returnBasis": "proxy"' in written_manifest,
             True,
             "TRI backed by price data should be marked as a proxy in the manifest",
+        )
+        assert_equal(
+            '"sourcePolicy": "blocked_proxy_tri"' in written_manifest,
+            True,
+            "TRI proxy manifests should expose their blocked source policy",
         )
 
 
@@ -141,10 +152,76 @@ def test_return_basis_rejects_inconsistent_total_return_claims():
     )
 
 
+def test_source_policy_tracks_return_basis_claims():
+    assert_equal(
+        normalize_source_policy(
+            None,
+            return_basis="price",
+            target_series_type="Price",
+            source_series_type="Price",
+        ),
+        "price_only",
+        "price datasets should derive price_only source policy",
+    )
+    assert_equal(
+        normalize_source_policy(
+            None,
+            return_basis="proxy",
+            target_series_type="TRI",
+            source_series_type="Price",
+        ),
+        "blocked_proxy_tri",
+        "TRI proxy datasets should derive blocked_proxy_tri source policy",
+    )
+    assert_equal(
+        normalize_source_policy(
+            "approved_total_return",
+            return_basis="total_return",
+            target_series_type="TRI",
+            source_series_type="TRI",
+        ),
+        "approved_total_return",
+        "approved total-return datasets should require an explicit source policy",
+    )
+
+    try:
+        normalize_source_policy(
+            None,
+            return_basis="total_return",
+            target_series_type="TRI",
+            source_series_type="TRI",
+        )
+    except RuntimeError as error:
+        assert_equal(
+            "explicitly approve" in str(error),
+            True,
+            "missing source-policy errors should not invent total-return approval",
+        )
+    else:
+        raise AssertionError("true total-return data must explicitly set sourcePolicy")
+
+    try:
+        normalize_source_policy(
+            "approved_total_return",
+            return_basis="proxy",
+            target_series_type="TRI",
+            source_series_type="Price",
+        )
+    except RuntimeError as error:
+        assert_equal(
+            "inconsistent" in str(error),
+            True,
+            "source-policy errors should explain inconsistent return-basis claims",
+        )
+    else:
+        raise AssertionError("proxy TRI data must not claim approved_total_return policy")
+
+
 def main():
     test_repeated_snapshot_writes_preserve_existing_generated_at()
     test_snapshot_and_manifest_include_return_basis()
     test_return_basis_rejects_inconsistent_total_return_claims()
+    test_source_policy_tracks_return_basis_claims()
     print("ok yfinance sync idempotence")
 
 
