@@ -94,6 +94,15 @@ python3 scripts/run_assistant_live_planner_smoke.py --env-file /path/to/.env
 ```
 
 If the key is stored under a different variable, pass `--api-key-var NAME`.
+For broader live AI product testing, run the matrix smoke:
+
+```bash
+python3 scripts/run_assistant_live_planner_smoke.py --matrix --env-file /path/to/.env
+```
+
+The matrix still does not execute studies; it checks that observed live-AI
+intents produce valid, runnable, non-executed StudyPlans with canonical route
+fragments.
 
 ## Data sources
 
