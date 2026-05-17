@@ -83,6 +83,11 @@ The backend also exposes a keyless assistant planning dry run at
 `POST /api/assistant/study-plan-dry-run`; it drafts and validates a StudyPlan
 without executing a study or calling an AI model.
 
+Inside the app, `#settings/study-builder` also has an explicit
+`Experimental: Live AI Draft` button. It calls the backend live-draft endpoint
+only when the local server has an OpenAI key configured, fills the StudyPlan JSON
+and preview, and still does not execute a study.
+
 New study ideas can be shaped without execution through
 `POST /api/study-factory/proposal`. That endpoint returns a versioned
 `study-proposal-v1` feasibility packet and an explicit `executed: false` marker.

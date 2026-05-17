@@ -22,6 +22,7 @@ import {
 import { renderRunHistorySettingsPage } from "../app/settings/studyRunHistorySettings.js";
 import { studyRegistry } from "../app/studies/registry.js";
 import {
+  EXAMPLE_STUDY_INTENT,
   EXAMPLE_STUDY_PLAN,
   mountStudyBuilderSettingsPage,
   renderStudyBuilderSettingsPage,
@@ -806,6 +807,64 @@ async function testStudyBuilderReadinessHydration() {
 
   unmount();
   console.log("ok study-builder readiness hydration");
+}
+
+async function testStudyBuilderLiveDraftInteraction() {
+  let clickHandler = null;
+  let capturedRequest = null;
+  const livePreview = buildStudyPlanConfirmationPreview(EXAMPLE_STUDY_PLAN);
+  const root = {
+    innerHTML: "",
+    addEventListener(type, handler) {
+      if (type === "click") {
+        clickHandler = handler;
+      }
+    },
+    removeEventListener() {},
+    querySelector(selector) {
+      if (selector === "#settings-study-builder-intent") {
+        return { value: EXAMPLE_STUDY_INTENT };
+      }
+      return null;
+    },
+  };
+
+  const unmount = mountStudyBuilderSettingsPage(root, {
+    liveDraftAssistantStudyPlan: async (request) => {
+      capturedRequest = request;
+      return {
+        version: "assistant-study-plan-live-draft-v1",
+        provider: "openai",
+        model: "gpt-test",
+        modelResult: { responseId: "resp_ui_test" },
+        plan: EXAMPLE_STUDY_PLAN,
+        validation: { ok: true, issues: [] },
+        preview: livePreview,
+        execution: { executed: false },
+      };
+    },
+  });
+
+  await clickHandler({
+    target: {
+      closest(selector) {
+        return selector === "#settings-study-builder-live-draft" ? {} : null;
+      },
+    },
+  });
+
+  assert(
+    capturedRequest.intent === EXAMPLE_STUDY_INTENT &&
+      root.innerHTML.includes("Experimental Live AI Draft") &&
+      root.innerHTML.includes("resp_ui_test") &&
+      root.innerHTML.includes("Valid Draft") &&
+      root.innerHTML.includes("no study execution") &&
+      root.innerHTML.includes("Live AI drafted a valid non-executing StudyPlan"),
+    "study-builder settings should run live draft through the backend helper and render non-executing metadata",
+  );
+
+  unmount();
+  console.log("ok study-builder live draft interaction");
 }
 
 async function testAssistantApiHelpers() {
@@ -3689,6 +3748,7 @@ async function main() {
   testAppRouteModel();
   await testStudyBuilderBackendRecipeHydration();
   await testStudyBuilderReadinessHydration();
+  await testStudyBuilderLiveDraftInteraction();
   await testAssistantApiHelpers();
   assertionCount += runMetricRegistryChecks();
   assertionCount += runStudyBuilderChecks();

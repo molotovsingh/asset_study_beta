@@ -4,7 +4,7 @@
 
 Partially implemented as a deterministic harness.
 
-The app now has a first settings surface at `#settings/study-builder` where backend-owned endpoints can draft `study-plan-v1` JSON from intent, convert existing study hashes back into `StudyPlan` drafts, validate plans, render confirmation previews, reuse saved backend recipes, and hand off to the existing study route. The page keeps a local deterministic fallback so the contract remains inspectable when the local backend is unavailable. The Run History settings surface now hydrates selected runs from the backend assistant brief endpoint, then renders deterministic explanation seeds and downloadable assistant handoff JSON from durable study-run records. This is still not an AI assistant. It is the guardrail layer that the future assistant must obey.
+The app now has a first settings surface at `#settings/study-builder` where backend-owned endpoints can draft `study-plan-v1` JSON from intent, convert existing study hashes back into `StudyPlan` drafts, validate plans, render confirmation previews, reuse saved backend recipes, and hand off to the existing study route. The page keeps a local deterministic fallback so the contract remains inspectable when the local backend is unavailable. It also exposes an explicit `Experimental: Live AI Draft` button that calls the backend live-draft endpoint when the local server has a model key configured; the result is still just a StudyPlan draft, is validated deterministically, and never executes a study. The Run History settings surface now hydrates selected runs from the backend assistant brief endpoint, then renders deterministic explanation seeds and downloadable assistant handoff JSON from durable study-run records. This is still not a full AI assistant. It is the guardrail layer that the future assistant must obey.
 
 ## Product Thesis
 
@@ -150,6 +150,7 @@ Shared contract:
 - live planner smoke: `python3 scripts/run_assistant_live_planner_smoke.py --env-file /path/to/.env`, which uses `POST /api/assistant/study-plan-live-draft` semantics without printing the key, executing a study, or generating result prose
 - live planner matrix: `python3 scripts/run_assistant_live_planner_smoke.py --matrix --env-file /path/to/.env`, which reruns the observed live-AI intent set and fails if any draft is invalid, unrunnable, executed, or missing expected canonical route fragments
 - live planner prompt guardrails now include the local current date, canonical route-param constraints, options-screener sort keys such as `ivHv20Ratio`, and a default instruction to omit `metricProposals`; deterministic validation still decides whether a draft can be handed to the app
+- the settings page's experimental live draft action fills the same StudyPlan JSON and confirmation preview as deterministic drafting; saving as a recipe still goes through the existing validated recipe path
 - a deterministic `intent-planner-v1` harness in `app/studyBuilder/intentPlanner.js` for simple natural-language-to-draft-plan templates
 - the intent planner contract is generated at `docs/intent-planner-contract.json` and checked with `node scripts/export_intent_planner_contract.mjs --check`
 - planner examples are part of that contract, so future AI work has concrete intent-to-study fixtures instead of relying only on prose
@@ -223,12 +224,12 @@ The planner can be probabilistic. The validator must not be.
 - The first visible UI lives in the app-level settings route at `#settings/study-builder`, not in the sidebar or a modal.
 - The first acceptance target is now a small matrix across relative risk, rolling returns, options screener, SIP simulator, and seasonality intents rather than one hand-picked study.
 - Live planner testing remains non-executing: a model may draft StudyPlans, but it may not run studies or generate result prose.
+- Live model-backed drafting is visible only as an explicit experimental button inside `#settings/study-builder`, with validation errors and model metadata shown beside the draft.
 
 ## Open Questions
 
 - Should backend StudyPlan recipes eventually get sharing/export/import controls, or stay local-first settings records?
 - How much result explanation should be allowed before the app has stronger provenance around every displayed metric?
-- Should the live model-backed draft flow become visible in the settings page, or remain a developer smoke until the result-explanation boundary is ready?
 
 ## Implementation Principle
 
