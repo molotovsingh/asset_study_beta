@@ -138,6 +138,10 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _local_today_iso() -> str:
+    return datetime.now().astimezone().date().isoformat()
+
+
 def _truthy(value, default: bool = True) -> bool:
     if value is None:
         return default
@@ -245,16 +249,43 @@ def _parse_json_object_from_text(text: str) -> dict:
 def _build_live_planner_prompt(intent: str) -> dict:
     contract_bundle = build_assistant_contract_bundle_payload({})
     contracts = contract_bundle["contracts"]
+    today = _local_today_iso()
     return {
         "intent": intent,
+        "currentDate": today,
         "studyCatalog": contracts["studyCatalog"],
         "studyPlanContract": contracts["studyPlan"],
+        "guardrails": {
+            "dateRules": [
+                "Only emit explicit start/end params when the date is known from the request or a conservative interpretation.",
+                f"Never emit start/end dates after currentDate ({today}).",
+                "For relative requests such as last five available years, omit exact dates unless the user provides them.",
+            ],
+            "parameterRules": [
+                "Use only params explicitly allowed by the selected studyId/viewId contract.",
+                "Do not invent internal flags such as demo unless the selected study/view explicitly allows them and the user asks for demo data.",
+                "Prefer omitting optional params over guessing unsupported values.",
+            ],
+            "optionsScreenerRules": [
+                "Use only canonical allowedValues from the options-screener param definitions.",
+                "For IV/HV20 sorting, emit sort=ivHv20Ratio.",
+                "Do not emit snake_case sort aliases such as iv_hv20.",
+            ],
+            "metricProposalRules": [
+                "Omit metricProposals unless the user explicitly asks to change metric presentation.",
+                "If metricProposals is included, every item must include metricId, proposedStatus, proposedExportable, and evaluatedDecision from the metric registry contract.",
+            ],
+        },
         "instructions": [
             "Return one study-plan-v1 JSON object only.",
             "Use only study ids, view ids, and route params from the provided contracts.",
+            f"Treat currentDate as {today}; explicit start/end params must not be in the future.",
+            "Do not include params that are not allowed for the selected study/view.",
+            "Do not include metricProposals unless the user explicitly requests metric presentation changes.",
             "Set requiresConfirmation to true.",
             "Do not include prose, markdown, comments, or unsupported metrics.",
             "If the intent is underspecified but can be safely mapped, choose conservative defaults.",
+            "If a safe mapping needs guessed optional params, omit those params instead.",
         ],
     }
 

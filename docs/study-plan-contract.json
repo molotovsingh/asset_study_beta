@@ -17,6 +17,7 @@
   ],
   "issueCodes": [
     "confirmation.required",
+    "date.future",
     "date.invalid",
     "date.partial",
     "date.range_invalid",
@@ -25,6 +26,7 @@
     "metric_proposals.invalid",
     "numeric.invalid",
     "param.unsupported",
+    "param.value_invalid",
     "params.invalid",
     "plan.not_object",
     "study.unknown",
@@ -113,12 +115,16 @@
     "u": {
       "label": "Universe",
       "type": "catalog-id",
+      "allowedValues": [
+        "us-liquid-10"
+      ],
       "description": "Options screener or validation universe id."
     },
     "bias": {
       "label": "Bias",
       "type": "enum",
       "allowedValues": [
+        "all",
         "rich",
         "cheap"
       ],
@@ -127,16 +133,45 @@
     "advice": {
       "label": "Advice Filter",
       "type": "catalog-id",
+      "allowedValues": [
+        "all",
+        "long-premium",
+        "short-premium",
+        "low-confidence",
+        "watch"
+      ],
       "description": "Options screener candidate/advice filter."
     },
     "preset": {
       "label": "Preset",
       "type": "catalog-id",
+      "allowedValues": [
+        "all",
+        "long-calendar",
+        "sell-vega",
+        "buy-gamma-vega",
+        "short-calendar"
+      ],
       "description": "Options trade idea preset id."
     },
     "sort": {
       "label": "Sort",
       "type": "catalog-id",
+      "allowedValues": [
+        "directionScore",
+        "ivHv20Ratio",
+        "ivHv60Ratio",
+        "straddleImpliedVolatility",
+        "ivPercentile",
+        "rvPercentile",
+        "vrp",
+        "termStructureSteepness",
+        "normalizedSkew",
+        "vrpRank",
+        "combinedOpenInterest",
+        "executionScore",
+        "confidenceScore"
+      ],
       "description": "Options screener sort key."
     },
     "group": {
