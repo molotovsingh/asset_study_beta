@@ -471,11 +471,13 @@ TRI bootstrap files are explicitly `proxy`, so long-term wealth studies can warn
 users instead of quietly treating price-only data as dividend-inclusive evidence.
 
 The product decision is now strict: TRI-labeled runs block unless the loaded
-data is true total-return data. `docs/planned-features/true-total-return-sourcing.md`
-keeps the remaining sourcing work explicit: approved sources, licensing posture,
+data is true total-return data. There is no approved true-TRI source configured
+today, so "TRI unavailable" is the correct product state. `docs/planned-features/true-total-return-sourcing.md`
+keeps the remaining sourcing work explicit: source approval, licensing posture,
 universe scope, stale-data tolerance, and whether blocked proxy datasets should
-remain discoverable. That document exists so the next code slice can wire a real
-source without smuggling data policy into the provider layer.
+remain discoverable. That document exists so a later code slice can wire a real
+source if one becomes available, without smuggling data policy into the provider
+layer.
 
 The follow-up hardening is `sourcePolicy`. `returnBasis` says what kind of
 returns the numbers actually support; `sourcePolicy` says what claim the product

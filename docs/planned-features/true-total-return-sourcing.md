@@ -6,11 +6,14 @@ The app now treats return basis as a first-class data contract: `price`, `total_
 
 The selected policy is **Strict True TRI**. TRI-labeled index-study runs are blocked unless the loaded data is approved true total-return data. Price and proxy datasets remain valid only when they are not presented as true TRI evidence.
 
+Product-owner update: there is currently **no approved true-TRI source** available to this repo. That means true-TRI support is intentionally unavailable for now. The app should keep blocking TRI-labeled runs instead of inventing a source, relabeling price data, scraping unapproved pages, or treating Yahoo price closes as dividend-inclusive returns.
+
 ## Current State
 
 - `returnBasis` is already exposed by synced index datasets.
 - `Price` datasets remain valid for price-return studies.
 - Current Nifty/Sensex TRI bootstrap datasets are marked as `proxy`, not `total_return`.
+- No approved true-TRI feed is configured.
 - Assistant explanation seeds and briefs preserve the warning text: price data used as a TRI proxy must not be treated as true total-return evidence.
 - The correct current behavior is to block TRI-labeled runs when only proxy data is available, not pretend the proxy is solved.
 
@@ -49,6 +52,8 @@ The next true-TRI implementation should add tests, not weaken these. In particul
 | Universe scope | Nifty 50/Sensex only is a different implementation problem from broad NSE sector and market-cap TRI coverage. |
 | Fallback behavior | Chosen: missing true TRI blocks TRI-labeled runs. It does not downgrade to proxy under the same label. |
 | Update cadence | Long-term return studies need reproducible data windows; stale TRI data must be visible. |
+
+Current resolution: the approved source list is empty. Until a source is approved, implementation work should harden blocking, disclosure, and source-policy metadata, not add ingestion for pseudo-TRI data.
 
 ## Candidate Policies Considered
 
@@ -95,8 +100,8 @@ Tradeoff:
 3. Current catalog entries are marked as `price_only` or `blocked_proxy_tri`.
 4. Source metadata fields now cover source name, license note, retrieval method, update cadence, and last verified date.
 5. Assistant explanation seeds, handoffs, and briefs now carry source policy explicitly and caveat `blocked_proxy_tri` runs.
-6. Add a true-TRI ingestion path for the approved source.
-7. Add fixture tests covering true TRI, stale approved sources, and missing source cases.
+6. Keep true-TRI ingestion blocked until an approved source exists.
+7. When a source exists, add a true-TRI ingestion path plus fixture tests covering approved true TRI, stale approved sources, and missing source cases.
 
 ## Non-Goals
 
@@ -110,7 +115,7 @@ Tradeoff:
 ## Product-Owner Questions
 
 1. Which first universe matters: Nifty 50/Sensex only, broad NSE indices, or all common user-entered Indian indices?
-2. Which source is approved for true total-return evidence?
+2. Which source is approved for true total-return evidence? Current answer: none.
 3. Can true TRI data be committed as repo snapshots, or must it stay local-only?
 4. What is the acceptable stale-data threshold for true TRI evidence?
 5. Should blocked proxy datasets remain discoverable with an explanation, or be hidden from normal selection?

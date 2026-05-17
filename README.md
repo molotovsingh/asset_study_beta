@@ -304,13 +304,14 @@ it does not shrink the stored universe.
 - The active-asset sidebar now supports remembered symbols, derived India sector
   indexes, and manual `Label | SYMBOL` entries, but it is still not a full
   market-security master.
-- `Nifty 50 TRI` and `S&P BSE Sensex TRI` currently use price index proxies from
+- There is currently no approved true-TRI source configured in this repo.
+  `Nifty 50 TRI` and `S&P BSE Sensex TRI` currently use price index proxies from
   Yahoo Finance, not true TRI series. They are marked `returnBasis: "proxy"` so
   TRI-labeled study runs are blocked until approved true total-return data is
-  wired in. Bundled datasets also carry `sourcePolicy` metadata such as
+  available. Bundled datasets also carry `sourcePolicy` metadata such as
   `price_only` or `blocked_proxy_tri` so exports, run history, and future
   assistant flows do not have to infer source claims from labels. The unresolved
-  source/licensing/universe policy is tracked in
+  source/licensing/universe implementation policy is tracked in
   [`docs/planned-features/true-total-return-sourcing.md`](docs/planned-features/true-total-return-sourcing.md).
 - Risk-free rate is entered manually for now, typically using an RBI reference.
 
