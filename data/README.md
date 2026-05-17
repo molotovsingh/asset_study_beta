@@ -49,6 +49,7 @@ Each snapshot records both the requested series type and the actual return
 basis. `returnBasis: "price"` means price-index history, `returnBasis:
 "total_return"` means true total-return history, and `returnBasis: "proxy"`
 means a total-return label is currently backed by price data. Current TRI-labeled
-bootstrap datasets are proxies until a licensed true TRI source is wired in. The
-open product decision is documented in
+bootstrap datasets are proxies and are blocked for TRI-labeled runs until a
+licensed true TRI source is wired in. The remaining source-approval decision is
+documented in
 `docs/planned-features/true-total-return-sourcing.md`.

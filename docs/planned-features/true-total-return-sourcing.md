@@ -4,7 +4,7 @@
 
 The app now treats return basis as a first-class data contract: `price`, `total_return`, or `proxy`. That protects users from quietly reading price-only data as dividend-inclusive evidence.
 
-The remaining decision is not a coding task. It is a product and data-source policy call: which true total-return index sources the app should trust, how licensing is handled, and what the app should do when true TRI is unavailable.
+The selected policy is **Strict True TRI**. TRI-labeled index-study runs are blocked unless the loaded data is approved true total-return data. Price and proxy datasets remain valid only when they are not presented as true TRI evidence.
 
 ## Current State
 
@@ -12,16 +12,17 @@ The remaining decision is not a coding task. It is a product and data-source pol
 - `Price` datasets remain valid for price-return studies.
 - Current Nifty/Sensex TRI bootstrap datasets are marked as `proxy`, not `total_return`.
 - Assistant explanation seeds and briefs preserve the warning text: price data used as a TRI proxy must not be treated as true total-return evidence.
-- The correct current behavior is to warn clearly, not pretend the proxy is solved.
+- The correct current behavior is to block TRI-labeled runs when only proxy data is available, not pretend the proxy is solved.
 
 ## Current Guardrails Already In Place
 
-These are not the final sourcing policy. They are the safety rails that prevent the app from overstating current evidence while the policy remains undecided.
+These are not the final source-approval policy. They are the safety rails that prevent the app from overstating current evidence while approved true total-return sourcing remains incomplete.
 
 | Guardrail | Where It Lives | What It Prevents |
 | --- | --- | --- |
 | Return-basis normalization | `app/studies/shared/returnBasis.js` | Price data cannot claim `total_return` when source and target series types differ. |
-| Index-study warning injection | `app/studies/shared/indexStudyPipeline.js` | Proxy datasets carry explicit warnings into study results. |
+| Strict TRI run block | `app/studies/shared/indexStudyPipeline.js` | TRI-labeled runs stop before study calculation when the loaded data is not true total-return data. |
+| Index-study warning injection | `app/studies/shared/indexStudyPipeline.js` | Non-blocking proxy contexts still carry explicit warnings into study results. |
 | Selection display caveat | `app/studies/shared/selectionSummaryView.js` | Users see the return-basis label and proxy warning near the selected asset. |
 | Durable warning ledger | `scripts/runtime_store_runs.py` | Warning messages are preserved and deduplicated when runs are written. |
 | Assistant explanation caveats | `app/studyBuilder/studyRunExplanation.js` and `app/studyBuilder/studyRunExplanationBrief.js` | Future assistant prose must repeat proxy warnings instead of converting them into conclusions. |
@@ -38,21 +39,19 @@ Regression coverage currently lives in:
 
 The next true-TRI implementation should add tests, not weaken these. In particular, any true source must prove why `returnBasis: "total_return"` is justified.
 
-## Decision Required
-
-The product owner needs to choose the app's true total-return policy before implementation continues.
+## Selected Decision
 
 | Decision | Why It Matters |
 | --- | --- |
 | Approved source list | Prevents ad hoc mixing of NSE files, Yahoo price series, manual CSVs, and scraped pages. |
 | Licensing posture | Determines whether data can be bundled in the repo, cached locally, or only loaded by the user's machine. |
-| Universe scope | Nifty 50/Sensex only is a different problem from broad NSE sector and market-cap TRI coverage. |
-| Fallback behavior | The app must know whether missing TRI should block a run, downgrade to proxy with warnings, or switch to price-only semantics. |
+| Universe scope | Nifty 50/Sensex only is a different implementation problem from broad NSE sector and market-cap TRI coverage. |
+| Fallback behavior | Chosen: missing true TRI blocks TRI-labeled runs. It does not downgrade to proxy under the same label. |
 | Update cadence | Long-term return studies need reproducible data windows; stale TRI data must be visible. |
 
-## Candidate Policies
+## Candidate Policies Considered
 
-### Policy A: Strict True TRI
+### Policy A: Strict True TRI - Selected
 
 Use only approved total-return sources for TRI-labeled datasets. If true TRI is unavailable, the app does not run that dataset as TRI.
 
@@ -88,37 +87,32 @@ Use when:
 Tradeoff:
 - catalog and UI become more complex
 
-## Recommended Direction
-
-The safest default is **Policy C: Dual Track**.
-
-It preserves current exploratory value without lying about evidence quality. It also gives the future assistant a clean rule: explain true TRI as total-return evidence, explain proxy as a caveated approximation, and never collapse the two.
-
 ## Implementation Slices After Decision
 
-1. Add a source-policy registry for index datasets.
-2. Mark each catalog entry as `approved_total_return`, `price_only`, or `proxy_allowed`.
-3. Add source metadata fields: source name, license note, retrieval method, update cadence, and last verified date.
-4. Add a true-TRI ingestion path for the approved source.
-5. Add validation that blocks TRI labeling when `returnBasis !== "total_return"` unless proxy mode is explicitly selected.
+1. Strict run blocking for TRI labels when `returnBasis !== "total_return"` is implemented.
+2. Add a source-policy registry for index datasets.
+3. Mark each catalog entry as `approved_total_return`, `price_only`, or `blocked_proxy_tri`.
+4. Add source metadata fields: source name, license note, retrieval method, update cadence, and last verified date.
+5. Add a true-TRI ingestion path for the approved source.
 6. Update exports and assistant briefs to include source policy and return-basis caveats.
-7. Add fixture tests covering true TRI, price-only, proxy, stale source, and missing source cases.
+7. Add fixture tests covering true TRI, price-only, blocked proxy, stale source, and missing source cases.
 
 ## Non-Goals
 
 - Do not scrape or bundle licensed data without a clear policy.
 - Do not silently replace true TRI with price data.
+- Do not run a TRI-labeled study from proxy data under the same label.
 - Do not broaden provider unification as part of this decision.
 - Do not treat Google Finance as a backend ingestion source unless a separate source-policy decision approves it.
 - Do not change options evidence work; this is an index-study data policy.
 
 ## Product-Owner Questions
 
-1. Should proxy TRI remain allowed for exploration, or should TRI-labeled studies block until true TRI exists?
-2. Which first universe matters: Nifty 50/Sensex only, broad NSE indices, or all common user-entered Indian indices?
+1. Which first universe matters: Nifty 50/Sensex only, broad NSE indices, or all common user-entered Indian indices?
+2. Which source is approved for true total-return evidence?
 3. Can true TRI data be committed as repo snapshots, or must it stay local-only?
 4. What is the acceptable stale-data threshold for true TRI evidence?
-5. Should the UI expose proxy datasets as separate selectable assets, or only as fallback warnings?
+5. Should blocked proxy datasets remain discoverable with an explanation, or be hidden from normal selection?
 
 ## Acceptance Bar
 

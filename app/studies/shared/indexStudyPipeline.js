@@ -4,6 +4,7 @@ import {
   appendSnapshotWarnings,
 } from "./overviewUtils.js";
 import {
+  buildStrictTotalReturnBlockMessage,
   buildReturnBasisWarning,
   isReturnBasisProxy,
 } from "./returnBasis.js";
@@ -45,6 +46,15 @@ async function prepareIndexStudySeries({
 
   appendCoverageWarnings(filteredSeries, start, end, warnings);
   appendSnapshotWarnings(snapshot, warnings);
+
+  const strictTotalReturnBlockMessage = buildStrictTotalReturnBlockMessage({
+    returnBasis: snapshot.returnBasis || selection.returnBasis,
+    targetSeriesType: selection.targetSeriesType || snapshot.targetSeriesType,
+    sourceSeriesType: snapshot.sourceSeriesType || selection.sourceSeriesType,
+  });
+  if (strictTotalReturnBlockMessage) {
+    throw new Error(strictTotalReturnBlockMessage);
+  }
 
   const returnBasisWarning = buildReturnBasisWarning({
     returnBasis: snapshot.returnBasis || selection.returnBasis,

@@ -10,6 +10,10 @@ function normalizeSeriesType(value) {
   return String(value || "").trim();
 }
 
+function isTotalReturnSeriesType(value) {
+  return TOTAL_RETURN_SERIES_TYPES.has(normalizeSeriesType(value).toLowerCase());
+}
+
 function normalizeReturnBasisValue(value) {
   return String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
@@ -78,11 +82,37 @@ function buildReturnBasisWarning({
   return `Loaded data is marked as a ${source} proxy for ${target}. Do not treat it as true total-return evidence.`;
 }
 
+function buildStrictTotalReturnBlockMessage({
+  returnBasis,
+  targetSeriesType,
+  sourceSeriesType,
+}) {
+  if (!isTotalReturnSeriesType(targetSeriesType)) {
+    return "";
+  }
+
+  const normalized = normalizeReturnBasis({
+    returnBasis,
+    targetSeriesType,
+    sourceSeriesType,
+  });
+  if (normalized === RETURN_BASIS.TOTAL_RETURN) {
+    return "";
+  }
+
+  const target = normalizeSeriesType(targetSeriesType) || "the requested series";
+  const source = normalizeSeriesType(sourceSeriesType) || "the loaded source";
+  const basisLabel = getReturnBasisLabel(normalized).toLowerCase();
+  return `Strict TRI policy requires approved true total-return data for ${target}. Loaded ${source} data is marked as ${basisLabel}, so this TRI-labeled run is blocked.`;
+}
+
 export {
   RETURN_BASIS,
+  buildStrictTotalReturnBlockMessage,
   buildReturnBasisWarning,
   deriveReturnBasis,
   getReturnBasisLabel,
+  isTotalReturnSeriesType,
   isReturnBasisProxy,
   normalizeReturnBasis,
 };

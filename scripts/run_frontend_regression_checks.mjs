@@ -57,9 +57,11 @@ import {
   renderSeasonalityInterpretation,
 } from "../app/studies/shared/interpretation.js";
 import {
+  buildStrictTotalReturnBlockMessage,
   buildReturnBasisWarning,
   normalizeReturnBasis,
 } from "../app/studies/shared/returnBasis.js";
+import { prepareIndexStudySeries } from "../app/studies/shared/indexStudyPipeline.js";
 import {
   buildAvailableStudyWindow,
   toInputDate,
@@ -1611,7 +1613,7 @@ function testInterpretationPanels() {
   console.log("ok interpretation panels");
 }
 
-function testReturnBasisPolicy() {
+async function testReturnBasisPolicy() {
   assert(
     normalizeReturnBasis({
       returnBasis: "total_return",
@@ -1635,6 +1637,77 @@ function testReturnBasisPolicy() {
       sourceSeriesType: "Price",
     }).includes("Do not treat it as true total-return evidence"),
     "proxy return-basis warnings should block total-return over-reading",
+  );
+  assert(
+    buildStrictTotalReturnBlockMessage({
+      returnBasis: "proxy",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "Price",
+    }).includes("TRI-labeled run is blocked"),
+    "strict TRI policy should block proxy total-return labels",
+  );
+
+  const proxySelection = {
+    label: "Nifty 50 TRI",
+    returnBasis: "proxy",
+    targetSeriesType: "TRI",
+    sourceSeriesType: "Price",
+  };
+  const trueTriSelection = {
+    label: "Approved TRI",
+    returnBasis: "total_return",
+    targetSeriesType: "TRI",
+    sourceSeriesType: "TRI",
+  };
+  const series = [
+    { date: new Date("2024-01-01"), value: 100 },
+    { date: new Date("2024-01-02"), value: 101 },
+  ];
+  let blockedMessage = "";
+  try {
+    await prepareIndexStudySeries({
+      selection: proxySelection,
+      start: new Date("2024-01-01"),
+      end: new Date("2024-01-02"),
+      warnings: [],
+      loadSelectionData: async () => ({
+        snapshot: {
+          symbol: "^NSEI",
+          returnBasis: "proxy",
+          targetSeriesType: "TRI",
+          sourceSeriesType: "Price",
+        },
+        series,
+      }),
+      applyLoadedSnapshot() {},
+    });
+  } catch (error) {
+    blockedMessage = error?.message || "";
+  }
+  assert(
+    blockedMessage.includes("Strict TRI policy requires approved true total-return data"),
+    "shared index-study pipeline should block proxy TRI runs",
+  );
+
+  const allowedPreparedSeries = await prepareIndexStudySeries({
+    selection: trueTriSelection,
+    start: new Date("2024-01-01"),
+    end: new Date("2024-01-02"),
+    warnings: [],
+    loadSelectionData: async () => ({
+      snapshot: {
+        symbol: "APPROVED_TRI",
+        returnBasis: "total_return",
+        targetSeriesType: "TRI",
+        sourceSeriesType: "TRI",
+      },
+      series,
+    }),
+    applyLoadedSnapshot() {},
+  });
+  assert(
+    allowedPreparedSeries.filteredSeries.length === 2,
+    "shared index-study pipeline should allow true total-return TRI runs",
   );
   console.log("ok return basis policy");
 }
@@ -3587,7 +3660,7 @@ async function main() {
   await testStudyKickerLabels();
   testShareableInputUrls();
   testInterpretationPanels();
-  testReturnBasisPolicy();
+  await testReturnBasisPolicy();
   await runRiskRegressionChecks();
   await runSeasonalityRegressionChecks();
   await runRelativeRegressionChecks();
