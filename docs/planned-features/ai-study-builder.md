@@ -205,7 +205,7 @@ Shared contract:
 
 ## Test Strategy
 
-The first implementation should be tested at the contract level:
+The implementation is tested at the contract level:
 
 - prompt-to-plan fixtures for common user intents
 - validator rejection tests for unknown studies and invalid views
@@ -213,15 +213,22 @@ The first implementation should be tested at the contract level:
 - short-window tests that preserve metric-policy warnings
 - route-handoff tests that prove the assistant uses the same app route model as manual study runs
 - no-AI unit tests for validation logic
+- a no-network live planner matrix harness in CI
+- an optional key-backed live planner matrix smoke for real model drift
 
 The planner can be probabilistic. The validator must not be.
 
+## Resolved Decisions
+
+- The first visible UI lives in the app-level settings route at `#settings/study-builder`, not in the sidebar or a modal.
+- The first acceptance target is now a small matrix across relative risk, rolling returns, options screener, SIP simulator, and seasonality intents rather than one hand-picked study.
+- Live planner testing remains non-executing: a model may draft StudyPlans, but it may not run studies or generate result prose.
+
 ## Open Questions
 
-- Should the first UI live in the sidebar, a command panel, or a dedicated route?
 - Should backend StudyPlan recipes eventually get sharing/export/import controls, or stay local-first settings records?
-- Which study should be the first acceptance target: Risk-Adjusted Return, Rolling Returns, or Lumpsum vs SIP?
 - How much result explanation should be allowed before the app has stronger provenance around every displayed metric?
+- Should the live model-backed draft flow become visible in the settings page, or remain a developer smoke until the result-explanation boundary is ready?
 
 ## Implementation Principle
 
