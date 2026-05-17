@@ -11,6 +11,7 @@ import {
   fetchStudyRunBrief,
   fetchStudyRuns,
   loadRememberedIndexCatalog,
+  liveDraftAssistantStudyPlan,
   recordStudyRunLedgerEntry,
   runAutomationNow,
   saveAutomationConfig,
@@ -808,6 +809,7 @@ function mountSettingsRoute(route) {
         draftStudyBuilderPlan,
         fetchAssistantReadiness,
         fetchStudyPlanRecipes,
+        liveDraftAssistantStudyPlan,
         saveStudyPlanRecipe,
         validateStudyBuilderPlan,
       });

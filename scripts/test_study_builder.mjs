@@ -1087,9 +1087,10 @@ function runStudyBuilderChecks() {
   });
   assert(
     validSettingsHtml.includes("Study Builder Preview") &&
-      validSettingsHtml.includes("Backend-owned deterministic harness") &&
+      validSettingsHtml.includes("Backend-owned harness") &&
+      validSettingsHtml.includes("Experimental: Live AI Draft") &&
       validSettingsHtml.includes("Intent Draft") &&
-      validSettingsHtml.includes("backend Study Builder endpoint") &&
+      validSettingsHtml.includes("Both paths stop at StudyPlan validation") &&
       validSettingsHtml.includes("Convert Route") &&
       validSettingsHtml.includes("Saved Recipes") &&
       validSettingsHtml.includes("Nifty 50 Risk Overview") &&
@@ -1099,6 +1100,30 @@ function runStudyBuilderChecks() {
       validSettingsHtml.includes("Go to route") &&
       validSettingsHtml.includes("Subject"),
     "study builder settings page should render intent drafting and a labeled confirmation preview",
+  );
+  const liveDraftSettingsHtml = renderStudyBuilderSettingsPage({
+    intentText: EXAMPLE_STUDY_INTENT,
+    routeHashText: EXAMPLE_STUDY_ROUTE_HASH,
+    planText: JSON.stringify(EXAMPLE_STUDY_PLAN, null, 2),
+    preview: validPreview,
+    liveDraftResult: {
+      provider: "openai",
+      model: "gpt-test",
+      modelResult: { responseId: "resp_test" },
+      validation: { ok: true },
+      preview: validPreview,
+      execution: { executed: false },
+    },
+    statusMessage: "Live AI drafted a valid non-executing StudyPlan.",
+  });
+  assert(
+    liveDraftSettingsHtml.includes("Experimental Live AI Draft") &&
+      liveDraftSettingsHtml.includes("gpt-test") &&
+      liveDraftSettingsHtml.includes("resp_test") &&
+      liveDraftSettingsHtml.includes("Validated by StudyPlan contract") &&
+      liveDraftSettingsHtml.includes("no study execution") &&
+      liveDraftSettingsHtml.includes("Valid Draft"),
+    "study builder settings page should render live AI draft metadata without implying execution",
   );
   const blockedSettingsHtml = renderStudyBuilderSettingsPage({
     intentText: "",

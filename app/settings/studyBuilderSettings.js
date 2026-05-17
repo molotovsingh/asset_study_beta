@@ -67,6 +67,13 @@ function getPlannerDraftStatusMessage(plannerResult, preview) {
   return "Drafted a route-safe StudyPlan. Review before route handoff.";
 }
 
+function getLiveDraftStatusMessage(payload) {
+  if (payload?.preview?.canRun) {
+    return "Live AI drafted a valid non-executing StudyPlan. Review before route handoff or save as a recipe.";
+  }
+  return "Live AI returned a StudyPlan draft, but deterministic validation blocked route handoff.";
+}
+
 function appendBackendFallbackNote(message, backendResult) {
   if (!backendResult?.usedFallback) {
     return message;
@@ -149,6 +156,15 @@ async function requestValidationPayload(controller, request) {
   }
 }
 
+async function requestLiveDraftPayload(controller, intent) {
+  if (typeof controller?.liveDraftAssistantStudyPlan !== "function") {
+    throw new Error(
+      "Experimental Live AI Draft requires the local backend /api/assistant/study-plan-live-draft endpoint.",
+    );
+  }
+  return controller.liveDraftAssistantStudyPlan({ intent });
+}
+
 function renderIssueList(title, issues) {
   if (!issues?.length) {
     return "";
@@ -172,6 +188,59 @@ function renderIssueList(title, issues) {
             `,
           )
           .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderLiveDraftResult(liveDraftResult) {
+  if (!liveDraftResult) {
+    return "";
+  }
+
+  if (liveDraftResult.errorMessage) {
+    return `
+      <div class="settings-detail-list">
+        <div class="settings-detail-item">
+          <div class="automation-item-head">
+            <div>
+              <p class="settings-detail-title">Live AI Draft Blocked</p>
+              <p class="summary-meta">${escapeHtml(liveDraftResult.errorMessage)}</p>
+            </div>
+            <div class="automation-pill-row">
+              <span class="automation-pill attention">Attention</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const validationOk = liveDraftResult.validation?.ok === true;
+  const canRun = liveDraftResult.preview?.canRun === true;
+  const executed = liveDraftResult.execution?.executed === true;
+  return `
+    <div class="settings-detail-list">
+      <div class="settings-detail-item">
+        <div class="automation-item-head">
+          <div>
+            <p class="settings-detail-title">Experimental Live AI Draft</p>
+            <p class="summary-meta">
+              ${escapeHtml(liveDraftResult.provider || "provider")} ·
+              ${escapeHtml(liveDraftResult.model || "model unknown")} ·
+              response ${escapeHtml(liveDraftResult.modelResult?.responseId || "n/a")}
+            </p>
+            <p class="summary-meta">
+              ${validationOk ? "Validated by StudyPlan contract" : "Blocked by StudyPlan contract"} ·
+              ${executed ? "execution violation" : "no study execution"}
+            </p>
+          </div>
+          <div class="automation-pill-row">
+            <span class="automation-pill ${canRun && !executed ? "ok" : "attention"}">
+              ${canRun && !executed ? "Valid Draft" : "Blocked"}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -382,6 +451,7 @@ function renderStudyBuilderSettingsPage({
   planText,
   preview,
   plannerResult = null,
+  liveDraftResult = null,
   recipes = [],
   recipeName = "",
   assistantReadiness = null,
@@ -395,7 +465,7 @@ function renderStudyBuilderSettingsPage({
           <p class="section-label">App Settings</p>
           <h2 class="settings-title">Study Builder Preview</h2>
           <p class="summary-meta settings-copy">
-            Backend-owned deterministic harness for future AI-generated study plans. No AI calls, no execution.
+            Backend-owned harness for future AI-generated study plans. Deterministic validation stays in charge; live AI draft is experimental and never executes studies.
           </p>
         </div>
         ${renderSettingsSectionNav("study-builder")}
@@ -409,7 +479,7 @@ function renderStudyBuilderSettingsPage({
             <div>
               <p class="meta-label">Intent Draft</p>
               <h3 class="settings-card-title">Describe the study request</h3>
-              <p class="summary-meta">This uses the backend Study Builder endpoint when available, with local contract fallback for offline review.</p>
+              <p class="summary-meta">Use deterministic drafting for keyless review, or explicitly request an experimental live AI draft from the backend. Both paths stop at StudyPlan validation.</p>
             </div>
           </div>
           <form id="settings-study-builder-intent-form" class="automation-form">
@@ -422,9 +492,11 @@ function renderStudyBuilderSettingsPage({
             >${escapeHtml(intentText)}</textarea>
             <div class="automation-actions">
               <button class="button" type="submit">Draft StudyPlan</button>
+              <button class="button secondary" type="button" id="settings-study-builder-live-draft">Experimental: Live AI Draft</button>
               <button class="button secondary" type="button" id="settings-study-builder-intent-example">Load Intent Example</button>
             </div>
           </form>
+          ${renderLiveDraftResult(liveDraftResult)}
           ${
             plannerResult
               ? `
@@ -527,6 +599,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
   let planText = formatJson(EXAMPLE_STUDY_PLAN);
   let preview = null;
   let plannerResult = null;
+  let liveDraftResult = null;
   let recipes = loadLocalStudyPlanRecipes();
   let recipeName = "";
   let assistantReadiness = null;
@@ -544,6 +617,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
       planText,
       preview,
       plannerResult,
+      liveDraftResult,
       recipes,
       recipeName,
       assistantReadiness,
@@ -729,6 +803,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
         backendResult,
       );
       plannerResult = null;
+      liveDraftResult = null;
       render();
       return;
     }
@@ -742,6 +817,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
         return;
       }
       plannerResult = backendResult.payload.plannerResult;
+      liveDraftResult = null;
       planText = formatJson(backendResult.payload.plan);
       preview = backendResult.payload.preview;
       statusMessage = appendBackendFallbackNote(
@@ -758,14 +834,52 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
     }
     event.preventDefault();
     planText = root.querySelector("#settings-study-builder-json")?.value || "";
+    liveDraftResult = null;
     await validateCurrentPlan();
     render();
   }
 
   async function handleClick(event) {
+    if (event.target.closest("#settings-study-builder-live-draft")) {
+      intentText = root.querySelector("#settings-study-builder-intent")?.value || "";
+      if (!intentText.trim()) {
+        liveDraftResult = {
+          errorMessage: "Enter a research intent before requesting an experimental live AI draft.",
+        };
+        statusMessage = liveDraftResult.errorMessage;
+        render();
+        return;
+      }
+      plannerResult = null;
+      liveDraftResult = null;
+      statusMessage = "Requesting experimental Live AI Draft from the local backend...";
+      render();
+      try {
+        const payload = await requestLiveDraftPayload(controller, intentText);
+        if (!isMounted) {
+          return;
+        }
+        liveDraftResult = payload;
+        planText = formatJson(payload.plan);
+        preview = payload.preview;
+        statusMessage = getLiveDraftStatusMessage(payload);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        liveDraftResult = {
+          errorMessage: error?.message || "Experimental Live AI Draft failed.",
+        };
+        statusMessage = liveDraftResult.errorMessage;
+      }
+      render();
+      return;
+    }
+
     if (event.target.closest("#settings-study-builder-intent-example")) {
       intentText = EXAMPLE_STUDY_INTENT;
       plannerResult = null;
+      liveDraftResult = null;
       statusMessage = "Loaded an example research intent.";
       render();
       return;
@@ -773,6 +887,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
 
     if (event.target.closest("#settings-study-builder-route-example")) {
       routeHashText = EXAMPLE_STUDY_ROUTE_HASH;
+      liveDraftResult = null;
       statusMessage = "Loaded an example study route hash.";
       render();
       return;
@@ -787,6 +902,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
         preview = buildStudyPlanConfirmationPreview(recipe.plan);
         recipeName = recipe.name;
         plannerResult = null;
+        liveDraftResult = null;
         statusMessage = "Loaded saved StudyPlan recipe.";
         render();
       }
@@ -816,6 +932,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
     if (event.target.closest("#settings-study-builder-example")) {
       planText = formatJson(EXAMPLE_STUDY_PLAN);
       preview = null;
+      liveDraftResult = null;
       statusMessage = "Loaded an example study-plan-v1 payload.";
       render();
       return;
@@ -824,6 +941,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
     if (event.target.closest("#settings-study-builder-clear")) {
       planText = "";
       preview = null;
+      liveDraftResult = null;
       statusMessage = "";
       render();
       return;

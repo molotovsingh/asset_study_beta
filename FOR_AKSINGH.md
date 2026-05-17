@@ -517,6 +517,16 @@ It reruns the observed live-AI intent set and fails if the model draft is
 invalid, unrunnable, accidentally executed, or missing expected canonical route
 fragments such as `sort=ivHv20Ratio`.
 
+That live boundary is now visible in the app, but deliberately not casual. In
+`#settings/study-builder`, the user has to press `Experimental: Live AI Draft`.
+The button calls the backend live-draft endpoint only when the local server has a
+model key configured. The response fills the same StudyPlan JSON box and the same
+deterministic confirmation preview. The page also shows provider/model/response
+metadata and repeats the key safety fact: no study execution happened. If the
+draft is valid, it can be saved as a recipe through the existing recipe path; if
+it is invalid, it remains a visible blocked draft instead of becoming a saved
+template.
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:
