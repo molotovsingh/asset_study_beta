@@ -8,7 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sync_yfinance import build_yahoo_quote_url, normalize_dataset_id
+from sync_yfinance import (
+    build_yahoo_quote_url,
+    normalize_dataset_id,
+    normalize_source_policy,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,6 +49,21 @@ def parse_args() -> argparse.Namespace:
         help="Source URL shown in the app. Defaults to the Yahoo quote page for the symbol.",
     )
     parser.add_argument("--note", help="Optional note attached to the synced dataset.")
+    parser.add_argument(
+        "--source-policy",
+        help=(
+            "Source policy: price_only, blocked_proxy_tri, or "
+            "approved_total_return. True total-return datasets must set this explicitly."
+        ),
+    )
+    parser.add_argument("--source-name", help="Human source name for this dataset.")
+    parser.add_argument("--license-note", help="License/provenance note for this dataset.")
+    parser.add_argument("--retrieval-method", help="How this dataset is retrieved.")
+    parser.add_argument("--update-cadence", help="Expected refresh cadence for this dataset.")
+    parser.add_argument(
+        "--last-verified-date",
+        help="YYYY-MM-DD date when source policy/provenance was last verified.",
+    )
     parser.add_argument(
         "--config-path",
         default="data/config/yfinance-datasets.json",
@@ -124,7 +143,16 @@ def main() -> int:
 
     config = load_config(config_path)
     dataset_id = normalize_dataset_id(args.dataset_id or args.label)
-    source_series_type = args.source_series_type or args.target_series_type
+    target_series_type = args.target_series_type.strip() or "Price"
+    source_series_type = (
+        args.source_series_type or target_series_type
+    ).strip() or target_series_type
+    source_policy = normalize_source_policy(
+        args.source_policy,
+        return_basis=None,
+        target_series_type=target_series_type,
+        source_series_type=source_series_type,
+    )
 
     for dataset in config["datasets"]:
         if dataset.get("datasetId") == dataset_id:
@@ -134,13 +162,23 @@ def main() -> int:
         "datasetId": dataset_id,
         "label": args.label.strip(),
         "symbol": args.symbol.strip(),
-        "targetSeriesType": args.target_series_type.strip() or "Price",
-        "sourceSeriesType": source_series_type.strip() or args.target_series_type.strip() or "Price",
+        "targetSeriesType": target_series_type,
+        "sourceSeriesType": source_series_type,
+        "sourcePolicy": source_policy,
         "providerName": args.provider_name.strip() or "Yahoo Finance",
         "family": args.family.strip() or "Custom",
         "sourceUrl": (args.source_url or build_yahoo_quote_url(args.symbol.strip())).strip(),
         "note": args.note.strip() if args.note else None,
     }
+    for key, value in [
+        ("sourceName", args.source_name),
+        ("licenseNote", args.license_note),
+        ("retrievalMethod", args.retrieval_method),
+        ("updateCadence", args.update_cadence),
+        ("lastVerifiedDate", args.last_verified_date),
+    ]:
+        if value:
+            entry[key] = value.strip()
     config["datasets"].append(entry)
     config["datasets"] = sorted(config["datasets"], key=lambda item: item["datasetId"])
 

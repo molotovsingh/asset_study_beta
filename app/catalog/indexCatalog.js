@@ -1,5 +1,24 @@
 import { sectorMarketCatalog } from "./sectorSnapshotCatalog.js";
 
+const yfinanceCloseSourceMetadata = {
+  sourceName: "Yahoo Finance via yfinance",
+  retrievalMethod: "Bundled snapshot when present; local backend yfinance daily Close otherwise",
+  updateCadence: "Bundled snapshots refresh manually; backend fetches on demand",
+  lastVerifiedDate: "2026-05-17",
+};
+
+const priceOnlySourcePolicy = {
+  sourcePolicy: "price_only",
+  licenseNote: "Local yfinance data; price-return evidence only.",
+  ...yfinanceCloseSourceMetadata,
+};
+
+const blockedProxyTriSourcePolicy = {
+  sourcePolicy: "blocked_proxy_tri",
+  licenseNote: "Local yfinance data; not an approved true total-return feed.",
+  ...yfinanceCloseSourceMetadata,
+};
+
 const baseIndexCatalog = [
   {
     id: "nifty-50",
@@ -17,6 +36,7 @@ const baseIndexCatalog = [
       symbol: "^NSEI",
       sourceSeriesType: "Price",
       returnBasis: "price",
+      ...priceOnlySourcePolicy,
     },
   },
   {
@@ -35,6 +55,7 @@ const baseIndexCatalog = [
       symbol: "^NSEI",
       sourceSeriesType: "Price",
       returnBasis: "proxy",
+      ...blockedProxyTriSourcePolicy,
       note: "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
     },
   },
@@ -77,6 +98,7 @@ const baseIndexCatalog = [
       symbol: "^NSEBANK",
       sourceSeriesType: "Price",
       returnBasis: "price",
+      ...priceOnlySourcePolicy,
     },
   },
   {
@@ -154,6 +176,7 @@ const baseIndexCatalog = [
       symbol: "^BSESN",
       sourceSeriesType: "Price",
       returnBasis: "price",
+      ...priceOnlySourcePolicy,
     },
   },
   {
@@ -172,6 +195,7 @@ const baseIndexCatalog = [
       symbol: "^BSESN",
       sourceSeriesType: "Price",
       returnBasis: "proxy",
+      ...blockedProxyTriSourcePolicy,
       note: "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
     },
   },

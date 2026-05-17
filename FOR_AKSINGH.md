@@ -477,6 +477,14 @@ universe scope, stale-data tolerance, and whether blocked proxy datasets should
 remain discoverable. That document exists so the next code slice can wire a real
 source without smuggling data policy into the provider layer.
 
+The follow-up hardening is `sourcePolicy`. `returnBasis` says what kind of
+returns the numbers actually support; `sourcePolicy` says what claim the product
+allows that source to make. A price snapshot is `price_only`. A TRI label backed
+by price closes is `blocked_proxy_tri`. A future real TRI feed must earn
+`approved_total_return`. That extra field sounds bureaucratic, but it is exactly
+the kind of boring metadata that prevents a future AI assistant from hallucinating
+source approval because a label contains the letters "TRI".
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:

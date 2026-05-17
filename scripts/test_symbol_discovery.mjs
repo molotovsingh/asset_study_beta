@@ -61,6 +61,10 @@ function testBuiltInDiscovery() {
     compactNifty[0].returnBasis === "price",
     "price-index suggestions should expose price return basis",
   );
+  assert(
+    compactNifty[0].sourcePolicy === "price_only",
+    "price-index suggestions should expose price-only source policy",
+  );
 
   const niftyTri = discoverSelectionSuggestions("nifty50 tri", suggestions, {
     limit: 5,
@@ -69,6 +73,10 @@ function testBuiltInDiscovery() {
   assert(
     niftyTri[0].returnBasis === "proxy",
     "TRI proxy suggestions should expose proxy return basis",
+  );
+  assert(
+    niftyTri[0].sourcePolicy === "blocked_proxy_tri",
+    "TRI proxy suggestions should expose blocked proxy source policy",
   );
 
   const broad500 = discoverSelectionSuggestions("nifty 500", suggestions, {

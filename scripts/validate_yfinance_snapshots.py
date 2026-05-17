@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sync_yfinance import load_all_datasets
 from sync_yfinance import normalize_return_basis
+from sync_yfinance import normalize_source_policy
 
 
 def parse_args() -> argparse.Namespace:
@@ -103,6 +104,36 @@ def validate_snapshot(snapshot_path: Path, config, manifest_entry: dict) -> None
         snapshot.get("returnBasis") == expected_return_basis,
         f"{dataset_id}: snapshot returnBasis mismatch",
     )
+    expected_source_policy = normalize_source_policy(
+        config.source_policy,
+        return_basis=config.return_basis,
+        target_series_type=config.target_series_type,
+        source_series_type=config.source_series_type,
+    )
+    expect(
+        snapshot.get("sourcePolicy") == expected_source_policy,
+        f"{dataset_id}: snapshot sourcePolicy mismatch",
+    )
+    expect(
+        snapshot.get("sourceName") == config.source_name,
+        f"{dataset_id}: snapshot sourceName mismatch",
+    )
+    expect(
+        snapshot.get("licenseNote") == config.license_note,
+        f"{dataset_id}: snapshot licenseNote mismatch",
+    )
+    expect(
+        snapshot.get("retrievalMethod") == config.retrieval_method,
+        f"{dataset_id}: snapshot retrievalMethod mismatch",
+    )
+    expect(
+        snapshot.get("updateCadence") == config.update_cadence,
+        f"{dataset_id}: snapshot updateCadence mismatch",
+    )
+    expect(
+        snapshot.get("lastVerifiedDate") == config.last_verified_date,
+        f"{dataset_id}: snapshot lastVerifiedDate mismatch",
+    )
     expect(snapshot.get("note") == config.note, f"{dataset_id}: snapshot note mismatch")
     expect(
         snapshot.get("providerName") == config.provider_name,
@@ -143,6 +174,18 @@ def validate_snapshot(snapshot_path: Path, config, manifest_entry: dict) -> None
         manifest_entry.get("returnBasis") == snapshot.get("returnBasis"),
         f"{dataset_id}: manifest returnBasis mismatch",
     )
+    for metadata_key in [
+        "sourcePolicy",
+        "sourceName",
+        "licenseNote",
+        "retrievalMethod",
+        "updateCadence",
+        "lastVerifiedDate",
+    ]:
+        expect(
+            manifest_entry.get(metadata_key) == snapshot.get(metadata_key),
+            f"{dataset_id}: manifest {metadata_key} mismatch",
+        )
     expect(
         manifest_entry.get("providerName") == snapshot.get("providerName"),
         f"{dataset_id}: manifest providerName mismatch",

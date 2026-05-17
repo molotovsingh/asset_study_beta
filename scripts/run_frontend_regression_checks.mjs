@@ -59,7 +59,9 @@ import {
 import {
   buildStrictTotalReturnBlockMessage,
   buildReturnBasisWarning,
+  getSourcePolicyLabel,
   normalizeReturnBasis,
+  normalizeSourcePolicy,
 } from "../app/studies/shared/returnBasis.js";
 import { prepareIndexStudySeries } from "../app/studies/shared/indexStudyPipeline.js";
 import {
@@ -1646,6 +1648,35 @@ async function testReturnBasisPolicy() {
     }).includes("TRI-labeled run is blocked"),
     "strict TRI policy should block proxy total-return labels",
   );
+  assert(
+    normalizeSourcePolicy({
+      returnBasis: "proxy",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "Price",
+    }) === "blocked_proxy_tri",
+    "frontend source policy should derive blocked_proxy_tri for proxy TRI datasets",
+  );
+  assert(
+    normalizeSourcePolicy({
+      returnBasis: "total_return",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "TRI",
+    }) === "",
+    "frontend source policy should not infer approved total-return status",
+  );
+  assert(
+    normalizeSourcePolicy({
+      sourcePolicy: "approved_total_return",
+      returnBasis: "proxy",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "Price",
+    }) === "",
+    "frontend source policy should not display inconsistent approval metadata",
+  );
+  assert(
+    getSourcePolicyLabel("blocked_proxy_tri") === "Blocked proxy TRI",
+    "frontend source policy labels should be user-readable",
+  );
 
   const proxySelection = {
     label: "Nifty 50 TRI",
@@ -2588,6 +2619,9 @@ function buildSelection(snapshot, currency = "INR") {
     targetSeriesType: snapshot.targetSeriesType,
     sourceSeriesType: snapshot.sourceSeriesType,
     returnBasis: snapshot.returnBasis,
+    sourcePolicy: snapshot.sourcePolicy,
+    sourceName: snapshot.sourceName,
+    licenseNote: snapshot.licenseNote,
     currency,
   };
 }
@@ -3637,6 +3671,10 @@ async function runExportRegressionChecks() {
   assert(
     workbookXml.includes("Return Basis") && workbookXml.includes("price"),
     "risk-adjusted workbook should include the selection return basis",
+  );
+  assert(
+    workbookXml.includes("Source Policy") && workbookXml.includes("price_only"),
+    "risk-adjusted workbook should include the selection source policy",
   );
   assert(
     workbookXml.includes("Period Risk-Free Log Return"),

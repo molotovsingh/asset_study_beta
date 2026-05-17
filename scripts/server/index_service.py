@@ -564,6 +564,26 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
     source_url = (request.get("sourceUrl") or build_symbol_source_url(symbol)).strip()
     note = request.get("note")
     note = str(note).strip() if note else None
+    source_policy = (
+        request.get("sourcePolicy") or raw_snapshot.get("sourcePolicy") or ""
+    )
+    source_policy = str(source_policy).strip() or None
+    source_name = request.get("sourceName") or raw_snapshot.get("sourceName")
+    source_name = str(source_name).strip() if source_name else None
+    license_note = request.get("licenseNote") or raw_snapshot.get("licenseNote")
+    license_note = str(license_note).strip() if license_note else None
+    retrieval_method = (
+        request.get("retrievalMethod") or raw_snapshot.get("retrievalMethod")
+    )
+    retrieval_method = str(retrieval_method).strip() if retrieval_method else None
+    update_cadence = request.get("updateCadence") or raw_snapshot.get("updateCadence")
+    update_cadence = str(update_cadence).strip() if update_cadence else None
+    last_verified_date = (
+        request.get("lastVerifiedDate") or raw_snapshot.get("lastVerifiedDate")
+    )
+    last_verified_date = (
+        str(last_verified_date).strip() if last_verified_date else None
+    )
     dataset_id = (
         request.get("datasetId")
         or raw_snapshot.get("cacheKey")
@@ -582,6 +602,12 @@ def build_response_snapshot(raw_snapshot: dict, request: dict, cache_status: str
         "targetSeriesType": target_series_type,
         "sourceSeriesType": source_series_type,
         "returnBasis": return_basis,
+        "sourcePolicy": source_policy,
+        "sourceName": source_name,
+        "licenseNote": license_note,
+        "retrievalMethod": retrieval_method,
+        "updateCadence": update_cadence,
+        "lastVerifiedDate": last_verified_date,
         "providerName": provider_name,
         "family": family,
         "sourceUrl": source_url,

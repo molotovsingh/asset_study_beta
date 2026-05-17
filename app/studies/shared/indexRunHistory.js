@@ -225,6 +225,12 @@ function buildIndexProviderSummary(studyRun) {
     targetSeriesType: selection.targetSeriesType || null,
     sourceSeriesType: selection.sourceSeriesType || null,
     returnBasis: selection.returnBasis || null,
+    sourcePolicy: selection.sourcePolicy || null,
+    sourceName: selection.sourceName || null,
+    licenseNote: selection.licenseNote || null,
+    retrievalMethod: selection.retrievalMethod || null,
+    updateCadence: selection.updateCadence || null,
+    lastVerifiedDate: selection.lastVerifiedDate || null,
   };
 }
 
