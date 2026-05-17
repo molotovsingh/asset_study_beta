@@ -476,6 +476,16 @@ def test_warning_and_clipped_run_requires_caveats():
                         "valueKind": "percent",
                     }
                 ],
+                "providerSummary": {
+                    "primaryProviderName": "Yahoo Finance",
+                    "symbol": "^NSEI",
+                    "targetSeriesType": "TRI",
+                    "sourceSeriesType": "Price",
+                    "returnBasis": "price_proxy",
+                    "sourcePolicy": "blocked_proxy_tri",
+                    "sourceName": "Yahoo Finance Close via yfinance",
+                    "licenseNote": "Price-only proxy data cannot be used as approved TRI evidence.",
+                },
                 "completedAt": "2026-05-15T11:30:00+00:00",
             }
         )
@@ -493,6 +503,15 @@ def test_warning_and_clipped_run_requires_caveats():
         assert_true(
             "metric.short_window_annualized" in caveat_codes,
             "short-window annualized metrics should be mandatory caveats",
+        )
+        assert_true(
+            "source_policy.blocked_proxy_tri" in caveat_codes,
+            "blocked proxy TRI source policy should be a mandatory caveat",
+        )
+        assert_equal(
+            payload["explanationBrief"]["sourcePolicy"]["sourcePolicy"],
+            "blocked_proxy_tri",
+            "assistant brief should expose source policy as first-class evidence",
         )
         warning_caveat = next(
             item

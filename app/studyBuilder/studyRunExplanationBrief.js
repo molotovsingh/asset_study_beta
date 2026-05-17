@@ -99,6 +99,7 @@ function buildBlockedBrief(issues) {
       links: [],
       dataSnapshotRefs: [],
     },
+    sourcePolicy: null,
     issues: normalizedIssues,
   };
 }
@@ -132,6 +133,9 @@ function buildStudyRunExplanationBriefFromHandoff(handoff) {
   const seed = isPlainObject(handoff.explanationSeed) ? handoff.explanationSeed : {};
   const run = isPlainObject(seed.run) ? seed.run : {};
   const evidence = isPlainObject(seed.evidence) ? seed.evidence : {};
+  const sourcePolicy = isPlainObject(seed.sourcePolicy)
+    ? cloneJson(seed.sourcePolicy)
+    : null;
   const replay = isPlainObject(handoff.replayStudyPlan) ? handoff.replayStudyPlan : {};
   const caveats = normalizeIssues(seed.caveats);
   const canExplainResult = Boolean(handoff.readyForResultExplanation && seed.canExplain);
@@ -200,6 +204,7 @@ function buildStudyRunExplanationBriefFromHandoff(handoff) {
     prohibitedClaims: [
       "Do not add unsupported causes, predictions, or trading advice.",
       "Do not hide clipped windows, warnings, missing evidence, or short-window annualization caveats.",
+      "Do not upgrade blocked proxy TRI or missing source policy into approved total-return evidence.",
       "Do not offer replay as one-click safe unless replay.canReplay is true.",
     ],
     replay: {
@@ -220,6 +225,7 @@ function buildStudyRunExplanationBriefFromHandoff(handoff) {
         ? cloneJson(evidence.dataSnapshotRefs)
         : [],
     },
+    sourcePolicy,
     issues,
   };
 }
@@ -264,6 +270,7 @@ function getStudyRunExplanationBriefContractManifest() {
       "prohibitedClaims",
       "replay",
       "sourceEvidence",
+      "sourcePolicy",
       "issues",
     ],
     modes: Object.values(STUDY_RUN_EXPLANATION_BRIEF_MODES),
@@ -279,6 +286,7 @@ function getStudyRunExplanationBriefContractManifest() {
       "The brief must be derived from a study-run handoff, not from visible UI text.",
       "Result conclusions are allowed only when resultConclusionAllowed is true.",
       "Every required caveat must be included in generated assistant prose.",
+      "Source-policy facts must be carried from the explanation seed and must not be inferred from UI text.",
       "Replay can be offered only through replay.normalizedPlan when replay.canReplay is true.",
       "The brief is a permission envelope; it is not trading advice.",
     ],

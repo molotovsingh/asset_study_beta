@@ -94,8 +94,8 @@ Tradeoff:
 2. Source-policy metadata for bundled yfinance datasets is implemented.
 3. Current catalog entries are marked as `price_only` or `blocked_proxy_tri`.
 4. Source metadata fields now cover source name, license note, retrieval method, update cadence, and last verified date.
-5. Add a true-TRI ingestion path for the approved source.
-6. Update assistant briefs to include source policy and return-basis caveats explicitly.
+5. Assistant explanation seeds, handoffs, and briefs now carry source policy explicitly and caveat `blocked_proxy_tri` runs.
+6. Add a true-TRI ingestion path for the approved source.
 7. Add fixture tests covering true TRI, stale approved sources, and missing source cases.
 
 ## Non-Goals
