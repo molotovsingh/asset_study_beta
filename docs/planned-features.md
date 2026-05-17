@@ -10,7 +10,7 @@ The rule for this repo is simple: if a future feature matters, it should have a 
 | --- | --- | --- | --- |
 | AI Study Builder | Planned | [AI Study Builder](planned-features/ai-study-builder.md) | Lets users describe the study they want in natural language while keeping the app's deterministic study engine, metric policy, and data-window validation in control. |
 | Agentic Study Factory | Read-only proposal slice implemented | [Agentic Study Factory](planned-features/agentic-study-factory.md) | Evaluates whether a new study idea has existing-study coverage, approved tools, evidence requirements, and caveats before code, data fetching, or conclusions exist. |
-| True Total-Return Sourcing | Strict policy + source metadata implemented; source approval pending | [True Total-Return Sourcing](planned-features/true-total-return-sourcing.md) | Blocks TRI-labeled runs until approved true total-return evidence exists, and exposes source-policy metadata while the remaining source/licensing/universe decisions stay explicit. |
+| True Total-Return Sourcing | Strict policy + source metadata implemented; no approved source configured | [True Total-Return Sourcing](planned-features/true-total-return-sourcing.md) | Blocks TRI-labeled runs until approved true total-return evidence exists, and exposes source-policy metadata while true-TRI ingestion remains intentionally unavailable. |
 
 ## Parked Vision Tracks
 
