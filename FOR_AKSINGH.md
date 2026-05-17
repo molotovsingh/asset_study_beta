@@ -470,12 +470,12 @@ the difference between a bottle label and the lab test. The current Nifty/Sensex
 TRI bootstrap files are explicitly `proxy`, so long-term wealth studies can warn
 users instead of quietly treating price-only data as dividend-inclusive evidence.
 
-The next move is intentionally parked as a product-owner decision, not a hidden
-engineering assumption. `docs/planned-features/true-total-return-sourcing.md`
-spells out the decision packet: approved sources, licensing posture, universe
-scope, fallback behavior, stale-data tolerance, and whether proxy datasets should
-remain selectable. That document exists so the next code slice can implement a
-chosen policy rather than smuggling one into the provider layer.
+The product decision is now strict: TRI-labeled runs block unless the loaded
+data is true total-return data. `docs/planned-features/true-total-return-sourcing.md`
+keeps the remaining sourcing work explicit: approved sources, licensing posture,
+universe scope, stale-data tolerance, and whether blocked proxy datasets should
+remain discoverable. That document exists so the next code slice can wire a real
+source without smuggling data policy into the provider layer.
 
 ## The Most Important Architectural Lesson
 
