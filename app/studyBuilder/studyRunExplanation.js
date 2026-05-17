@@ -17,6 +17,7 @@ const STUDY_RUN_EXPLANATION_ISSUE_CODES = Object.freeze({
   SUMMARY_MISSING: "summary.missing",
   EVIDENCE_LINKS_MISSING: "evidence_links.missing",
   SNAPSHOT_REFS_MISSING: "snapshot_refs.missing",
+  SOURCE_POLICY_BLOCKED_PROXY_TRI: "source_policy.blocked_proxy_tri",
   SHORT_WINDOW_ANNUALIZED: "metric.short_window_annualized",
 });
 
@@ -67,6 +68,15 @@ const STUDY_RUN_EXPLANATION_EXAMPLE_RUNS = Object.freeze([
       dataSnapshotRefs: Object.freeze([
         Object.freeze({ kind: "cache-series", symbol: "NIFTY50" }),
       ]),
+      providerSummary: Object.freeze({
+        primaryProviderName: "Yahoo Finance",
+        symbol: "^NSEI",
+        targetSeriesType: "Price",
+        sourceSeriesType: "Price",
+        returnBasis: "price",
+        sourcePolicy: "price_only",
+        sourceName: "Yahoo Finance Close via yfinance",
+      }),
       completedAt: "2026-05-15T10:00:00+00:00",
     }),
   }),
@@ -110,6 +120,16 @@ const STUDY_RUN_EXPLANATION_EXAMPLE_RUNS = Object.freeze([
       dataSnapshotRefs: Object.freeze([
         Object.freeze({ kind: "cache-series", symbol: "NIFTY50" }),
       ]),
+      providerSummary: Object.freeze({
+        primaryProviderName: "Yahoo Finance",
+        symbol: "^NSEI",
+        targetSeriesType: "TRI",
+        sourceSeriesType: "Price",
+        returnBasis: "price_proxy",
+        sourcePolicy: "blocked_proxy_tri",
+        sourceName: "Yahoo Finance Close via yfinance",
+        licenseNote: "Price-only proxy data cannot be used as approved TRI evidence.",
+      }),
       completedAt: "2026-05-15T10:00:00+00:00",
     }),
   }),
@@ -229,6 +249,45 @@ function normalizeSnapshotRefs(refs) {
   return (Array.isArray(refs) ? refs : []).filter(isPlainObject);
 }
 
+function sourcePolicyLabel(sourcePolicy) {
+  switch (cleanText(sourcePolicy).toLowerCase()) {
+    case "price_only":
+      return "Price only";
+    case "approved_total_return":
+      return "Approved total return";
+    case "blocked_proxy_tri":
+      return "Blocked proxy TRI";
+    default:
+      return cleanText(sourcePolicy) || null;
+  }
+}
+
+function normalizeSourcePolicySummary(run) {
+  const providerSummary = isPlainObject(run?.providerSummary) ? run.providerSummary : {};
+  const sourcePolicy = cleanText(providerSummary.sourcePolicy).toLowerCase();
+  const fields = {
+    sourcePolicy,
+    sourcePolicyLabel: sourcePolicyLabel(sourcePolicy),
+    sourceName: cleanText(providerSummary.sourceName),
+    licenseNote: cleanText(providerSummary.licenseNote),
+    retrievalMethod: cleanText(providerSummary.retrievalMethod),
+    updateCadence: cleanText(providerSummary.updateCadence),
+    lastVerifiedDate: cleanText(providerSummary.lastVerifiedDate),
+    primaryProviderName: cleanText(providerSummary.primaryProviderName),
+    symbol: cleanText(providerSummary.symbol),
+    targetSeriesType: cleanText(providerSummary.targetSeriesType),
+    sourceSeriesType: cleanText(providerSummary.sourceSeriesType),
+    returnBasis: cleanText(providerSummary.returnBasis),
+  };
+  const hasAnySourcePolicyField = Object.values(fields).some(Boolean);
+  if (!hasAnySourcePolicyField) {
+    return null;
+  }
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [key, value || null]),
+  );
+}
+
 function normalizeWarningMessages(run) {
   const resolvedParams = isPlainObject(run?.resolvedParams) ? run.resolvedParams : {};
   const seen = new Set();
@@ -331,10 +390,42 @@ function buildRunSummary(run) {
   };
 }
 
-function buildExplanationBullets({ runSummary, window, summaryItems, evidence }) {
+function buildSourcePolicyBullet(sourcePolicy) {
+  if (!sourcePolicy) {
+    return "";
+  }
+  const parts = [
+    `Source policy: ${sourcePolicy.sourcePolicyLabel || sourcePolicy.sourcePolicy || "n/a"}`,
+  ];
+  if (sourcePolicy.sourceName) {
+    parts.push(sourcePolicy.sourceName);
+  } else if (sourcePolicy.primaryProviderName) {
+    parts.push(sourcePolicy.primaryProviderName);
+  }
+  if (sourcePolicy.returnBasis) {
+    parts.push(`return basis ${sourcePolicy.returnBasis}`);
+  }
+  if (sourcePolicy.sourceSeriesType && sourcePolicy.targetSeriesType) {
+    parts.push(`${sourcePolicy.sourceSeriesType} source for ${sourcePolicy.targetSeriesType} target`);
+  }
+  return `${parts.join("; ")}.`;
+}
+
+function buildExplanationBullets({
+  runSummary,
+  window,
+  summaryItems,
+  evidence,
+  sourcePolicy,
+}) {
   const bullets = [
     `Run ${runSummary.runId ?? "n/a"} recorded ${runSummary.studyTitle || "a study"} for ${runSummary.selectionLabel || "the selected subject"}.`,
   ];
+
+  const sourcePolicyBullet = buildSourcePolicyBullet(sourcePolicy);
+  if (sourcePolicyBullet) {
+    bullets.push(sourcePolicyBullet);
+  }
 
   if (window.effectiveStartDate && window.effectiveEndDate) {
     bullets.push(
@@ -403,6 +494,7 @@ function buildStudyRunExplanationSeed(run) {
       issues,
       caveats: issues,
       explanationBullets: [],
+      sourcePolicy: null,
     };
   }
 
@@ -411,6 +503,7 @@ function buildStudyRunExplanationSeed(run) {
   const summaryItems = normalizeSummaryItems(run.summaryItems);
   const links = normalizeLinks(run.links);
   const dataSnapshotRefs = normalizeSnapshotRefs(run.dataSnapshotRefs);
+  const sourcePolicy = normalizeSourcePolicySummary(run);
   const evidence = {
     linkCount: links.length,
     snapshotRefCount: dataSnapshotRefs.length,
@@ -504,6 +597,16 @@ function buildStudyRunExplanationSeed(run) {
       ),
     );
   }
+  if (sourcePolicy?.sourcePolicy === "blocked_proxy_tri") {
+    issues.push(
+      buildIssue(
+        STUDY_RUN_EXPLANATION_ISSUE_CODES.SOURCE_POLICY_BLOCKED_PROXY_TRI,
+        "warning",
+        "The recorded source policy says this TRI-labeled data is a blocked proxy, not approved true total-return evidence.",
+        sourcePolicy,
+      ),
+    );
+  }
   if (
     Number.isFinite(window.effectiveDays) &&
     window.effectiveDays < 365 &&
@@ -529,10 +632,17 @@ function buildStudyRunExplanationSeed(run) {
     window,
     summaryItems,
     evidence,
+    sourcePolicy,
     issues,
     caveats: issues.filter((issue) => issue.severity !== "error"),
     explanationBullets: canExplain
-      ? buildExplanationBullets({ runSummary, window, summaryItems, evidence })
+      ? buildExplanationBullets({
+          runSummary,
+          window,
+          summaryItems,
+          evidence,
+          sourcePolicy,
+        })
       : [],
   };
 }
@@ -569,6 +679,7 @@ function getStudyRunExplanationContractManifest() {
       "window",
       "summaryItems",
       "evidence",
+      "sourcePolicy",
       "issues",
       "caveats",
       "explanationBullets",
@@ -586,6 +697,7 @@ function getStudyRunExplanationContractManifest() {
       "Failed runs are not explainable as conclusions; they are failure explanations only.",
       "Actual/effective windows must be preferred over requested windows when they differ.",
       "Sub-1-year annualized metric signals must produce a caveat.",
+      "Blocked proxy TRI source policies must produce a caveat and must not be upgraded into true total-return evidence.",
       "Missing summary items or evidence references must be visible to consumers.",
     ],
   };

@@ -138,6 +138,7 @@ function buildStudyRunAssistantHandoff(run) {
     consumerInstructions: [
       "Use explanationSeed for result commentary; do not infer from rendered UI text.",
       "Use replayStudyPlan.normalizedPlan for rerun handoff; do not rebuild params manually.",
+      "Carry explanationSeed.sourcePolicy exactly; never upgrade blocked proxy TRI or missing policy into approved total-return evidence.",
       "If readyForResultExplanation is false, explain the failure state only.",
       "If explanation caveats exist, include them explicitly in assistant output.",
       "If readyForReplay is false, do not offer a one-click rerun without user correction.",
@@ -189,6 +190,7 @@ function getStudyRunHandoffContractManifest() {
     invariants: [
       "The handoff must come from a durable study-run ledger record.",
       "Result explanation must use explanationSeed, not rendered UI prose.",
+      "Source policy must be preserved as recorded by the ledger.",
       "Replay handoff must use replayStudyPlan.normalizedPlan from the StudyPlan validator.",
       "Failed runs may be explained only as failures, not as investment conclusions.",
       "Caveats in explanationSeed are mandatory assistant context.",

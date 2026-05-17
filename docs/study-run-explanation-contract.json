@@ -11,6 +11,7 @@
     "window",
     "summaryItems",
     "evidence",
+    "sourcePolicy",
     "issues",
     "caveats",
     "explanationBullets"
@@ -31,6 +32,7 @@
     "summary.missing",
     "evidence_links.missing",
     "snapshot_refs.missing",
+    "source_policy.blocked_proxy_tri",
     "metric.short_window_annualized"
   ],
   "annualizedMetricSignals": [
@@ -86,6 +88,15 @@
             "symbol": "NIFTY50"
           }
         ],
+        "providerSummary": {
+          "primaryProviderName": "Yahoo Finance",
+          "symbol": "^NSEI",
+          "targetSeriesType": "Price",
+          "sourceSeriesType": "Price",
+          "returnBasis": "price",
+          "sourcePolicy": "price_only",
+          "sourceName": "Yahoo Finance Close via yfinance"
+        },
         "completedAt": "2026-05-15T10:00:00+00:00"
       },
       "seed": {
@@ -151,10 +162,25 @@
             }
           ]
         },
+        "sourcePolicy": {
+          "sourcePolicy": "price_only",
+          "sourcePolicyLabel": "Price only",
+          "sourceName": "Yahoo Finance Close via yfinance",
+          "licenseNote": null,
+          "retrievalMethod": null,
+          "updateCadence": null,
+          "lastVerifiedDate": null,
+          "primaryProviderName": "Yahoo Finance",
+          "symbol": "^NSEI",
+          "targetSeriesType": "Price",
+          "sourceSeriesType": "Price",
+          "returnBasis": "price"
+        },
         "issues": [],
         "caveats": [],
         "explanationBullets": [
           "Run 101 recorded Rolling Returns for Nifty 50.",
+          "Source policy: Price only; Yahoo Finance Close via yfinance; return basis price; Price source for Price target.",
           "Effective window: 2021-04-08 to 2026-04-08.",
           "Recorded summaries: Median Rolling Return 12.4%.",
           "Evidence recorded: 1 link(s), 1 snapshot reference(s)."
@@ -204,6 +230,16 @@
             "symbol": "NIFTY50"
           }
         ],
+        "providerSummary": {
+          "primaryProviderName": "Yahoo Finance",
+          "symbol": "^NSEI",
+          "targetSeriesType": "TRI",
+          "sourceSeriesType": "Price",
+          "returnBasis": "price_proxy",
+          "sourcePolicy": "blocked_proxy_tri",
+          "sourceName": "Yahoo Finance Close via yfinance",
+          "licenseNote": "Price-only proxy data cannot be used as approved TRI evidence."
+        },
         "completedAt": "2026-05-15T10:00:00+00:00"
       },
       "seed": {
@@ -271,6 +307,20 @@
             }
           ]
         },
+        "sourcePolicy": {
+          "sourcePolicy": "blocked_proxy_tri",
+          "sourcePolicyLabel": "Blocked proxy TRI",
+          "sourceName": "Yahoo Finance Close via yfinance",
+          "licenseNote": "Price-only proxy data cannot be used as approved TRI evidence.",
+          "retrievalMethod": null,
+          "updateCadence": null,
+          "lastVerifiedDate": null,
+          "primaryProviderName": "Yahoo Finance",
+          "symbol": "^NSEI",
+          "targetSeriesType": "TRI",
+          "sourceSeriesType": "Price",
+          "returnBasis": "price_proxy"
+        },
         "issues": [
           {
             "code": "run.warnings_recorded",
@@ -292,6 +342,25 @@
               "requestedEndDate": "2026-05-15",
               "actualStartDate": "2026-01-02",
               "actualEndDate": "2026-04-08"
+            }
+          },
+          {
+            "code": "source_policy.blocked_proxy_tri",
+            "severity": "warning",
+            "message": "The recorded source policy says this TRI-labeled data is a blocked proxy, not approved true total-return evidence.",
+            "metadata": {
+              "sourcePolicy": "blocked_proxy_tri",
+              "sourcePolicyLabel": "Blocked proxy TRI",
+              "sourceName": "Yahoo Finance Close via yfinance",
+              "licenseNote": "Price-only proxy data cannot be used as approved TRI evidence.",
+              "retrievalMethod": null,
+              "updateCadence": null,
+              "lastVerifiedDate": null,
+              "primaryProviderName": "Yahoo Finance",
+              "symbol": "^NSEI",
+              "targetSeriesType": "TRI",
+              "sourceSeriesType": "Price",
+              "returnBasis": "price_proxy"
             }
           },
           {
@@ -327,6 +396,25 @@
             }
           },
           {
+            "code": "source_policy.blocked_proxy_tri",
+            "severity": "warning",
+            "message": "The recorded source policy says this TRI-labeled data is a blocked proxy, not approved true total-return evidence.",
+            "metadata": {
+              "sourcePolicy": "blocked_proxy_tri",
+              "sourcePolicyLabel": "Blocked proxy TRI",
+              "sourceName": "Yahoo Finance Close via yfinance",
+              "licenseNote": "Price-only proxy data cannot be used as approved TRI evidence.",
+              "retrievalMethod": null,
+              "updateCadence": null,
+              "lastVerifiedDate": null,
+              "primaryProviderName": "Yahoo Finance",
+              "symbol": "^NSEI",
+              "targetSeriesType": "TRI",
+              "sourceSeriesType": "Price",
+              "returnBasis": "price_proxy"
+            }
+          },
+          {
             "code": "metric.short_window_annualized",
             "severity": "warning",
             "message": "Annualized metrics were recorded on a sub-1-year effective window; do not treat them as long-run compounding evidence.",
@@ -337,6 +425,7 @@
         ],
         "explanationBullets": [
           "Run 102 recorded Risk-Adjusted Return for Nifty 50.",
+          "Source policy: Blocked proxy TRI; Yahoo Finance Close via yfinance; return basis price_proxy; Price source for TRI target.",
           "Effective window: 2026-01-02 to 2026-04-08.",
           "Recorded summaries: CAGR 42.0%.",
           "Recorded warning(s): Loaded data is marked as a Price proxy for TRI. Do not treat it as true total-return evidence.",
@@ -396,6 +485,7 @@
           "links": [],
           "dataSnapshotRefs": []
         },
+        "sourcePolicy": null,
         "issues": [
           {
             "code": "run.status_failed",
@@ -473,6 +563,7 @@
     "Failed runs are not explainable as conclusions; they are failure explanations only.",
     "Actual/effective windows must be preferred over requested windows when they differ.",
     "Sub-1-year annualized metric signals must produce a caveat.",
+    "Blocked proxy TRI source policies must produce a caveat and must not be upgraded into true total-return evidence.",
     "Missing summary items or evidence references must be visible to consumers."
   ]
 }

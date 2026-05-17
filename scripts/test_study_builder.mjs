@@ -457,13 +457,29 @@ function runStudyBuilderChecks() {
       },
     ],
     dataSnapshotRefs: [{ kind: "cache-series", symbol: "NIFTY50" }],
+    providerSummary: {
+      primaryProviderName: "Yahoo Finance",
+      symbol: "^NSEI",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "Price",
+      returnBasis: "price_proxy",
+      sourcePolicy: "blocked_proxy_tri",
+      sourceName: "Yahoo Finance Close via yfinance",
+      licenseNote: "Price-only proxy data cannot be used as approved TRI evidence.",
+    },
   });
   assert(
     explanationSeed.canExplain &&
       explanationSeed.confidence === STUDY_RUN_EXPLANATION_CONFIDENCE.MEDIUM &&
+      explanationSeed.sourcePolicy.sourcePolicy === "blocked_proxy_tri" &&
       explanationSeed.window.clipped &&
       explanationSeed.issues.some(
         (issue) => issue.code === STUDY_RUN_EXPLANATION_ISSUE_CODES.WINDOW_CLIPPED,
+      ) &&
+      explanationSeed.issues.some(
+        (issue) =>
+          issue.code ===
+          STUDY_RUN_EXPLANATION_ISSUE_CODES.SOURCE_POLICY_BLOCKED_PROXY_TRI,
       ) &&
       explanationSeed.issues.some(
         (issue) =>
@@ -471,6 +487,12 @@ function runStudyBuilderChecks() {
       ) &&
       explanationSeed.explanationBullets.some((bullet) => bullet.includes("Run 42")),
     "study-run explanation seed should expose real window, warning, and annualization caveats",
+  );
+  assert(
+    explanationSeed.explanationBullets.some((bullet) =>
+      bullet.includes("Source policy: Blocked proxy TRI"),
+    ),
+    "study-run explanation seed should expose source-policy bullets",
   );
   const warningBullet = explanationSeed.explanationBullets.find((bullet) =>
     bullet.startsWith("Recorded warning(s):"),
@@ -534,6 +556,10 @@ function runStudyBuilderChecks() {
     explanationContract.issueCodes.includes(
       STUDY_RUN_EXPLANATION_ISSUE_CODES.SHORT_WINDOW_ANNUALIZED,
     ) &&
+      explanationContract.issueCodes.includes(
+        STUDY_RUN_EXPLANATION_ISSUE_CODES.SOURCE_POLICY_BLOCKED_PROXY_TRI,
+      ) &&
+      explanationContract.outputFields.includes("sourcePolicy") &&
       explanationContract.outputFields.includes("explanationBullets") &&
       explanationContract.helperFunctions.includes("serializeStudyRunExplanationSeed(run)") &&
       explanationContract.examples.length === explanationExamples.length,
@@ -649,9 +675,19 @@ function runStudyBuilderChecks() {
     actualEndDate: "2026-04-08",
     warningCount: 1,
     summaryItems: [{ label: "CAGR", valueText: "42.0%", valueKind: "percent" }],
+    providerSummary: {
+      primaryProviderName: "Yahoo Finance",
+      symbol: "^NSEI",
+      targetSeriesType: "TRI",
+      sourceSeriesType: "Price",
+      returnBasis: "price_proxy",
+      sourcePolicy: "blocked_proxy_tri",
+      sourceName: "Yahoo Finance Close via yfinance",
+    },
   });
   assert(
     caveatBrief.requiredCaveats.length > 0 &&
+      caveatBrief.sourcePolicy.sourcePolicy === "blocked_proxy_tri" &&
       caveatBrief.issues.some(
         (issue) => issue.code === STUDY_RUN_EXPLANATION_BRIEF_ISSUE_CODES.CAVEATS_REQUIRED,
       ),
@@ -725,6 +761,7 @@ function runStudyBuilderChecks() {
   assert(
     briefContract.outputFields.includes("allowedAssistantActions") &&
       briefContract.outputFields.includes("prohibitedClaims") &&
+      briefContract.outputFields.includes("sourcePolicy") &&
       briefContract.examples.length === briefExamples.length,
     "study-run explanation brief contract should expose assistant prose permissions",
   );
