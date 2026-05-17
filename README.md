@@ -73,6 +73,13 @@ checks whether a new study idea has existing-study coverage, approved tools,
 evidence requirements, and caveats. In both cases, the app's existing study
 engine, metric policy, and data-window checks stay in charge.
 
+## Release baseline
+
+The first stable product baseline is documented in
+[`docs/releases/v1.0.0.md`](docs/releases/v1.0.0.md). V1 is a trust-and-contract
+baseline for future development, not a claim that every study or data source is
+complete.
+
 The deterministic assistant boundary can be checked without any AI key:
 
 ```bash
