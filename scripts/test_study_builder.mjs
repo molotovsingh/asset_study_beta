@@ -107,6 +107,14 @@ function assert(condition, message) {
   assertionCount += 1;
 }
 
+function toLocalInputDate(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 function runStudyBuilderChecks() {
   const validPlan = validateStudyPlan({
     version: STUDY_PLAN_VERSION,
@@ -261,6 +269,52 @@ function runStudyBuilderChecks() {
       invalidDates.errors.some((error) => error.includes("start must be on or before end")),
     "date range inversion should fail",
   );
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const futureDates = validateStudyPlan({
+    version: STUDY_PLAN_VERSION,
+    studyId: "rolling-returns",
+    viewId: "overview",
+    params: { subject: "Nifty 50", start: "2021-01-01", end: toLocalInputDate(tomorrow) },
+    requiresConfirmation: true,
+  });
+  assert(
+    !futureDates.ok &&
+      futureDates.issues.some(
+        (issue) => issue.code === STUDY_PLAN_ISSUE_CODES.DATE_FUTURE,
+      ),
+    "future explicit dates should fail before assistant route handoff",
+  );
+  const invalidOptionsSort = validateStudyPlan({
+    version: STUDY_PLAN_VERSION,
+    studyId: "options-screener",
+    viewId: "overview",
+    params: { u: "us-liquid-10", sort: "iv_hv20" },
+    requiresConfirmation: true,
+  });
+  assert(
+    !invalidOptionsSort.ok &&
+      invalidOptionsSort.issues.some(
+        (issue) =>
+          issue.code === STUDY_PLAN_ISSUE_CODES.PARAM_VALUE_INVALID &&
+          issue.field === "sort",
+      ),
+    "non-canonical options sort values should fail validation",
+  );
+  const validOptionsSort = validateStudyPlan({
+    version: STUDY_PLAN_VERSION,
+    studyId: "options-screener",
+    viewId: "overview",
+    params: {
+      u: "us-liquid-10",
+      bias: "all",
+      advice: "all",
+      preset: "all",
+      sort: "ivHv20Ratio",
+    },
+    requiresConfirmation: true,
+  });
+  assert(validOptionsSort.ok, "canonical options screener params should validate");
 
   const noConfirmation = validateStudyPlan({
     version: STUDY_PLAN_VERSION,

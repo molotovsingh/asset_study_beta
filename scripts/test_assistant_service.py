@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -343,6 +344,34 @@ def test_assistant_study_plan_live_draft_validates_model_plan():
     assert_equal(payload["preview"]["canRun"], True, "model plan should produce a runnable preview")
     assert_equal(payload["execution"]["executed"], False, "live draft must not execute a study")
     assert_true(openai_call.called, "live draft should call the OpenAI bridge")
+
+
+def test_assistant_live_planner_prompt_includes_observed_guardrails():
+    payload = assistant_service._build_live_planner_prompt(
+        "Run options screener for US Liquid 10 sorted by IV/HV20."
+    )
+    serialized = json.dumps(payload, sort_keys=True)
+    assert_equal(
+        payload["currentDate"],
+        assistant_service._local_today_iso(),
+        "live planner prompt should include the local current date",
+    )
+    assert_true(
+        "explicit start/end params must not be in the future" in " ".join(payload["instructions"]),
+        "live planner prompt should warn against future date params",
+    )
+    assert_true(
+        "Use only params explicitly allowed by the selected studyId/viewId contract." in payload["guardrails"]["parameterRules"],
+        "live planner prompt should forbid unsupported route params",
+    )
+    assert_true(
+        "ivHv20Ratio" in serialized and "iv_hv20" in serialized,
+        "live planner prompt should name the canonical IV/HV20 sort key and rejected alias",
+    )
+    assert_true(
+        "Omit metricProposals unless the user explicitly asks to change metric presentation." in payload["guardrails"]["metricProposalRules"],
+        "live planner prompt should discourage malformed metric proposals",
+    )
 
 
 def test_assistant_study_plan_live_draft_accepts_fenced_multiline_json():

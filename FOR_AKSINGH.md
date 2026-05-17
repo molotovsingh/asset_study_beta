@@ -489,6 +489,28 @@ source approval because a label contains the letters "TRI". The assistant brief
 now carries this field directly, so source approval is not a treasure hunt through
 provider metadata.
 
+## A Live-AI Testing Lesson
+
+The first real OpenAI smoke did exactly what good test environments are supposed
+to do: it found boring contract gaps before the feature became user-facing. The
+model sometimes drafted plausible but invalid plans: a `demo` flag on the wrong
+view, a future year-end date, a snake-case options sort key, and malformed metric
+proposals. None of those should become a study run.
+
+The fix was not to "trust the prompt harder." The fix was two-layered:
+
+- the StudyPlan validator now rejects explicit future dates and non-canonical
+  options-screener enum values such as a bad sort key
+- the live planner prompt now sends the model a clearer rulebook: today's date,
+  allowed route parameters only, `ivHv20Ratio` for IV/HV20 sorting, and no
+  `metricProposals` unless the user explicitly asks for metric-presentation
+  changes
+
+Think of the model as a junior analyst filling out an order ticket. The prompt
+is the instruction sheet, but the validator is the trade desk control. A better
+instruction sheet reduces mistakes; the control is what prevents bad tickets
+from reaching execution.
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:

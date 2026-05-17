@@ -8,6 +8,7 @@ import {
   DEFAULT_OPTIONS_SCREENER_CANDIDATE_FILTER,
   DEFAULT_OPTIONS_SCREENER_PRESET_ID,
   DEFAULT_OPTIONS_SCREENER_SORT_KEY,
+  OPTIONS_SCREENER_SORT_DEFINITIONS,
   buildOptionsScreenerStudyRun,
   getSortDefinition,
   normalizeCandidateFilter,
@@ -82,7 +83,10 @@ function normalizeSortKey(value) {
   if (!nextValue) {
     return DEFAULT_OPTIONS_SCREENER_SORT_KEY;
   }
-  return getSortDefinition(nextValue).key;
+  const match = OPTIONS_SCREENER_SORT_DEFINITIONS.find(
+    (definition) => definition.key === nextValue,
+  );
+  return match?.key || DEFAULT_OPTIONS_SCREENER_SORT_KEY;
 }
 
 function applyRouteParams() {

@@ -1,4 +1,5 @@
 import { getStudyById } from "../studies/registry.js";
+import { optionsScreenerUniverseCatalog } from "../catalog/optionsScreenerCatalog.js";
 import {
   buildStudyViewHash,
   getDefaultStudyViewId,
@@ -6,6 +7,10 @@ import {
   getStudyViews,
   parseStudyViewHash,
 } from "../studies/studyShell.js";
+import {
+  OPTIONS_SCREENER_PRESET_DEFINITIONS,
+  OPTIONS_SCREENER_SORT_DEFINITIONS,
+} from "../lib/optionsScreener.js";
 import {
   validateMetricDecisionProposals,
 } from "../lib/metricRegistry.js";
@@ -25,7 +30,9 @@ const STUDY_PLAN_ISSUE_CODES = Object.freeze({
   VIEW_UNSUPPORTED: "view.unsupported",
   PARAMS_INVALID: "params.invalid",
   PARAM_UNSUPPORTED: "param.unsupported",
+  PARAM_VALUE_INVALID: "param.value_invalid",
   DATE_INVALID: "date.invalid",
+  DATE_FUTURE: "date.future",
   DATE_RANGE_INVALID: "date.range_invalid",
   DATE_PARTIAL: "date.partial",
   NUMERIC_INVALID: "numeric.invalid",
@@ -36,6 +43,24 @@ const STUDY_PLAN_ISSUE_CODES = Object.freeze({
 });
 
 const COMMON_INDEX_PARAM_KEYS = new Set(["subject", "start", "end"]);
+const OPTIONS_SCREENER_BIAS_VALUES = Object.freeze(["all", "rich", "cheap"]);
+const OPTIONS_SCREENER_ADVICE_VALUES = Object.freeze([
+  "all",
+  "long-premium",
+  "short-premium",
+  "low-confidence",
+  "watch",
+]);
+const OPTIONS_SCREENER_PRESET_VALUES = Object.freeze([
+  "all",
+  ...OPTIONS_SCREENER_PRESET_DEFINITIONS.map((definition) => definition.id),
+]);
+const OPTIONS_SCREENER_SORT_VALUES = Object.freeze(
+  OPTIONS_SCREENER_SORT_DEFINITIONS.map((definition) => definition.key),
+);
+const OPTIONS_SCREENER_UNIVERSE_VALUES = Object.freeze(
+  optionsScreenerUniverseCatalog.map((entry) => entry.id),
+);
 
 const STUDY_PLAN_PARAM_DEFINITIONS = Object.freeze({
   subject: Object.freeze({
@@ -115,27 +140,31 @@ const STUDY_PLAN_PARAM_DEFINITIONS = Object.freeze({
   u: Object.freeze({
     label: "Universe",
     type: "catalog-id",
+    allowedValues: OPTIONS_SCREENER_UNIVERSE_VALUES,
     description: "Options screener or validation universe id.",
   }),
   bias: Object.freeze({
     label: "Bias",
     type: "enum",
-    allowedValues: ["rich", "cheap"],
+    allowedValues: OPTIONS_SCREENER_BIAS_VALUES,
     description: "Options screener volatility bias.",
   }),
   advice: Object.freeze({
     label: "Advice Filter",
     type: "catalog-id",
+    allowedValues: OPTIONS_SCREENER_ADVICE_VALUES,
     description: "Options screener candidate/advice filter.",
   }),
   preset: Object.freeze({
     label: "Preset",
     type: "catalog-id",
+    allowedValues: OPTIONS_SCREENER_PRESET_VALUES,
     description: "Options trade idea preset id.",
   }),
   sort: Object.freeze({
     label: "Sort",
     type: "catalog-id",
+    allowedValues: OPTIONS_SCREENER_SORT_VALUES,
     description: "Options screener sort key.",
   }),
   group: Object.freeze({
@@ -219,6 +248,13 @@ function isPlainObject(value) {
 
 function isValidInputDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function localInputDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function normalizePlanParams(params) {
@@ -344,6 +380,25 @@ function validateDateParams(params, issues) {
       field: "start",
     });
   }
+  const today = localInputDate();
+  if (isValidInputDate(params.start) && params.start > today) {
+    addIssue(issues, {
+      code: STUDY_PLAN_ISSUE_CODES.DATE_FUTURE,
+      severity: STUDY_PLAN_ISSUE_SEVERITY.ERROR,
+      message: "start must not be in the future",
+      field: "start",
+      metadata: { today },
+    });
+  }
+  if (isValidInputDate(params.end) && params.end > today) {
+    addIssue(issues, {
+      code: STUDY_PLAN_ISSUE_CODES.DATE_FUTURE,
+      severity: STUDY_PLAN_ISSUE_SEVERITY.ERROR,
+      message: "end must not be in the future",
+      field: "end",
+      metadata: { today },
+    });
+  }
   if (params.start && !params.end) {
     addIssue(issues, {
       code: STUDY_PLAN_ISSUE_CODES.DATE_PARTIAL,
@@ -360,6 +415,38 @@ function validateDateParams(params, issues) {
       field: "end",
     });
   }
+}
+
+function addParamValueIssue(issues, key, value, allowedValues) {
+  addIssue(issues, {
+    code: STUDY_PLAN_ISSUE_CODES.PARAM_VALUE_INVALID,
+    severity: STUDY_PLAN_ISSUE_SEVERITY.ERROR,
+    message: `${key} must be one of: ${allowedValues.join(", ")}`,
+    field: key,
+    metadata: {
+      value,
+      allowedValues: [...allowedValues],
+    },
+  });
+}
+
+function validateAllowedParamValues(studyId, params, issues) {
+  if (studyId !== "options-screener") {
+    return;
+  }
+
+  [
+    ["u", OPTIONS_SCREENER_UNIVERSE_VALUES],
+    ["bias", OPTIONS_SCREENER_BIAS_VALUES],
+    ["advice", OPTIONS_SCREENER_ADVICE_VALUES],
+    ["preset", OPTIONS_SCREENER_PRESET_VALUES],
+    ["sort", OPTIONS_SCREENER_SORT_VALUES],
+  ].forEach(([key, allowedValues]) => {
+    const value = params[key];
+    if (value !== undefined && !allowedValues.includes(value)) {
+      addParamValueIssue(issues, key, value, allowedValues);
+    }
+  });
 }
 
 function getAllowedParamKeys(studyId, viewId) {
@@ -530,6 +617,7 @@ function validateStudyPlan(rawPlan = {}) {
     });
     validateDateParams(params, issues);
     validateNumericParams(params, issues);
+    validateAllowedParamValues(study.id, params, issues);
   }
 
   if (rawPlan.requiresConfirmation !== true) {

@@ -148,6 +148,7 @@ Shared contract:
 - assistant readiness: `GET /api/assistant/readiness` and `python3 scripts/check_assistant_readiness.py`, so development and CI can prove the deterministic assistant boundary is aligned before any live AI key or model call is introduced
 - assistant dry run: `POST /api/assistant/study-plan-dry-run`, so a future assistant can exercise the backend planning boundary end-to-end without executing a study, writing evidence, or requiring a model key
 - live planner smoke: `python3 scripts/run_assistant_live_planner_smoke.py --env-file /path/to/.env`, which uses `POST /api/assistant/study-plan-live-draft` semantics without printing the key, executing a study, or generating result prose
+- live planner prompt guardrails now include the local current date, canonical route-param constraints, options-screener sort keys such as `ivHv20Ratio`, and a default instruction to omit `metricProposals`; deterministic validation still decides whether a draft can be handed to the app
 - a deterministic `intent-planner-v1` harness in `app/studyBuilder/intentPlanner.js` for simple natural-language-to-draft-plan templates
 - the intent planner contract is generated at `docs/intent-planner-contract.json` and checked with `node scripts/export_intent_planner_contract.mjs --check`
 - planner examples are part of that contract, so future AI work has concrete intent-to-study fixtures instead of relying only on prose
