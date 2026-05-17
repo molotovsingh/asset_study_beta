@@ -626,6 +626,7 @@ def main():
     test_assistant_study_plan_dry_run_is_keyless_and_non_executing()
     test_assistant_study_plan_dry_run_rejects_missing_intent()
     test_assistant_study_plan_live_draft_validates_model_plan()
+    test_assistant_live_planner_prompt_includes_observed_guardrails()
     test_assistant_study_plan_live_draft_accepts_fenced_multiline_json()
     test_assistant_study_plan_live_draft_requires_key()
     test_invalid_and_unknown_run_ids()

@@ -511,6 +511,12 @@ is the instruction sheet, but the validator is the trade desk control. A better
 instruction sheet reduces mistakes; the control is what prevents bad tickets
 from reaching execution.
 
+The repeatable command for this lesson is now
+`python3 scripts/run_assistant_live_planner_smoke.py --matrix --env-file /path/to/.env`.
+It reruns the observed live-AI intent set and fails if the model draft is
+invalid, unrunnable, accidentally executed, or missing expected canonical route
+fragments such as `sort=ivHv20Ratio`.
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:
