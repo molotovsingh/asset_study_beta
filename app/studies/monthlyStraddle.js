@@ -7,7 +7,11 @@ import {
   exportMonthlyStraddleCsv,
   exportMonthlyStraddleXls,
 } from "../lib/monthlyStraddleExport.js";
-import { fetchMonthlyStraddleSnapshot } from "../lib/syncedData.js";
+import {
+  fetchMonthlyStraddleSnapshot,
+  verifySymbol,
+} from "../lib/syncedData.js";
+import { parseManualSelectionInput } from "../lib/symbolDiscovery.js";
 import {
   adoptActiveSubjectQuery,
   getActiveSubjectQuery,
@@ -39,6 +43,11 @@ const monthlyStraddleSession = {
 
 function buildRunSignature(session) {
   return [session.indexQuery, session.minimumDteValue, session.contractCountValue].join("|");
+}
+
+function resolveProviderSymbol(query) {
+  const manualSelection = parseManualSelectionInput(query);
+  return manualSelection?.symbol || String(query || "").trim();
 }
 
 function applyRouteParams() {
@@ -166,25 +175,38 @@ function mountMonthlyStraddleOverview(root) {
 
     try {
       const symbol = monthlyStraddleSession.indexQuery;
+      const providerSymbol = resolveProviderSymbol(symbol);
       const { minimumDte, contractCount } = validateInputs(
-        symbol,
+        providerSymbol,
         minimumDteInput.value,
         contractCountInput.value,
       );
-      setStatus(`Loading monthly straddles for ${symbol}...`, "info");
+      setStatus(`Verifying options capability for ${providerSymbol}...`, "info");
+      const verification = await verifySymbol({
+        query: symbol,
+        symbol: providerSymbol,
+        requiredCapability: "optionsUnderlying",
+      });
+      if (!verification.verified) {
+        throw new Error(
+          `This symbol is not verified for this study yet. Missing optionsUnderlying capability for ${providerSymbol}.`,
+        );
+      }
+
+      setStatus(`Loading monthly straddles for ${providerSymbol}...`, "info");
       resultsRoot.innerHTML = `
         <div class="empty-state">
-          Loading live monthly contracts for ${symbol}...
+          Loading live monthly contracts for ${providerSymbol}...
         </div>
       `;
 
       const snapshot = await fetchMonthlyStraddleSnapshot({
-        symbol,
+        symbol: providerSymbol,
         minimumDte,
         maxContracts: contractCount,
       });
       const studyRun = buildMonthlyStraddleStudyRun(snapshot, {
-        requestedSymbol: symbol,
+        requestedSymbol: providerSymbol,
         minimumDte,
         maxContracts: contractCount,
       });
@@ -196,12 +218,13 @@ function mountMonthlyStraddleOverview(root) {
       recordLocalStudyRun({
         study: monthlyStraddleStudy,
         subjectQuery: symbol,
-        selectionLabel: symbol,
+        selectionLabel: providerSymbol,
         symbol: studyRun.symbol,
         actualEndDate: studyRun.asOfDate,
         detailLabel: `${minimumDte}D minimum · ${contractCount} contract${contractCount === 1 ? "" : "s"}`,
         requestedParams: {
           symbol,
+          providerSymbol,
           minimumDte,
           contractCount,
         },

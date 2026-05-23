@@ -555,6 +555,56 @@ async function deleteStudyPlanRecipe(request) {
   return payload;
 }
 
+
+async function fetchSavedStudies(request = {}) {
+  const payload = await requestJson(buildApiUrl(`/saved-studies${buildQueryString(request)}`), {
+    onNetworkError: () => buildLocalApiUnavailableMessage(),
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not load saved studies.",
+  });
+  if (payload?.version !== "saved-study-v1" || !Array.isArray(payload?.savedStudies)) {
+    throw new Error("The local data API returned an invalid saved-study payload.");
+  }
+  return payload;
+}
+
+
+async function saveSavedStudy(request) {
+  const payload = await requestLocalApiJson("/saved-studies/save", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not save that study.",
+  });
+  if (payload?.version !== "saved-study-v1" || typeof payload?.ok !== "boolean") {
+    throw new Error("The local data API returned an invalid saved-study save payload.");
+  }
+  return payload;
+}
+
+
+async function archiveSavedStudy(request) {
+  const payload = await requestLocalApiJson("/saved-studies/archive", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not archive that saved study.",
+  });
+  if (payload?.version !== "saved-study-v1" || typeof payload?.ok !== "boolean") {
+    throw new Error("The local data API returned an invalid saved-study archive payload.");
+  }
+  return payload;
+}
+
+
+async function refreshSavedStudyReadiness(request) {
+  const payload = await requestLocalApiJson("/saved-studies/refresh-readiness", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not refresh saved-study readiness.",
+  });
+  if (payload?.version !== "saved-study-v1" || typeof payload?.ok !== "boolean") {
+    throw new Error("The local data API returned an invalid saved-study readiness payload.");
+  }
+  return payload;
+}
+
+
 async function saveAutomationConfig(request) {
   const payload = await requestLocalApiJson("/automations/save", request, {
     onHttpError: (response, parsedPayload) =>
@@ -649,6 +699,32 @@ async function discoverSymbols(request) {
   return payload;
 }
 
+async function verifySymbol(request) {
+  const payload = await requestLocalApiJson("/symbols/verify", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not verify that symbol.",
+  });
+
+  if (payload?.version !== "instrument-verification-v1" || typeof payload?.verified !== "boolean") {
+    throw new Error("The local data API returned an invalid symbol verification payload.");
+  }
+
+  return payload;
+}
+
+async function registerManualSymbol(request) {
+  const payload = await requestLocalApiJson("/symbols/register-manual", request, {
+    onHttpError: (response, parsedPayload) =>
+      parsedPayload?.error || "The local data API could not register that manual symbol.",
+  });
+
+  if (payload?.version !== "instrument-verification-v1" || typeof payload?.verified !== "boolean") {
+    throw new Error("The local data API returned an invalid manual symbol registration payload.");
+  }
+
+  return payload;
+}
+
 async function fetchMonthlyStraddleSnapshot(request) {
   const payload = await requestLocalApiJson(
     "/yfinance/monthly-straddle",
@@ -719,6 +795,7 @@ async function fetchOptionsValidation(request) {
 
 export {
   LOCAL_API_COMMAND,
+  archiveSavedStudy,
   buildStudyFactoryProposal,
   buildLocalApiUnavailableMessage,
   deleteAutomationConfig,
@@ -737,6 +814,7 @@ export {
   fetchOptionsScreenerSnapshot,
   fetchOptionsValidation,
   fetchRuntimeHealth,
+  fetchSavedStudies,
   fetchStudyPlanRecipes,
   fetchStudyRunBrief,
   fetchStudyRuns,
@@ -747,9 +825,13 @@ export {
   loadSyncManifest,
   loadSyncedSeries,
   liveDraftAssistantStudyPlan,
+  registerManualSymbol,
   recordStudyRunLedgerEntry,
   runAutomationNow,
   saveAutomationConfig,
+  saveSavedStudy,
   saveStudyPlanRecipe,
+  refreshSavedStudyReadiness,
   validateStudyBuilderPlan,
+  verifySymbol,
 };

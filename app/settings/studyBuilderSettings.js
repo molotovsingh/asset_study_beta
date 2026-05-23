@@ -1,20 +1,21 @@
-import { buildSettingsRouteHash } from "../appRoute.js";
+import { STUDY_PLAN_VERSION } from "../studyBuilder/studyPlan.js";
 import {
-  STUDY_PLAN_VERSION,
-  buildStudyPlanConfirmationPreview,
-  buildStudyPlanFromRouteHash,
-  validateStudyPlan,
-} from "../studyBuilder/studyPlan.js";
+  appendBackendFallbackNote,
+  buildPreviewForPlan,
+  convertStudyBuilderRoute,
+  draftStudyBuilderIntent,
+  formatStudyPlanJson,
+  parseStudyPlanJson,
+  runLiveStudyBuilderDraft,
+  validateStudyBuilderPlanText,
+} from "../studyBuilder/studyBuilderWorkflow.js";
 import {
-  deleteStudyPlanRecipe as deleteLocalStudyPlanRecipe,
-  loadStudyPlanRecipes as loadLocalStudyPlanRecipes,
-  saveStudyPlanRecipe as saveLocalStudyPlanRecipe,
-} from "../studyBuilder/studyPlanRecipes.js";
-import {
-  STUDY_BUILDER_PLAN_RESPONSE_VERSION,
-  STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
-} from "../studyBuilder/studyBuilderApiContract.js";
-import { draftStudyPlanFromIntent } from "../studyBuilder/intentPlanner.js";
+  deleteStudyPlanRecipeWithFallback,
+  loadInitialStudyPlanRecipes,
+  refreshStudyPlanRecipes,
+  refreshSavedStudyReadinessWithFallback,
+  saveStudyPlanRecipeWithFallback,
+} from "../studyBuilder/studyPlanRecipeClient.js";
 import { escapeHtml, formatSettingsTimestamp, renderSettingsSectionNav } from "./shared.js";
 
 const EXAMPLE_STUDY_INTENT =
@@ -35,18 +36,6 @@ const EXAMPLE_STUDY_PLAN = {
   requiresConfirmation: true,
 };
 
-function formatJson(value) {
-  return JSON.stringify(value, null, 2);
-}
-
-function parsePlanText(planText) {
-  const trimmed = String(planText || "").trim();
-  if (!trimmed) {
-    throw new Error("Paste a study-plan-v1 JSON object first.");
-  }
-  return JSON.parse(trimmed);
-}
-
 function formatPlannerConfidence(confidence) {
   if (confidence === "needs-review") {
     return "Needs Review";
@@ -55,114 +44,6 @@ function formatPlannerConfidence(confidence) {
     return "Blocked";
   }
   return "Draft";
-}
-
-function getPlannerDraftStatusMessage(plannerResult, preview) {
-  if (!preview?.canRun) {
-    return "Drafted a StudyPlan, but validation blocked route handoff.";
-  }
-  if (plannerResult?.confidence === "needs-review") {
-    return "Drafted a route-safe StudyPlan with planner diagnostics. Review before route handoff.";
-  }
-  return "Drafted a route-safe StudyPlan. Review before route handoff.";
-}
-
-function getLiveDraftStatusMessage(payload) {
-  if (payload?.preview?.canRun) {
-    return "Live AI drafted a valid non-executing StudyPlan. Review before route handoff or save as a recipe.";
-  }
-  return "Live AI returned a StudyPlan draft, but deterministic validation blocked route handoff.";
-}
-
-function appendBackendFallbackNote(message, backendResult) {
-  if (!backendResult?.usedFallback) {
-    return message;
-  }
-  return `${message} Used local Study Builder fallback because the backend endpoint was unavailable.`;
-}
-
-function buildLocalPlannerPayload(intent) {
-  const plannerResult = draftStudyPlanFromIntent(intent);
-  return {
-    version: STUDY_BUILDER_PLAN_RESPONSE_VERSION,
-    plannerResult,
-    plan: plannerResult.plan,
-    preview: plannerResult.preview,
-  };
-}
-
-function buildLocalValidationPayload(request = {}) {
-  const safeRequest =
-    request && typeof request === "object" && !Array.isArray(request)
-      ? request
-      : {};
-
-  if (Object.hasOwn(safeRequest, "routeHash")) {
-    const route = buildStudyPlanFromRouteHash(safeRequest.routeHash);
-    const routePlan = route.normalizedPlan || route.rawPlan;
-    return {
-      version: STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
-      mode: "route",
-      route,
-      validation: validateStudyPlan(routePlan),
-      preview: buildStudyPlanConfirmationPreview(routePlan),
-    };
-  }
-
-  const plan = Object.hasOwn(safeRequest, "plan") ? safeRequest.plan : request;
-  return {
-    version: STUDY_BUILDER_VALIDATION_RESPONSE_VERSION,
-    mode: "plan",
-    validation: validateStudyPlan(plan),
-    preview: buildStudyPlanConfirmationPreview(plan),
-  };
-}
-
-async function requestPlannerPayload(controller, intent) {
-  if (typeof controller?.draftStudyBuilderPlan !== "function") {
-    return { payload: buildLocalPlannerPayload(intent), usedFallback: false };
-  }
-
-  try {
-    return {
-      payload: await controller.draftStudyBuilderPlan({ intent }),
-      usedFallback: false,
-    };
-  } catch (error) {
-    return {
-      payload: buildLocalPlannerPayload(intent),
-      usedFallback: true,
-      error,
-    };
-  }
-}
-
-async function requestValidationPayload(controller, request) {
-  if (typeof controller?.validateStudyBuilderPlan !== "function") {
-    return { payload: buildLocalValidationPayload(request), usedFallback: false };
-  }
-
-  try {
-    return {
-      payload: await controller.validateStudyBuilderPlan(request),
-      usedFallback: false,
-    };
-  } catch (error) {
-    return {
-      payload: buildLocalValidationPayload(request),
-      usedFallback: true,
-      error,
-    };
-  }
-}
-
-async function requestLiveDraftPayload(controller, intent) {
-  if (typeof controller?.liveDraftAssistantStudyPlan !== "function") {
-    throw new Error(
-      "Experimental Live AI Draft requires the local backend /api/assistant/study-plan-live-draft endpoint.",
-    );
-  }
-  return controller.liveDraftAssistantStudyPlan({ intent });
 }
 
 function renderIssueList(title, issues) {
@@ -204,7 +85,7 @@ function renderLiveDraftResult(liveDraftResult) {
         <div class="settings-detail-item">
           <div class="automation-item-head">
             <div>
-              <p class="settings-detail-title">Live AI Draft Blocked</p>
+              <p class="settings-detail-title">AI Draft Blocked</p>
               <p class="summary-meta">${escapeHtml(liveDraftResult.errorMessage)}</p>
             </div>
             <div class="automation-pill-row">
@@ -224,20 +105,22 @@ function renderLiveDraftResult(liveDraftResult) {
       <div class="settings-detail-item">
         <div class="automation-item-head">
           <div>
-            <p class="settings-detail-title">Experimental Live AI Draft</p>
+            <p class="settings-detail-title">AI Draft Result</p>
             <p class="summary-meta">
-              ${escapeHtml(liveDraftResult.provider || "provider")} ·
-              ${escapeHtml(liveDraftResult.model || "model unknown")} ·
-              response ${escapeHtml(liveDraftResult.modelResult?.responseId || "n/a")}
+              The AI suggested a study setup. The app checked the setup, not the market data.
             </p>
             <p class="summary-meta">
-              ${validationOk ? "Validated by StudyPlan contract" : "Blocked by StudyPlan contract"} ·
-              ${executed ? "execution violation" : "no study execution"}
+              ${validationOk ? "Setup OK, data not checked here" : "Needs changes"} ·
+              ${executed ? "Unexpected run detected" : "No study was run"}
+            </p>
+            <p class="summary-meta">
+              ${escapeHtml(liveDraftResult.provider || "provider")} ·
+              ${escapeHtml(liveDraftResult.model || "model unknown")}
             </p>
           </div>
           <div class="automation-pill-row">
             <span class="automation-pill ${canRun && !executed ? "ok" : "attention"}">
-              ${canRun && !executed ? "Valid Draft" : "Blocked"}
+              ${canRun && !executed ? "Setup OK" : "Blocked"}
             </span>
           </div>
         </div>
@@ -252,11 +135,11 @@ function renderPreviewCard(preview) {
       <section class="card settings-card">
         <div class="settings-card-head">
           <div>
-            <p class="meta-label">Confirmation Preview</p>
-            <h3 class="settings-card-title">No plan validated yet</h3>
+            <p class="meta-label">Preview</p>
+            <h3 class="settings-card-title">Your study will appear here</h3>
           </div>
         </div>
-        <p class="summary-meta">Paste a StudyPlan JSON object and validate it to see the deterministic confirmation card.</p>
+        <p class="summary-meta">Describe a study, ask AI to draft one, or paste a saved link. The app will show what it plans to open before anything runs.</p>
       </section>
     `;
   }
@@ -268,7 +151,7 @@ function renderPreviewCard(preview) {
     <section class="card settings-card">
       <div class="settings-card-head">
         <div>
-          <p class="meta-label">Confirmation Preview</p>
+          <p class="meta-label">Preview</p>
           <h3 class="settings-card-title">${
             preview.studyTitle
               ? `${escapeHtml(preview.studyTitle)} · ${escapeHtml(preview.viewLabel)}`
@@ -276,27 +159,27 @@ function renderPreviewCard(preview) {
           }</h3>
           <p class="summary-meta">${
             preview.canRun
-              ? "This plan is route-safe and can be handed off after user confirmation."
-              : "This plan cannot run until the listed issues are fixed."
+              ? "This setup can open a study. The study page will check whether the symbol and date range have data."
+              : "This setup needs changes before it can open a study."
           }</p>
         </div>
         <div class="automation-pill-row">
           <span class="automation-pill ${preview.canRun ? "ok" : "attention"}">
-            ${preview.canRun ? "Can Run" : "Blocked"}
+            ${preview.canRun ? "Setup OK" : "Blocked"}
           </span>
         </div>
       </div>
 
       <div class="settings-detail-list">
         <div class="settings-detail-item">
-          <p class="settings-detail-title">Route</p>
+          <p class="settings-detail-title">Study link</p>
           <p class="summary-meta">${escapeHtml(preview.routeHash || "No valid route")}</p>
         </div>
         ${
           preview.paramItems.length
             ? `
               <div class="settings-detail-item">
-                <p class="settings-detail-title">Parameters</p>
+                <p class="settings-detail-title">Study details</p>
                 <div class="settings-study-builder-param-grid">
                   ${preview.paramItems
                     .map(
@@ -304,12 +187,21 @@ function renderPreviewCard(preview) {
                         <div>
                           <p class="meta-label">${escapeHtml(item.label)}</p>
                           <p>${escapeHtml(item.value)}</p>
-                          <p class="summary-meta">${escapeHtml(item.key)} · ${escapeHtml(item.type)}</p>
                         </div>
                       `,
                     )
                     .join("")}
                 </div>
+              </div>
+            `
+            : ""
+        }
+        ${
+          preview.canRun
+            ? `
+              <div class="settings-detail-item">
+                <p class="settings-detail-title">Data check</p>
+                <p class="summary-meta">Not checked on this page. Opening the study will load the symbol and date range, then show any missing or clipped data.</p>
               </div>
             `
             : ""
@@ -325,7 +217,7 @@ function renderPreviewCard(preview) {
           href="${preview.canRun ? escapeHtml(preview.routeHash) : "#"}"
           ${preview.canRun ? "" : 'aria-disabled="true" tabindex="-1"'}
           data-study-builder-go
-        >Go to route</a>
+        >Open and check data</a>
       </div>
     </section>
   `;
@@ -333,33 +225,44 @@ function renderPreviewCard(preview) {
 
 function renderRecipeList(recipes) {
   if (!recipes?.length) {
-    return `<p class="summary-meta">No saved StudyPlan recipes yet. Validate a plan, then save it here for reuse.</p>`;
+    return `<p class="summary-meta">No saved studies yet. Build or check a setup, then save it for reuse.</p>`;
   }
 
   return `
     <div class="settings-detail-list">
       ${recipes
-        .map(
-          (recipe) => `
+        .map((recipe) => {
+          const readiness = recipe.readiness || recipe.savedStudy?.readiness || null;
+          const readinessStatus = String(readiness?.status || "unknown");
+          const dependencies = recipe.dependencies || recipe.savedStudy?.dependencies || [];
+          const dependencyCopy = dependencies.length
+            ? `${dependencies.length} data dependencies`
+            : "No dependency manifest yet";
+          return `
             <div class="settings-detail-item">
               <div class="automation-item-head">
                 <div>
                   <p class="settings-detail-title">${escapeHtml(recipe.name)}</p>
                   <p class="summary-meta">${escapeHtml(recipe.studyId)} · ${escapeHtml(recipe.viewId)}</p>
                   <p class="summary-meta">${escapeHtml(recipe.routeHash)}</p>
+                  <p class="summary-meta">${escapeHtml(dependencyCopy)} · readiness ${escapeHtml(readinessStatus)}</p>
                   <p class="summary-meta">Updated ${escapeHtml(formatSettingsTimestamp(recipe.updatedAt))}</p>
                 </div>
                 <div class="automation-pill-row">
-                  <span class="automation-pill ok">Recipe</span>
+                  <span class="automation-pill ${readinessStatus === "ok" ? "ok" : "attention"}">
+                    ${readinessStatus === "ok" ? "Ready" : "Needs readiness"}
+                  </span>
                 </div>
               </div>
               <div class="automation-item-actions">
                 <button class="button secondary" type="button" data-study-builder-load-recipe="${escapeHtml(recipe.id)}">Load</button>
-                <button class="button secondary" type="button" data-study-builder-delete-recipe="${escapeHtml(recipe.id)}">Delete</button>
+                <a class="button secondary" href="${escapeHtml(recipe.routeHash)}">Open</a>
+                <button class="button secondary" type="button" data-study-builder-refresh-saved-study="${escapeHtml(recipe.id)}">Refresh Readiness</button>
+                <button class="button secondary" type="button" data-study-builder-delete-recipe="${escapeHtml(recipe.id)}">Archive</button>
               </div>
             </div>
-          `,
-        )
+          `;
+        })
         .join("")}
     </div>
   `;
@@ -379,16 +282,16 @@ function renderAssistantReadinessCard(readiness, readinessStatusMessage = "") {
     <section class="card settings-card">
       <div class="settings-card-head">
         <div>
-          <p class="meta-label">Assistant Readiness</p>
+          <p class="meta-label">Safety Check</p>
           <h3 class="settings-card-title">${
             readiness
               ? isOk
-                ? "Deterministic assistant rail is healthy"
-                : "Assistant rail needs attention"
-              : "Checking deterministic assistant rail"
+                ? "Study Builder setup checks are OK"
+                : "Study Builder needs attention"
+              : "Checking Study Builder"
           }</h3>
           <p class="summary-meta">
-            Fast keyless preflight for contracts, route wiring, generated artifacts, and future AI testing readiness.
+            The app checks that AI can only suggest a study setup. It does not prove the market data exists yet.
           </p>
         </div>
         <div class="automation-pill-row">
@@ -400,26 +303,26 @@ function renderAssistantReadinessCard(readiness, readinessStatusMessage = "") {
 
       <div class="settings-detail-list">
         <div class="settings-detail-item">
-          <p class="settings-detail-title">Preflight</p>
+          <p class="settings-detail-title">System check</p>
           <p class="summary-meta">${
             readiness
               ? `${Number(summary.passed || 0)} / ${Number(summary.total || 0)} checks passed · ${Number(summary.failed || 0)} failed`
-              : "Loading backend readiness from the local server..."
+              : "Checking the local server..."
           }</p>
         </div>
         <div class="settings-detail-item">
-          <p class="settings-detail-title">Live AI Key</p>
+          <p class="settings-detail-title">AI draft key</p>
           <p class="summary-meta">${
             liveAiTesting.status
-              ? `${escapeHtml(liveAiTesting.status)} · ${escapeHtml(liveAiTesting.requiredOnlyWhen || "")}`
-              : "Not required for deterministic readiness."
+              ? "Needed only when you click Ask AI to Draft."
+              : "Not needed for the basic draft."
           }</p>
         </div>
         ${
           visibleFailedChecks.length
             ? `
               <div class="settings-detail-item">
-                <p class="settings-detail-title">Attention Items</p>
+                <p class="settings-detail-title">Needs attention</p>
                 ${visibleFailedChecks
                   .map(
                     (check) =>
@@ -433,9 +336,9 @@ function renderAssistantReadinessCard(readiness, readinessStatusMessage = "") {
       </div>
 
       <div class="automation-actions">
-        <button class="button secondary" type="button" id="settings-study-builder-refresh-readiness">Refresh Readiness</button>
+        <button class="button secondary" type="button" id="settings-study-builder-refresh-readiness">Check Again</button>
       </div>
-      <p class="summary-meta">Run <code>python3 scripts/check_assistant_readiness.py</code> for the full CLI drift check.</p>
+      <p class="summary-meta">Developer check: <code>python3 scripts/check_assistant_readiness.py</code>.</p>
       ${
         readinessStatusMessage
           ? `<p class="status ${isOk ? "success" : "info"}">${escapeHtml(readinessStatusMessage)}</p>`
@@ -463,9 +366,9 @@ function renderStudyBuilderSettingsPage({
       <div class="settings-toolbar">
         <div>
           <p class="section-label">App Settings</p>
-          <h2 class="settings-title">Study Builder Preview</h2>
+          <h2 class="settings-title">Build a Study with AI</h2>
           <p class="summary-meta settings-copy">
-            Backend-owned harness for future AI-generated study plans. Deterministic validation stays in charge; live AI draft is experimental and never executes studies.
+            Tell the app what you want to study. AI can draft the setup, but the app checks it before anything runs.
           </p>
         </div>
         ${renderSettingsSectionNav("study-builder")}
@@ -477,13 +380,13 @@ function renderStudyBuilderSettingsPage({
         <section class="card settings-card">
           <div class="settings-card-head">
             <div>
-              <p class="meta-label">Intent Draft</p>
-              <h3 class="settings-card-title">Describe the study request</h3>
-              <p class="summary-meta">Use deterministic drafting for keyless review, or explicitly request an experimental live AI draft from the backend. Both paths stop at StudyPlan validation.</p>
+              <p class="meta-label">Your Request</p>
+              <h3 class="settings-card-title">Tell me what you want to study</h3>
+              <p class="summary-meta">Example: Compare Nifty 50 against Sensex from 2021 to 2024.</p>
             </div>
           </div>
           <form id="settings-study-builder-intent-form" class="automation-form">
-            <label class="field-label" for="settings-study-builder-intent">Research intent</label>
+            <label class="field-label" for="settings-study-builder-intent">Study request</label>
             <textarea
               id="settings-study-builder-intent"
               class="input settings-study-builder-intent"
@@ -491,9 +394,9 @@ function renderStudyBuilderSettingsPage({
               rows="5"
             >${escapeHtml(intentText)}</textarea>
             <div class="automation-actions">
-              <button class="button" type="submit">Draft StudyPlan</button>
-              <button class="button secondary" type="button" id="settings-study-builder-live-draft">Experimental: Live AI Draft</button>
-              <button class="button secondary" type="button" id="settings-study-builder-intent-example">Load Intent Example</button>
+              <button class="button" type="submit">Draft without AI</button>
+              <button class="button secondary" type="button" id="settings-study-builder-live-draft">Ask AI to Draft</button>
+              <button class="button secondary" type="button" id="settings-study-builder-intent-example">Load Example</button>
             </div>
           </form>
           ${renderLiveDraftResult(liveDraftResult)}
@@ -502,12 +405,12 @@ function renderStudyBuilderSettingsPage({
               ? `
                 <div class="settings-detail-list">
                   <div class="settings-detail-item">
-                    <p class="settings-detail-title">Matched Template</p>
+                    <p class="settings-detail-title">App chose</p>
                     <p>${escapeHtml(plannerResult.templateLabel || "Unknown")}</p>
                     <p class="summary-meta">${escapeHtml(plannerResult.templateId || "")} · ${escapeHtml(formatPlannerConfidence(plannerResult.confidence))}</p>
                   </div>
                 </div>
-                ${renderIssueList("Planner Diagnostics", plannerResult.diagnostics || [])}
+                ${renderIssueList("Needs your review", plannerResult.diagnostics || [])}
               `
               : ""
           }
@@ -516,13 +419,13 @@ function renderStudyBuilderSettingsPage({
         <section class="card settings-card">
           <div class="settings-card-head">
             <div>
-              <p class="meta-label">Route Hash</p>
-              <h3 class="settings-card-title">Convert an existing route</h3>
-              <p class="summary-meta">Round-trip saved links, copied app URLs, history routes, or manual hashes through the same StudyPlan validator.</p>
+              <p class="meta-label">Saved Link</p>
+              <h3 class="settings-card-title">Turn a link back into a setup</h3>
+              <p class="summary-meta">Paste a saved app link or history link and the app will rebuild the study setup.</p>
             </div>
           </div>
           <form id="settings-study-builder-route-form" class="automation-form">
-            <label class="field-label" for="settings-study-builder-route">study route hash or app URL</label>
+            <label class="field-label" for="settings-study-builder-route">Saved study link</label>
             <input
               id="settings-study-builder-route"
               class="input"
@@ -530,8 +433,8 @@ function renderStudyBuilderSettingsPage({
               value="${escapeHtml(routeHashText)}"
             />
             <div class="automation-actions">
-              <button class="button" type="submit">Convert Route</button>
-              <button class="button secondary" type="button" id="settings-study-builder-route-example">Load Route Example</button>
+              <button class="button" type="submit">Convert Link</button>
+              <button class="button secondary" type="button" id="settings-study-builder-route-example">Load Example</button>
             </div>
           </form>
         </section>
@@ -539,12 +442,12 @@ function renderStudyBuilderSettingsPage({
         <section class="card settings-card">
           <div class="settings-card-head">
             <div>
-              <p class="meta-label">StudyPlan JSON</p>
-              <h3 class="settings-card-title">Paste a proposed plan</h3>
+              <p class="meta-label">Advanced</p>
+              <h3 class="settings-card-title">Edit the study setup JSON</h3>
             </div>
           </div>
           <form id="settings-study-builder-form" class="automation-form">
-            <label class="field-label" for="settings-study-builder-json">study-plan-v1</label>
+            <label class="field-label" for="settings-study-builder-json">Study setup JSON</label>
             <textarea
               id="settings-study-builder-json"
               class="input settings-study-builder-textarea"
@@ -552,7 +455,7 @@ function renderStudyBuilderSettingsPage({
               rows="18"
             >${escapeHtml(planText)}</textarea>
             <div class="automation-actions">
-              <button class="button" type="submit">Validate Preview</button>
+              <button class="button" type="submit">Check Setup</button>
               <button class="button secondary" type="button" id="settings-study-builder-example">Load Example</button>
               <button class="button secondary" type="button" id="settings-study-builder-clear">Clear</button>
             </div>
@@ -567,13 +470,13 @@ function renderStudyBuilderSettingsPage({
         <section class="card settings-card">
           <div class="settings-card-head">
             <div>
-              <p class="meta-label">Saved Recipes</p>
-              <h3 class="settings-card-title">Reuse validated plans</h3>
-              <p class="summary-meta">Backend recipes when the local server is available, with browser-local fallback for offline review. This is convenience history, not evidence.</p>
+              <p class="meta-label">Saved Studies</p>
+              <h3 class="settings-card-title">Reuse studies you build often</h3>
+              <p class="summary-meta">Saved studies are reusable setups, not completed results or evidence.</p>
             </div>
           </div>
           <form id="settings-study-builder-recipe-form" class="automation-form">
-            <label class="field-label" for="settings-study-builder-recipe-name">Recipe name</label>
+            <label class="field-label" for="settings-study-builder-recipe-name">Setup name</label>
             <input
               id="settings-study-builder-recipe-name"
               class="input"
@@ -581,7 +484,7 @@ function renderStudyBuilderSettingsPage({
               placeholder="Nifty 50 relative risk"
             />
             <div class="automation-actions">
-              <button class="button" type="submit">Save Current Plan</button>
+              <button class="button" type="submit">Save This Study</button>
             </div>
           </form>
           ${renderRecipeList(recipes)}
@@ -596,11 +499,11 @@ function renderStudyBuilderSettingsPage({
 function mountStudyBuilderSettingsPage(root, controller = {}) {
   let intentText = EXAMPLE_STUDY_INTENT;
   let routeHashText = EXAMPLE_STUDY_ROUTE_HASH;
-  let planText = formatJson(EXAMPLE_STUDY_PLAN);
+  let planText = formatStudyPlanJson(EXAMPLE_STUDY_PLAN);
   let preview = null;
   let plannerResult = null;
   let liveDraftResult = null;
-  let recipes = loadLocalStudyPlanRecipes();
+  let recipes = loadInitialStudyPlanRecipes();
   let recipeName = "";
   let assistantReadiness = null;
   let assistantReadinessStatusMessage = "";
@@ -626,54 +529,25 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
     });
   }
 
-  function setJsonErrorPreview(error) {
-    preview = {
-      ok: false,
-      canRun: false,
-      version: STUDY_PLAN_VERSION,
-      studyId: "",
-      studyTitle: "",
-      viewId: "",
-      viewLabel: "",
-      routeHash: "",
-      requiresConfirmation: false,
-      paramItems: [],
-      errors: [error?.message || "Invalid JSON."],
-      warnings: [],
-      issues: [
-        {
-          code: "json.invalid",
-          severity: "error",
-          message: error?.message || "Invalid JSON.",
-          field: "studyPlanJson",
-          metadata: {},
-        },
-      ],
-      metricErrors: [],
-      metricWarnings: [],
-      normalizedPlan: null,
-    };
-  }
-
   async function refreshBackendRecipes({ showStatus = false } = {}) {
-    if (typeof controller?.fetchStudyPlanRecipes !== "function") {
-      return;
-    }
     try {
-      const payload = await controller.fetchStudyPlanRecipes();
+      const payload = await refreshStudyPlanRecipes(controller);
+      if (payload.skipped) {
+        return;
+      }
       if (!isMounted) {
         return;
       }
       recipes = payload.recipes;
       if (showStatus) {
-        statusMessage = "Loaded backend StudyPlan recipes.";
+        statusMessage = "Loaded saved studies.";
       }
       render();
     } catch (error) {
       if (!isMounted || !showStatus) {
         return;
       }
-      statusMessage = "Could not load backend recipes. Keeping browser-local fallback.";
+      statusMessage = "Could not load saved studies from the local server. Keeping browser-saved setups.";
       render();
     }
   }
@@ -681,7 +555,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
   async function refreshAssistantReadiness({ showStatus = false } = {}) {
     if (typeof controller?.fetchAssistantReadiness !== "function") {
       assistantReadinessStatusMessage =
-        "Backend readiness endpoint is unavailable in this context. Local contracts remain inspectable.";
+        "The local safety check is unavailable here. You can still inspect the setup on this page.";
       render();
       return;
     }
@@ -691,7 +565,7 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
         return;
       }
       assistantReadiness = payload;
-      assistantReadinessStatusMessage = "Loaded keyless backend assistant readiness.";
+      assistantReadinessStatusMessage = "Safety check loaded.";
       render();
     } catch (error) {
       if (!isMounted) {
@@ -699,64 +573,15 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
       }
       assistantReadiness = null;
       assistantReadinessStatusMessage =
-        error?.message || "Could not load backend assistant readiness.";
+        error?.message || "Could not load the safety check.";
       render();
     }
   }
 
-  async function saveCurrentRecipe({ name, plan }) {
-    if (typeof controller?.saveStudyPlanRecipe === "function") {
-      try {
-        return {
-          ...(await controller.saveStudyPlanRecipe({ name, plan })),
-          usedFallback: false,
-        };
-      } catch (error) {
-        const localResult = saveLocalStudyPlanRecipe({ name, plan });
-        return { ...localResult, usedFallback: true, error };
-      }
-    }
-    return { ...saveLocalStudyPlanRecipe({ name, plan }), usedFallback: false };
-  }
-
-  async function deleteCurrentRecipe(recipeId) {
-    if (typeof controller?.deleteStudyPlanRecipe === "function") {
-      try {
-        return {
-          ...(await controller.deleteStudyPlanRecipe({ id: recipeId })),
-          usedFallback: false,
-        };
-      } catch (error) {
-        return {
-          ok: true,
-          recipes: deleteLocalStudyPlanRecipe(recipeId),
-          usedFallback: true,
-          error,
-        };
-      }
-    }
-    return {
-      ok: true,
-      recipes: deleteLocalStudyPlanRecipe(recipeId),
-      usedFallback: false,
-    };
-  }
-
   async function validateCurrentPlan() {
-    try {
-      const plan = parsePlanText(planText);
-      const backendResult = await requestValidationPayload(controller, { plan });
-      preview = backendResult.payload.preview;
-      statusMessage = appendBackendFallbackNote(
-        preview.canRun
-          ? "Plan validated. Review the deterministic preview before route handoff."
-          : "Plan blocked. Fix the deterministic issues listed in the preview.",
-        backendResult,
-      );
-    } catch (error) {
-      setJsonErrorPreview(error);
-      statusMessage = "Could not parse StudyPlan JSON.";
-    }
+    const result = await validateStudyBuilderPlanText(controller, planText);
+    preview = result.preview;
+    statusMessage = result.statusMessage;
   }
 
   async function handleSubmit(event) {
@@ -766,19 +591,23 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
       recipeName = root.querySelector("#settings-study-builder-recipe-name")?.value || "";
       planText = root.querySelector("#settings-study-builder-json")?.value || planText;
       try {
-        const plan = parsePlanText(planText);
-        const result = await saveCurrentRecipe({ name: recipeName, plan });
+        const plan = parseStudyPlanJson(planText);
+        const result = await saveStudyPlanRecipeWithFallback(controller, {
+          name: recipeName,
+          plan,
+        });
         recipes = result.recipes;
-        preview = result.preview || buildStudyPlanConfirmationPreview(result.recipe?.plan || plan);
+        preview = result.preview || buildPreviewForPlan(result.recipe?.plan || plan);
         statusMessage = appendBackendFallbackNote(
           result.ok
-            ? "StudyPlan recipe saved."
-            : "Only validated StudyPlans can be saved as recipes.",
+            ? "Saved study stored."
+            : "Only checked study setups can be saved.",
           result,
         );
       } catch (error) {
-        setJsonErrorPreview(error);
-        statusMessage = error?.message || "Could not save StudyPlan recipe.";
+        const validationResult = await validateStudyBuilderPlanText({}, planText);
+        preview = validationResult.preview;
+        statusMessage = error?.message || "Could not save this study setup.";
       }
       render();
       return;
@@ -788,22 +617,15 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
     if (routeForm) {
       event.preventDefault();
       routeHashText = root.querySelector("#settings-study-builder-route")?.value || "";
-      const backendResult = await requestValidationPayload(controller, { routeHash: routeHashText });
+      const result = await convertStudyBuilderRoute(controller, routeHashText);
       if (!isMounted) {
         return;
       }
-      const routeValidation = backendResult.payload.route || buildStudyPlanFromRouteHash(routeHashText);
-      const routePlan = routeValidation.normalizedPlan || routeValidation.rawPlan;
-      planText = formatJson(routePlan);
-      preview = backendResult.payload.preview || buildStudyPlanConfirmationPreview(routePlan);
-      statusMessage = appendBackendFallbackNote(
-        routeValidation.ok
-          ? "Route converted into a validated StudyPlan. Review before route handoff."
-          : "Route converted, but validation blocked route handoff.",
-        backendResult,
-      );
-      plannerResult = null;
-      liveDraftResult = null;
+      planText = result.planText;
+      preview = result.preview;
+      statusMessage = result.statusMessage;
+      plannerResult = result.plannerResult;
+      liveDraftResult = result.liveDraftResult;
       render();
       return;
     }
@@ -812,18 +634,15 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
     if (intentForm) {
       event.preventDefault();
       intentText = root.querySelector("#settings-study-builder-intent")?.value || "";
-      const backendResult = await requestPlannerPayload(controller, intentText);
+      const result = await draftStudyBuilderIntent(controller, intentText);
       if (!isMounted) {
         return;
       }
-      plannerResult = backendResult.payload.plannerResult;
-      liveDraftResult = null;
-      planText = formatJson(backendResult.payload.plan);
-      preview = backendResult.payload.preview;
-      statusMessage = appendBackendFallbackNote(
-        getPlannerDraftStatusMessage(plannerResult, preview),
-        backendResult,
-      );
+      plannerResult = result.plannerResult;
+      liveDraftResult = result.liveDraftResult;
+      planText = result.planText;
+      preview = result.preview;
+      statusMessage = result.statusMessage;
       render();
       return;
     }
@@ -842,36 +661,18 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
   async function handleClick(event) {
     if (event.target.closest("#settings-study-builder-live-draft")) {
       intentText = root.querySelector("#settings-study-builder-intent")?.value || "";
-      if (!intentText.trim()) {
-        liveDraftResult = {
-          errorMessage: "Enter a research intent before requesting an experimental live AI draft.",
-        };
-        statusMessage = liveDraftResult.errorMessage;
-        render();
-        return;
-      }
       plannerResult = null;
       liveDraftResult = null;
-      statusMessage = "Requesting experimental Live AI Draft from the local backend...";
+      statusMessage = "Asking AI to draft a study setup...";
       render();
-      try {
-        const payload = await requestLiveDraftPayload(controller, intentText);
-        if (!isMounted) {
-          return;
-        }
-        liveDraftResult = payload;
-        planText = formatJson(payload.plan);
-        preview = payload.preview;
-        statusMessage = getLiveDraftStatusMessage(payload);
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-        liveDraftResult = {
-          errorMessage: error?.message || "Experimental Live AI Draft failed.",
-        };
-        statusMessage = liveDraftResult.errorMessage;
+      const result = await runLiveStudyBuilderDraft(controller, intentText);
+      if (!isMounted) {
+        return;
       }
+      liveDraftResult = result.liveDraftResult;
+      planText = result.planText || planText;
+      preview = result.preview || preview;
+      statusMessage = result.statusMessage;
       render();
       return;
     }
@@ -898,42 +699,71 @@ function mountStudyBuilderSettingsPage(root, controller = {}) {
       const recipeId = loadRecipeButton.getAttribute("data-study-builder-load-recipe");
       const recipe = recipes.find((item) => item.id === recipeId);
       if (recipe) {
-        planText = formatJson(recipe.plan);
-        preview = buildStudyPlanConfirmationPreview(recipe.plan);
+        planText = formatStudyPlanJson(recipe.plan);
+        preview = buildPreviewForPlan(recipe.plan);
         recipeName = recipe.name;
         plannerResult = null;
         liveDraftResult = null;
-        statusMessage = "Loaded saved StudyPlan recipe.";
+        statusMessage = "Loaded saved study.";
         render();
       }
+      return;
+    }
+
+    const refreshSavedStudyButton = event.target.closest("[data-study-builder-refresh-saved-study]");
+    if (refreshSavedStudyButton) {
+      const recipeId = refreshSavedStudyButton.getAttribute("data-study-builder-refresh-saved-study");
+      statusMessage = "Refreshing saved-study readiness...";
+      render();
+      const result = await refreshSavedStudyReadinessWithFallback(controller, { recipeId });
+      if (!isMounted) {
+        return;
+      }
+      if (Array.isArray(result.recipes)) {
+        recipes = result.recipes;
+      } else if (Array.isArray(result.savedStudies)) {
+        recipes = result.savedStudies.map((savedStudy) => ({
+          ...savedStudy,
+          id: savedStudy.id,
+          plan: savedStudy.plan,
+          savedStudy,
+          readiness: savedStudy.readiness,
+          dependencies: savedStudy.dependencies || [],
+        }));
+      }
+      statusMessage = appendBackendFallbackNote(
+        result.ok ? "Saved-study readiness refreshed." : result.statusMessage || "Saved-study readiness was not refreshed.",
+        result,
+      );
+      render();
       return;
     }
 
     const deleteRecipeButton = event.target.closest("[data-study-builder-delete-recipe]");
     if (deleteRecipeButton) {
       const recipeId = deleteRecipeButton.getAttribute("data-study-builder-delete-recipe");
-      const result = await deleteCurrentRecipe(recipeId);
+      const result = await deleteStudyPlanRecipeWithFallback(controller, { recipeId });
       if (!isMounted) {
         return;
       }
       recipes = result.recipes;
-      statusMessage = appendBackendFallbackNote("StudyPlan recipe deleted.", result);
+      statusMessage = appendBackendFallbackNote("Saved study archived.", result);
       render();
       return;
     }
 
     if (event.target.closest("#settings-study-builder-refresh-readiness")) {
-      assistantReadinessStatusMessage = "Refreshing assistant readiness...";
+      assistantReadinessStatusMessage = "Checking again...";
       render();
       await refreshAssistantReadiness({ showStatus: true });
       return;
     }
 
     if (event.target.closest("#settings-study-builder-example")) {
-      planText = formatJson(EXAMPLE_STUDY_PLAN);
+      planText = formatStudyPlanJson(EXAMPLE_STUDY_PLAN);
       preview = null;
       liveDraftResult = null;
-      statusMessage = "Loaded an example study-plan-v1 payload.";
+      statusMessage = "Loaded an example study setup.";
       render();
       return;
     }

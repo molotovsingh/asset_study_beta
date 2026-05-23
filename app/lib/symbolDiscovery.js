@@ -75,6 +75,10 @@ function chooseAutoResolvedSuggestion(query, suggestions) {
   const normalizedQuery = normalizeDiscoveryText(query);
   const compactQuery = compactDiscoveryText(query);
   const [topSuggestion, nextSuggestion] = suggestions;
+  if (topSuggestion?.kind === "provider" && topSuggestion?.verified === false) {
+    return null;
+  }
+
   const topScore = Number(topSuggestion?.matchScore || 0);
   const nextScore = Number(nextSuggestion?.matchScore || 0);
   const scoreGap = topScore - nextScore;

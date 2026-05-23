@@ -18,6 +18,15 @@
   --shadow: 0 20px 60px rgba(38, 44, 42, 0.08);
   --font: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
   --mono: "SFMono-Regular", "Menlo", "Monaco", monospace;
+  --text-2xs: clamp(0.72rem, 0.69rem + 0.08vw, 0.78rem);
+  --text-xs: clamp(0.78rem, 0.74rem + 0.1vw, 0.84rem);
+  --text-sm: clamp(0.86rem, 0.82rem + 0.12vw, 0.93rem);
+  --text-base: clamp(0.96rem, 0.92rem + 0.15vw, 1.04rem);
+  --text-md: clamp(1.04rem, 0.98rem + 0.22vw, 1.16rem);
+  --text-lg: clamp(1.22rem, 1.1rem + 0.46vw, 1.48rem);
+  --text-xl: clamp(1.52rem, 1.28rem + 0.82vw, 2rem);
+  --text-display: clamp(2.1rem, 1.52rem + 2.1vw, 3.35rem);
+  --text-metric: clamp(1.75rem, 1.36rem + 1.22vw, 2.45rem);
 }
 
 * {
@@ -32,11 +41,15 @@ body {
 body {
   margin: 0;
   font-family: var(--font);
+  font-size: var(--text-base);
+  line-height: 1.55;
   color: var(--ink);
   background:
     radial-gradient(circle at top left, rgba(181, 128, 63, 0.12), transparent 28%),
     radial-gradient(circle at 75% 0%, rgba(13, 95, 77, 0.1), transparent 24%),
     linear-gradient(180deg, #fbf7f0 0%, #f0e8dc 52%, #ebe1d3 100%);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .sr-only {
@@ -561,6 +574,15 @@ body {
   border-color: rgba(13, 95, 77, 0.2);
   background: rgba(255, 255, 255, 0.78);
   transform: translateY(-1px);
+}
+
+.active-asset-result[data-verified="false"] {
+  border-color: rgba(170, 96, 36, 0.2);
+  background: rgba(170, 96, 36, 0.08);
+}
+
+.active-asset-result[data-verified="true"] {
+  border-color: rgba(13, 95, 77, 0.18);
 }
 
 .active-asset-result-main {
@@ -2635,6 +2657,147 @@ textarea {
 .study-placeholder-card p {
   margin: 0;
   line-height: 1.5;
+}
+
+/* Global type recalibration: keep the visual language, but make dense research pages easier to scan. */
+.eyebrow,
+.meta-label,
+.section-label,
+.study-kicker,
+.study-view-state,
+.summary-pill,
+.meta-pill,
+.automation-pill,
+.options-screener-badge,
+.options-screener-direction-badge,
+.options-screener-candidate-badge,
+.interpretation-badge,
+.selection-chip {
+  font-size: var(--text-2xs);
+  line-height: 1.15;
+}
+
+.brand-block h1,
+.study-header h2 {
+  font-size: var(--text-display);
+  line-height: 1.03;
+  letter-spacing: -0.045em;
+}
+
+.settings-title,
+.intro-card > div > h2,
+.empty-state h2,
+.visuals-copy h2,
+.visual-empty h2,
+.study-placeholder h2 {
+  font-size: var(--text-xl);
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+}
+
+.lead {
+  max-width: 24ch;
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+
+.selection-title,
+.settings-card-title,
+.settings-detail-title,
+.visual-card h2,
+.options-screener-history-title {
+  font-size: var(--text-lg);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.summary-meta,
+.helper,
+.status,
+.field-label,
+.study-view-link,
+.copy-link-button,
+.results-export-button,
+.results-tab-button,
+.command-block,
+.visual-card-foot,
+.seasonality-table,
+.rolling-table,
+.sip-table,
+.result-caption,
+.result-detail,
+.study-header p,
+.note-box p,
+.source-list li,
+.warning-list li,
+.interpretation-item p,
+.sector-summary-item p,
+.study-placeholder-card p {
+  font-size: var(--text-sm);
+  line-height: 1.52;
+}
+
+.automation-item-title,
+.run-history-main,
+.active-asset-result-main,
+.profile-name,
+.detail-block h3 {
+  font-size: var(--text-base);
+  line-height: 1.22;
+}
+
+.automation-item-meta,
+.automation-item-copy,
+.active-asset-result-meta,
+.active-asset-copy,
+.run-history-meta,
+.interpretation-footnote,
+.profile-classification span,
+.profile-metric span,
+.sector-leadership-cell span,
+.rolling-legend-item,
+.empty-state-link {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.input,
+.file-input,
+.button,
+textarea {
+  font-size: var(--text-base);
+  line-height: 1.25;
+}
+
+.result-value,
+.visuals-summary-value {
+  font-size: var(--text-metric);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+.seasonality-result-value,
+.sector-result-value {
+  font-size: var(--text-xl);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.seasonality-table thead th,
+.rolling-table thead th,
+.sip-table thead th,
+.sector-heatmap-axis,
+.sector-leadership-axis,
+.seasonality-heatmap-axis,
+.visual-card-stat-label,
+.profile-metric span {
+  font-size: var(--text-2xs);
+}
+
+.settings-history-code,
+.settings-study-builder-textarea {
+  font-size: var(--text-xs);
+  line-height: 1.55;
 }
 
 input:focus-visible,

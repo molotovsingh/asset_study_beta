@@ -16,6 +16,15 @@ function parseOptionalIntegerValue(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseOptionalNumberValue(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function describeAutomationStatus(automation) {
   const lastStatus = automation?.isRunning
     ? "running"
@@ -43,6 +52,7 @@ function describeAutomationStatus(automation) {
 function buildAutomationCatalogCopy(automationState) {
   const marketUniverses = automationState?.catalogs?.marketUniverses || [];
   const optionsUniverses = automationState?.catalogs?.optionsUniverses || [];
+  const fundamentalUniverses = automationState?.catalogs?.fundamentalUniverses || [];
   return [
     marketUniverses.length
       ? `Market: ${marketUniverses
@@ -52,6 +62,11 @@ function buildAutomationCatalogCopy(automationState) {
     optionsUniverses.length
       ? `Options: ${optionsUniverses.map((entry) => entry.universeId).join(", ")}`
       : "Options: no configured collector universes.",
+    fundamentalUniverses.length
+      ? `Fundamentals: ${fundamentalUniverses
+          .map((entry) => `${entry.universeId} (${entry.activeMembers ?? entry.memberCount ?? "unseeded"})`)
+          .join(", ")}`
+      : "Fundamentals: no configured universes.",
   ].join("\n");
 }
 
@@ -76,6 +91,7 @@ function renderRuntimeHealthSummary(automationRuntimeHealth, { compact = false }
   }
 
   const summary = automationRuntimeHealth.summary;
+  const registrySummary = automationRuntimeHealth.instrumentRegistry?.summary || {};
   const topIssues = automationRuntimeHealth.attentionSymbols?.length
     ? automationRuntimeHealth.attentionSymbols
         .slice(0, compact ? 2 : 5)
@@ -108,7 +124,15 @@ function renderRuntimeHealthSummary(automationRuntimeHealth, { compact = false }
         </div>
         <div class="automation-health-metric">
           <span class="automation-health-value">${escapeHtml(summary.totalCollectionRuns || 0)}</span>
-          <span class="summary-meta">Collection runs</span>
+          <span class="summary-meta">Market runs</span>
+        </div>
+        <div class="automation-health-metric">
+          <span class="automation-health-value">${escapeHtml(summary.totalFundamentalSnapshots || 0)}</span>
+          <span class="summary-meta">Fundamental snapshots</span>
+        </div>
+        <div class="automation-health-metric">
+          <span class="automation-health-value">${escapeHtml(registrySummary.totalInstruments || 0)}</span>
+          <span class="summary-meta">Registry instruments</span>
         </div>
       </div>
       ${
@@ -123,6 +147,8 @@ function renderRuntimeHealthSummary(automationRuntimeHealth, { compact = false }
 function renderRuntimeHealthDetail(automationRuntimeHealth) {
   const universeHealth = automationRuntimeHealth?.universeHealth || [];
   const attentionSymbols = automationRuntimeHealth?.attentionSymbols || [];
+  const recentFundamentalRuns = automationRuntimeHealth?.recentFundamentalCollectionRuns || [];
+  const instrumentRegistry = automationRuntimeHealth?.instrumentRegistry || null;
 
   return `
     <section class="card settings-card">
@@ -183,6 +209,45 @@ function renderRuntimeHealthDetail(automationRuntimeHealth) {
               : `<p class="summary-meta">No stored universe health yet.</p>`
           }
         </div>
+        <div class="settings-detail-column">
+          <p class="meta-label">Instrument Registry</p>
+          ${
+            instrumentRegistry?.summary
+              ? `
+                <div class="settings-detail-list">
+                  <div class="settings-detail-item">
+                    <p class="settings-detail-title">${escapeHtml(instrumentRegistry.summary.totalInstruments || 0)} instruments</p>
+                    <p class="automation-item-meta">${escapeHtml(instrumentRegistry.summary.verifiedMappings || 0)} verified mappings · ${escapeHtml(instrumentRegistry.summary.unverifiedInstruments || 0)} unverified or legacy</p>
+                    <p class="automation-item-meta">Providers: ${escapeHtml(Object.keys(instrumentRegistry.byProvider || {}).join(", ") || "none")}</p>
+                  </div>
+                </div>
+              `
+              : `<p class="summary-meta">No registry health snapshot yet.</p>`
+          }
+        </div>
+        <div class="settings-detail-column">
+          <p class="meta-label">Fundamental Runs</p>
+          ${
+            recentFundamentalRuns.length
+              ? `
+                <div class="settings-detail-list">
+                  ${recentFundamentalRuns
+                    .slice(0, 6)
+                    .map(
+                      (entry) => `
+                        <div class="settings-detail-item">
+                          <p class="settings-detail-title">${escapeHtml(entry.universeLabel || entry.universeId)}</p>
+                          <p class="automation-item-meta">${escapeHtml(entry.provider || "provider")} · ${escapeHtml(entry.successCount || 0)} ok / ${escapeHtml(entry.failureCount || 0)} failed</p>
+                          <p class="automation-item-meta">${escapeHtml(formatSettingsTimestamp(entry.completedAt))}</p>
+                        </div>
+                      `,
+                    )
+                    .join("")}
+                </div>
+              `
+              : `<p class="summary-meta">No fundamental collection run recorded yet.</p>`
+          }
+        </div>
       </div>
     </section>
   `;
@@ -204,6 +269,9 @@ function renderAutomationList(automationState) {
           : null,
         automation.runOptionsCollection
           ? `Options ${automation.optionsUniverseIds?.join(", ") || "all configured universes"}`
+          : null,
+        automation.runFundamentalCollection
+          ? `Fundamentals ${automation.fundamentalUniverseIds?.join(", ") || "built-in universes"}`
           : null,
       ]
         .filter(Boolean)
@@ -270,7 +338,27 @@ function renderAutomationSettingsPage({
   const isActiveChecked = Boolean(template.isActive ?? true);
   const runMarketChecked = Boolean(template.runMarketCollection ?? true);
   const runOptionsChecked = Boolean(template.runOptionsCollection ?? true);
+  const runFundamentalsChecked = Boolean(template.runFundamentalCollection ?? false);
+  const seedFundamentalsChecked = Boolean(template.seedFundamentalUniverses ?? true);
   const refreshMastersChecked = Boolean(template.refreshExchangeSymbolMasters ?? false);
+  const fundamentalPeriodValue =
+    template.fundamentalPeriodDays !== undefined &&
+    template.fundamentalPeriodDays !== null &&
+    template.fundamentalPeriodDays !== ""
+      ? String(template.fundamentalPeriodDays)
+      : "366";
+  const fundamentalLimitValue =
+    template.fundamentalLimit !== undefined &&
+    template.fundamentalLimit !== null &&
+    template.fundamentalLimit !== ""
+      ? String(template.fundamentalLimit)
+      : "";
+  const fundamentalDelayValue =
+    template.fundamentalDelaySeconds !== undefined &&
+    template.fundamentalDelaySeconds !== null &&
+    template.fundamentalDelaySeconds !== ""
+      ? String(template.fundamentalDelaySeconds)
+      : "0";
 
   return `
     <section class="settings-shell">
@@ -317,6 +405,14 @@ function renderAutomationSettingsPage({
               <label for="settings-automation-run-options-input">Run options evidence</label>
             </div>
             <div class="toggle-row">
+              <input id="settings-automation-run-fundamentals-input" type="checkbox" ${runFundamentalsChecked ? "checked" : ""}>
+              <label for="settings-automation-run-fundamentals-input">Run fundamentals snapshots</label>
+            </div>
+            <div class="toggle-row">
+              <input id="settings-automation-seed-fundamentals-input" type="checkbox" ${seedFundamentalsChecked ? "checked" : ""}>
+              <label for="settings-automation-seed-fundamentals-input">Refresh built-in fundamental memberships</label>
+            </div>
+            <div class="toggle-row">
               <input id="settings-automation-refresh-masters-input" type="checkbox" ${refreshMastersChecked ? "checked" : ""}>
               <label for="settings-automation-refresh-masters-input">Refresh exchange symbol masters</label>
             </div>
@@ -326,6 +422,18 @@ function renderAutomationSettingsPage({
 
             <label class="field-label" for="settings-automation-options-universes-input">Options Universe Ids</label>
             <input id="settings-automation-options-universes-input" class="input" type="text" placeholder="us-liquid-10" value="${escapeHtml(Array.isArray(template.optionsUniverseIds) ? template.optionsUniverseIds.join(", ") : "")}">
+
+            <label class="field-label" for="settings-automation-fundamental-universes-input">Fundamental Universe Ids</label>
+            <input id="settings-automation-fundamental-universes-input" class="input" type="text" placeholder="sp500-current, nifty-500-current" value="${escapeHtml(Array.isArray(template.fundamentalUniverseIds) ? template.fundamentalUniverseIds.join(", ") : "")}">
+
+            <label class="field-label" for="settings-automation-fundamental-period-input">Fundamental Period Days</label>
+            <input id="settings-automation-fundamental-period-input" class="input" type="number" min="1" step="1" value="${escapeHtml(fundamentalPeriodValue)}">
+
+            <label class="field-label" for="settings-automation-fundamental-limit-input">Fundamental Run Limit</label>
+            <input id="settings-automation-fundamental-limit-input" class="input" type="number" min="1" step="1" placeholder="Blank for full universe" value="${escapeHtml(fundamentalLimitValue)}">
+
+            <label class="field-label" for="settings-automation-fundamental-delay-input">Fundamental Delay Seconds</label>
+            <input id="settings-automation-fundamental-delay-input" class="input" type="number" min="0" step="0.1" value="${escapeHtml(fundamentalDelayValue)}">
 
             <label class="field-label" for="settings-automation-max-attention-input">Max Attention Symbols</label>
             <input id="settings-automation-max-attention-input" class="input" type="number" min="0" step="1" placeholder="Leave blank to tolerate" value="${escapeHtml(maxAttentionValue)}">
@@ -381,12 +489,26 @@ function buildAutomationFormPayload(root) {
     isActive: Boolean(root.querySelector("#settings-automation-active-input")?.checked),
     runMarketCollection: Boolean(root.querySelector("#settings-automation-run-market-input")?.checked),
     runOptionsCollection: Boolean(root.querySelector("#settings-automation-run-options-input")?.checked),
+    runFundamentalCollection: Boolean(root.querySelector("#settings-automation-run-fundamentals-input")?.checked),
+    seedFundamentalUniverses: Boolean(root.querySelector("#settings-automation-seed-fundamentals-input")?.checked),
     refreshExchangeSymbolMasters: Boolean(root.querySelector("#settings-automation-refresh-masters-input")?.checked),
     marketUniverseIds: normalizeAutomationCsvList(
       root.querySelector("#settings-automation-market-universes-input")?.value,
     ).map((value) => value.toLowerCase()),
     optionsUniverseIds: normalizeAutomationCsvList(
       root.querySelector("#settings-automation-options-universes-input")?.value,
+    ),
+    fundamentalUniverseIds: normalizeAutomationCsvList(
+      root.querySelector("#settings-automation-fundamental-universes-input")?.value,
+    ).map((value) => value.toLowerCase()),
+    fundamentalPeriodDays: parseOptionalIntegerValue(
+      root.querySelector("#settings-automation-fundamental-period-input")?.value,
+    ),
+    fundamentalLimit: parseOptionalIntegerValue(
+      root.querySelector("#settings-automation-fundamental-limit-input")?.value,
+    ),
+    fundamentalDelaySeconds: parseOptionalNumberValue(
+      root.querySelector("#settings-automation-fundamental-delay-input")?.value,
     ),
     maxAttentionSymbols: parseOptionalIntegerValue(
       root.querySelector("#settings-automation-max-attention-input")?.value,
