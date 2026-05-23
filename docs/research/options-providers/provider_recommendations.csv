@@ -1,0 +1,31 @@
+Provider Recommendations - EOD Daily + Basic Fields + Python-Friendly - Last Updated: 2026-05-16
+
+SCENARIO,INDIA PICK,US PICK,EST MONTHLY COST,RATIONALE
+Best All-in-One,TrueData (all 3 segments),IVolatility Quant,~$270-300/mo,Single provider per market with Greeks. IVolatility covers equity+index+CME futures.
+Best Dev Experience,Dhan (INR 499/mo),Databento Standard,~$185/mo,Dhan: Greeks+Python SDK cheaper than TrueData. Databento: best Python DX for equities+futures.
+Best Value,Shoonya (FREE),Market Data Starter,~$30/mo,Shoonya completely free broker API. Market Data $30/mo with OPRA since 2005 + Python SDK.
+Best for Backtesting,Definedge (20yr daily),ORATS Delayed,~$120/mo,Definedge 20yr daily history. ORATS 15+yr (2007+) with 500+ analytics.
+Best GEX/Exposure,N/A,FlashAlpha,~$79-199/mo,Unique GEX/DEX/VEX/CHEX data. 15 Greeks incl higher-order. 0DTE specialist. No India equivalent.
+Budget Minimum,Shoonya (FREE),Market Data Free,~$0/mo,Both free tiers. Shoonya for India. Market Data 100 req/day free for US equity options.
+
+KEY INSIGHT,,,,
+1,,,,No single provider covers India + US. You need separate providers per market.
+2,,,,"No global provider (Databento, Polygon, etc.) covers Indian options data at all."
+3,,,,"CME futures options gap improved: now 5+ providers (Databento, IVolatility, AlgoSeek, IQFeed, Barchart)."
+4,,,,For Greek computation from raw data: Black-Scholes works for European-style Indian index options.
+5,,,,"Broker APIs (Dhan, Shoonya, Upstox) are free/cheap but need trading accounts and may lack expired contract history."
+6,,,,"NEW: Market Data (free tier) and FlashAlpha (free tier) provide viable free US entry points."
+
+90-DAY ACTION PLAN,,,,
+Days 1-14,,,,"Sign up free tiers (Shoonya, Dhan, Market Data free, FlashAlpha free, Polygon free). Test API reliability."
+Days 15-30,,,,"Add paid trials (Databento free credits, ThetaData trial, Dhan data API, TrueData trial). Compare data completeness."
+Days 30-60,,,,"Run daily EOD pulls for 10-20 key underlyings. Validate data quality, compute Greeks from raw data where needed."
+Days 60-90,,,,Finalize provider selection based on cost/quality trade-offs. Build ingestion pipeline for Index Study Lab.
+
+NEW DISCOVERIES (May 16) vs PREVIOUS,,,,
+1,,,,"Dhan: $6/mo with Greeks + Python SDK — best value India provider discovered."
+2,,,,"FlashAlpha: Unique GEX/DEX/VEX gamma exposure data — no other provider offers this."
+3,,,,"Market Data: Free US equity options tier with OPRA since 2005 — best free US entry."
+4,,,,"AlgoSeek, Barchart: Additional CME futures options coverage — previously hardest gap."
+5,,,,"Definedge: 20-year daily history from broker API — best backtesting depth among Indian broker APIs."
+6,,,,"IQFeed: Tick-by-tick real-time with dynamic Greeks — best real-time + historical US combo.

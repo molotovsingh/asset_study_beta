@@ -43,7 +43,7 @@ The browser is the cockpit. The Python backend is the engine room. The committed
 
 `scripts/dev_server.py` serves the app and dispatches `/api/*` calls.
 
-`scripts/server/` contains backend services and route handlers. `index_service.py` owns price/profile history behavior. `options_service.py` is now a compatibility facade for the options backend. The real options domains live under `scripts/server/options/`. `market_collector.py` owns bounded universe collection.
+`scripts/server/` contains backend services and route handlers. `index_service.py` owns price/profile history behavior. `options_service.py` is now a compatibility facade for the options backend. The real options domains live under `scripts/server/options/`. `market_collector.py` owns bounded market-price universe collection. `fundamentals_collector.py` owns current constituent lists and Finnhub basic-financial snapshots.
 
 `scripts/providers/` contains provider adapters. They are the translation layer between messy external data and the app's normalized internal shapes.
 
@@ -62,6 +62,8 @@ This split is worth understanding because it teaches a practical refactoring les
 `scripts/runtime_store_metadata.py` owns remembered datasets, instrument profiles, symbol universes, and market collection runs.
 
 `scripts/runtime_store_options.py` owns options monthly snapshots, screener-run persistence, and tracked trade/evidence persistence.
+
+`scripts/runtime_store_fundamentals.py` owns fundamental universes, current members, raw provider metric snapshots, normalized metric rows, and collection-run records.
 
 `docs/workflow-map.html` and `docs/workflow-map.json` document the workflow map interactively. The HTML is just the renderer; the JSON is the source of truth.
 
@@ -132,6 +134,29 @@ Local backend data goes through `/api/yfinance/index-series`. It is needed for a
 
 This distinction matters. If a built-in dataset has a `sync` config and a committed snapshot, the browser can load it directly. If it only has a symbol, like `Nifty 500` with `^CRSLDX`, it needs the local backend because no committed snapshot exists yet.
 
+## Verified Instrument Registry
+
+Symbol discovery used to behave like a helpful autocomplete: search, pick, and let the study find out later whether the symbol actually works. That is convenient, but it is not product-grade. A fake symbol should not get dressed up as an "UPDATED" instrument profile and then fail downstream. The app now treats symbol discovery more like airport security: a name match is not enough; the backend has to verify that a provider can serve the capability the workflow needs.
+
+The durable registry lives in SQLite across four additive tables:
+
+- `instruments` stores the canonical identity: label, symbol, asset class, exchange, MIC, currency, country, metadata, and status.
+- `instrument_provider_mappings` stores provider-specific symbols and capability flags such as `priceHistory`, `profile`, `fundamentals`, `optionsUnderlying`, `optionContract`, and `cryptoHistory`.
+- `instrument_aliases` stores friendly names like `banknifty`, `nifty metals`, and manual labels.
+- `instrument_discovery_events` stores every search, verification, manual registration, and failure reason.
+
+The new backend entrypoints are `POST /api/symbols/discover`, `POST /api/symbols/verify`, and `POST /api/symbols/register-manual`. Discovery can return local registry matches, built-ins, remembered entries, and Finnhub candidates. Verification is the gate. If a user types `ZZZNOTREAL123`, the app now blocks with one clear message: "This symbol is not verified for this study yet." If a user enters `Nifty Oil & Gas | ^CNXOILGAS`, the manual label is saved only after the backend proves price-history capability.
+
+There is an important maturity detail: successful price-history writes now update the registry too. That keeps the registry from becoming a stale side ledger. Older local symbols are migrated as `legacy`, not magically upgraded to freshly verified. That distinction is deliberate. A legacy mapping means "we saw this before"; a verified mapping means "the backend just proved this provider can serve the needed data."
+
+For operations, runtime health now includes an instrument-registry snapshot, and the non-UI refresh command is:
+
+```bash
+python3 scripts/refresh_instrument_registry.py --query "nifty energy"
+```
+
+The engineering lesson is that search is not identity. A search result says "this looks like what you typed." A registry mapping says "this exact provider symbol can serve this exact workflow." Future AI features should read the registry, not hallucinate that a ticker-like string is usable.
+
 ## The Runtime Store
 
 The SQLite store is machine-local mutable state. It stores:
@@ -141,12 +166,14 @@ The SQLite store is machine-local mutable state. It stores:
 - corporate actions
 - sync state
 - remembered datasets
+- verified instrument registry rows
 - instrument profiles
 - options monthly snapshots
 - derived metrics
 - options screener runs and evidence
 - symbol universes
 - market collection runs
+- fundamental universes, snapshots, metric rows, and collection runs
 - generic study-run ledger rows
 
 This store is not the same thing as bundled snapshot data. Bundled snapshots are repo assets. The runtime store is local memory.
@@ -157,7 +184,9 @@ There is a newer lesson here too. The repo used to put all of that persistence l
 
 The fix was not a flashy rewrite. The fix was to keep `runtime_store.py` as the stable public door and move domain-specific SQL into helper modules behind it. That is why `runtime_store_metadata.py`, `runtime_store_options.py`, and `runtime_store_runs.py` exist. The rest of the repo still calls `runtime_store.*`, but the actual logic now lives in narrower rooms.
 
-There is also a newer operations lesson: once you have local collectors and evidence archives, "does the code run?" stops being enough. You also need to ask "what is stale?", "what failed recently?", and "which tracked positions are still open with no marks?" That is why the repo now has `scripts/server/ops_service.py` and `scripts/report_runtime_health.py`. Good engineers add visibility before the system becomes mysterious.
+There is also a newer operations lesson: once you have local collectors and evidence archives, "does the code run?" stops being enough. You also need to ask "what is stale?", "what failed recently?", "did the app restart?", "did it shut down cleanly?", and "which tracked positions are still open with no marks?" That is why the repo now has `scripts/server/ops_service.py`, `scripts/report_runtime_health.py`, and a small `app_runtime_events` ledger. Good engineers add visibility before the system becomes mysterious.
+
+The `app_runtime_events` table is deliberately boring: one row for server start, readiness, failure, and stop events. It will not catch a laptop power loss or a `kill -9`, because no code gets to run in those cases. But for normal starts and clean shutdowns it gives the app a durable operational diary instead of relying on terminal scrollback.
 
 The next step after visibility is orchestration. That is why `scripts/run_data_maintenance.py` exists. It is not a scheduler by itself. It is a stable command that an external scheduler can call. This is a subtle but important engineering choice: keep scheduling policy outside the repo, keep the repo responsible for doing one maintenance pass correctly.
 
@@ -198,6 +227,12 @@ External providers are wrapped by adapters under `scripts/providers/`. The app d
 The provider router currently gives the app a default history/profile order of yfinance first, then yahoo_finance15. The market collector has a different default: Finnhub first, then yfinance. That is not a contradiction. App runs and scheduled collection have different needs.
 
 Finnhub is especially useful for symbol master and exchange-backed discovery. yfinance remains a convenient research provider. Google Finance is not treated as a backend ingestion API in this repo.
+
+The newer fundamentals lane uses Finnhub differently from both of those paths. For S&P 500, Finnhub is both the constituent source and the fundamentals provider. For Nifty 500, NSE/Nifty Indices is the constituent source, and the collector maps each local NSE symbol into Finnhub's `.NS` provider symbol before requesting fundamentals. That distinction matters. Constituents answer "who is in the universe today?" Fundamentals answer "what metrics did the provider return for this company today?" Those are different claims and they get stored separately.
+
+The fundamentals tables are local evidence, not a replacement for audited filings. The collector preserves the raw Finnhub payload for traceability, then extracts scalar, annual, and quarterly metric rows for the trailing period. Future studies should read from this SQLite ledger instead of calling Finnhub one symbol at a time during a user interaction. That is the product maturity move: ingestion happens as a controlled job; analysis reads a durable local snapshot.
+
+The automation settings page now exposes that lane as an opt-in `Run fundamentals snapshots` job. It is off by default and has a safety limit because S&P 500 plus Nifty 500 is roughly one thousand provider calls. A full run is a scheduled data job, not something to hide behind a button that looks harmless.
 
 ## Options Workflows
 
@@ -247,6 +282,10 @@ Discovery ranking is sensitive. Adding a strong built-in like `Nifty 500` can ch
 Provider provenance matters. A prior bug showed Finnhub-cached series as generic "Local market data" because the display map did not know Finnhub. The fix was to add Finnhub to provider display names so the UI tells the truth.
 
 `--limit` in the market collector must not shrink stored universe membership. It is a run cap, not a membership edit. This is a good example of naming danger: a small CLI flag can accidentally mean two things unless the code makes the distinction explicit.
+
+The same rule now applies to fundamentals. `--limit` caps the current fundamentals run only. It does not shrink the stored S&P 500 or Nifty 500 membership. This is why the Nifty 500 seed can record the full current CSV membership while a smoke run collects only two symbols.
+
+Another provider lesson showed up here: Finnhub does not expose a useful Nifty 500 index-constituents response through the same path that works for `^GSPC`. The mature response was not to fake it. The app uses Finnhub's index endpoint for S&P 500, NSE/Nifty Indices CSV for Nifty 500 membership, and Finnhub only for each Nifty constituent's `.NS` fundamentals. Source truth should be per claim, not per vendor brand.
 
 Options evidence can sprawl fast. The right move is to store compact summaries and validation records first, not try to archive every possible option-chain shape before the study needs it.
 
@@ -320,9 +359,11 @@ The route converter also keeps the failed draft. That is what `rawPlan` means in
 
 The converter is also tolerant about the shape of the input. It accepts a clean hash like `#risk-adjusted-return/overview?...`, a bare route like `risk-adjusted-return/overview?...`, a slash-prefixed route, or a full copied browser URL such as `http://127.0.0.1:8000/#risk-adjusted-return/overview?...`. The important point is that tolerance happens before validation, not instead of validation. The route can be convenient to paste, but it still has to become a legal StudyPlan before the app will run it.
 
-The Study Builder settings page now has saved recipes too. These are backend settings records when the local server is available, with browser-local storage kept as an offline fallback. They let you save a validated StudyPlan, load it later, and hand it back through the same confirmation preview. The backend routes are `GET /api/study-builder/recipes`, `POST /api/study-builder/recipes/save`, and `POST /api/study-builder/recipes/delete`. The generated contract lives at `docs/study-plan-recipe-contract.json`, checked by `node scripts/export_study_plan_recipe_contract.mjs --check`.
+The Study Builder settings page now has saved studies too. This replaced the weaker mental model of "saved recipes." A saved study is still not evidence, but it is stronger than a throwaway route: it says the user values this setup and may run it again. The backend stores a canonical StudyPlan, replay route, extracted dependency manifest, readiness snapshot, and optional latest-run link in local SQLite. The user-facing rule is simple: saving means valuable setup; refreshing means readiness; running means evidence.
 
-The important maturity point is what recipes are not. They are not evidence. They are not proof that a study ran. They are not the trade ledger or the completed run ledger. They are closer to a saved order ticket template: useful for reuse, but it still has to be validated and routed before anything meaningful happens. That distinction keeps the future assistant from confusing "I can recreate this study request" with "this result is historically proven."
+The old recipe endpoints still exist as compatibility wrappers: `GET /api/study-builder/recipes`, `POST /api/study-builder/recipes/save`, and `POST /api/study-builder/recipes/delete`. The first-class saved-study endpoints are `GET /api/saved-studies`, `POST /api/saved-studies/save`, `POST /api/saved-studies/archive`, and `POST /api/saved-studies/refresh-readiness`. Browser-local recipes remain only as an offline fallback.
+
+The important maturity point is what saved studies are not. They are not proof that a study ran. They are not the trade ledger or the completed run ledger. They are closer to a saved order ticket plus a dependency checklist: useful for reuse and warm data, but not a result claim. That distinction keeps the future assistant from confusing "I can recreate this study request" with "this result is historically proven."
 
 The next guardrail is result explanation. `app/studyBuilder/studyRunExplanation.js` turns a durable `study_runs` ledger record into a deterministic explanation seed. The seed records the run id, study, subject, route, effective date window, summary items, evidence links, snapshot references, source policy, confidence, and caveats. The generated contract lives at `docs/study-run-explanation-contract.json`, checked by `node scripts/export_study_run_explanation_contract.mjs --check`.
 
@@ -423,6 +464,19 @@ Run a bounded collector smoke:
 
 ```bash
 ./.venv/bin/python scripts/collect_market_universe.py --universe-id smoke-aapl --symbols AAPL --provider-order finnhub,yfinance --indent 2
+```
+
+Run a bounded fundamentals smoke:
+
+```bash
+./.venv/bin/python scripts/collect_fundamentals.py --universe-id sp500-current --seed-built-in --limit 25 --indent 2
+./.venv/bin/python scripts/collect_fundamentals.py --universe-id nifty-500-current --seed-built-in --limit 25 --indent 2
+```
+
+Run fundamentals through the same maintenance path used by app automations:
+
+```bash
+./.venv/bin/python scripts/run_data_maintenance.py --skip-market --skip-options --run-fundamentals --seed-fundamental-universes --fundamental-universe-id sp500-current --fundamental-limit 25
 ```
 
 Inspect operational health of the local SQLite runtime store:
@@ -526,6 +580,27 @@ metadata and repeats the key safety fact: no study execution happened. If the
 draft is valid, it can be saved as a recipe through the existing recipe path; if
 it is invalid, it remains a visible blocked draft instead of becoming a saved
 template.
+
+The Study Builder settings page then hit the next predictable maturity point:
+it was no longer just a page. It rendered markup, wired buttons, validated
+StudyPlan JSON, converted routes, called live AI, handled backend fallback
+payloads, and persisted recipes. That is too many jobs for one settings module.
+The fix was to split the boundary without changing the user experience:
+
+- `app/studyBuilder/studyBuilderWorkflow.js` owns plan parsing, deterministic
+  fallback payloads, route conversion, validation orchestration, live-draft
+  orchestration, and fallback status copy.
+- `app/studyBuilder/studyPlanRecipeClient.js` owns recipe loading, saving,
+  deleting, and backend-to-local fallback behavior.
+- `app/settings/studyBuilderSettings.js` now stays closer to what a settings
+  page should be: render the UI, read form values, call workflow/client helpers,
+  and update visible state.
+
+The engineering lesson is the same one that keeps showing up in this app: a
+screen may host a workflow, but it should not own the workflow contract. If a
+future in-app AI assistant needs to explain, replay, save, or test StudyPlans,
+it can now call stable non-UI helpers instead of scraping behavior out of a
+settings page.
 
 ## The Most Important Architectural Lesson
 
