@@ -12,6 +12,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import runtime_store  # noqa: E402
+import dev_server  # noqa: E402
 from server import ops_service  # noqa: E402
 
 
@@ -278,6 +279,14 @@ def test_runtime_health_payload_flags_attention_and_reports_operational_state():
         assert_equal(payload["summary"]["staleCheckCount"], 1, "one symbol should be stale by check time")
         assert_equal(payload["summary"]["stalePriceCount"], 1, "one symbol should be stale by price date")
         assert_equal(payload["summary"]["openTrackedPositionCount"], 1, "one tracked position should be open")
+        assert_true(
+            payload["instrumentRegistry"]["summary"]["totalInstruments"] >= 4,
+            "runtime health should include instrument registry health",
+        )
+        assert_true(
+            payload["instrumentRegistry"]["summary"]["verifiedMappings"] >= 4,
+            "runtime health should include verified provider mappings",
+        )
 
         issues_by_symbol = {
             entry["symbol"]: entry["issue"]
@@ -306,8 +315,97 @@ def test_runtime_health_payload_flags_attention_and_reports_operational_state():
         assert_equal(payload["openPositionHealth"][0]["markCount"], 0, "open position should show no marks yet")
 
 
+def test_app_runtime_lifecycle_events_round_trip_and_surface_in_health():
+    with isolated_runtime_store():
+        session_id = "session-test-1"
+        runtime_store.record_app_runtime_event(
+            session_id=session_id,
+            event_type="server_starting",
+            process_id=12345,
+            host="127.0.0.1",
+            port=8765,
+            event_at="2026-05-23T10:00:00+00:00",
+            message="starting",
+            metadata={"source": "test"},
+        )
+        runtime_store.record_app_runtime_event(
+            session_id=session_id,
+            event_type="server_ready",
+            process_id=12345,
+            host="127.0.0.1",
+            port=8765,
+            event_at="2026-05-23T10:00:02+00:00",
+            message="ready",
+        )
+        runtime_store.record_app_runtime_event(
+            session_id=session_id,
+            event_type="server_stopped",
+            process_id=12345,
+            host="127.0.0.1",
+            port=8765,
+            event_at="2026-05-23T10:05:00+00:00",
+            message="stopped",
+            metadata={"reason": "test-stop"},
+        )
+
+        events = runtime_store.load_recent_app_runtime_events(limit=5)
+        assert_equal(len(events), 3, "all lifecycle events should round-trip")
+        assert_equal(events[0]["eventType"], "server_stopped", "latest event should be first")
+        assert_equal(events[0]["metadata"], {"reason": "test-stop"}, "event metadata should decode")
+
+        latest = runtime_store.load_latest_app_runtime_session()
+        assert_equal(latest["sessionId"], session_id, "latest session id should round-trip")
+        assert_equal(latest["readyAt"], "2026-05-23T10:00:02+00:00", "ready time should be summarized")
+        assert_equal(latest["stoppedAt"], "2026-05-23T10:05:00+00:00", "stop time should be summarized")
+        assert_equal(latest["isOpen"], False, "stopped sessions should not be open")
+
+        payload = ops_service.build_runtime_health_payload({"runLimit": 5})
+        assert_equal(payload["appRuntime"]["version"], "app-runtime-health-v1", "runtime health should include app runtime contract")
+        assert_equal(payload["appRuntime"]["latestSession"]["sessionId"], session_id, "runtime health should expose latest session")
+        assert_equal(payload["appRuntime"]["recentEvents"][0]["eventType"], "server_stopped", "runtime health should expose recent events")
+
+        runtime_store.record_app_runtime_event(
+            session_id="session-failed",
+            event_type="server_failed",
+            process_id=12346,
+            host="127.0.0.1",
+            port=8766,
+            event_at="2026-05-23T10:06:00+00:00",
+            message="address already in use",
+        )
+        failed_latest = runtime_store.load_latest_app_runtime_session()
+        assert_equal(failed_latest["lastEventType"], "server_failed", "failed session should become latest")
+        assert_equal(failed_latest["isOpen"], False, "failed startup should not be treated as open")
+
+
+def test_dev_server_lifecycle_helper_records_runtime_events():
+    with isolated_runtime_store():
+        session_id = dev_server.build_server_session_id(
+            process_id=12345,
+            host="127.0.0.1",
+            port=8765,
+        )
+        dev_server.record_server_lifecycle_event(
+            session_id=session_id,
+            event_type="server_ready",
+            host="127.0.0.1",
+            port=8765,
+            process_id=12345,
+            message="ready",
+            metadata={"serverVersion": "test"},
+        )
+        events = runtime_store.load_recent_app_runtime_events(limit=1)
+        assert_equal(events[0]["sessionId"], session_id, "dev server helper should persist session id")
+        assert_equal(events[0]["eventType"], "server_ready", "dev server helper should persist event type")
+        assert_equal(events[0]["host"], "127.0.0.1", "dev server helper should persist host")
+        assert_equal(events[0]["port"], 8765, "dev server helper should persist port")
+        assert_equal(events[0]["metadata"], {"serverVersion": "test"}, "dev server helper should persist metadata")
+
+
 def main():
     test_runtime_health_payload_flags_attention_and_reports_operational_state()
+    test_app_runtime_lifecycle_events_round_trip_and_surface_in_health()
+    test_dev_server_lifecycle_helper_records_runtime_events()
     print("ok runtime health")
 
 

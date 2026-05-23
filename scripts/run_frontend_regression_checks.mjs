@@ -112,15 +112,18 @@ import {
 } from "../app/lib/studyExport.js";
 import {
   buildStudyFactoryProposal,
+  archiveSavedStudy,
   deleteStudyPlanRecipe,
   dryRunAssistantStudyPlan,
   draftStudyBuilderPlan,
   fetchAssistantContract,
   fetchAssistantContractBundle,
   fetchAssistantReadiness,
+  fetchSavedStudies,
   fetchStudyPlanRecipes,
   fetchStudyRunBrief,
   liveDraftAssistantStudyPlan,
+  refreshSavedStudyReadiness,
   saveStudyPlanRecipe,
   validateStudyBuilderPlan,
 } from "../app/lib/syncedData.js";
@@ -683,11 +686,14 @@ function testAppRouteModel() {
     statusMessage: "Plan validated.",
   });
   assert(
-    studyBuilderPage.includes("Study Builder Preview") &&
-      studyBuilderPage.includes("Assistant Readiness") &&
-      studyBuilderPage.includes("Go to route") &&
+    studyBuilderPage.includes("Build a Study with AI") &&
+      studyBuilderPage.includes("Safety Check") &&
+      studyBuilderPage.includes("Saved Studies") &&
+      studyBuilderPage.includes("Saved studies are reusable setups, not completed results or evidence.") &&
+      studyBuilderPage.includes("Open and check data") &&
+      studyBuilderPage.includes("Not checked on this page") &&
       studyBuilderPage.includes("#risk-adjusted-return/overview"),
-    "study builder settings page should render a deterministic route preview",
+    "study builder settings page should render a plain-language route preview and saved-study boundary",
   );
   console.log("ok app routes");
 }
@@ -746,7 +752,7 @@ async function testStudyBuilderBackendRecipeHydration() {
 
     assert(
       !root.innerHTML.includes("Local Only Recipe") &&
-        root.innerHTML.includes("No saved StudyPlan recipes yet."),
+        root.innerHTML.includes("No saved studies yet."),
       "study-builder settings should replace stale local recipes with an empty successful backend response",
     );
 
@@ -781,7 +787,7 @@ async function testStudyBuilderReadinessHydration() {
   });
 
   assert(
-    root.innerHTML.includes("Checking deterministic assistant rail"),
+    root.innerHTML.includes("Checking Study Builder"),
     "study-builder settings should render assistant readiness loading state",
   );
 
@@ -799,9 +805,9 @@ async function testStudyBuilderReadinessHydration() {
   await Promise.resolve();
 
   assert(
-    root.innerHTML.includes("Deterministic assistant rail is healthy") &&
+    root.innerHTML.includes("Study Builder setup checks are OK") &&
       root.innerHTML.includes("13 / 13 checks passed") &&
-      root.innerHTML.includes("not-required"),
+      root.innerHTML.includes("Needed only when you click Ask AI to Draft."),
     "study-builder settings should hydrate backend assistant readiness",
   );
 
@@ -855,11 +861,11 @@ async function testStudyBuilderLiveDraftInteraction() {
 
   assert(
     capturedRequest.intent === EXAMPLE_STUDY_INTENT &&
-      root.innerHTML.includes("Experimental Live AI Draft") &&
-      root.innerHTML.includes("resp_ui_test") &&
-      root.innerHTML.includes("Valid Draft") &&
-      root.innerHTML.includes("no study execution") &&
-      root.innerHTML.includes("Live AI drafted a valid non-executing StudyPlan"),
+      root.innerHTML.includes("AI Draft Result") &&
+      root.innerHTML.includes("gpt-test") &&
+      root.innerHTML.includes("Setup OK") &&
+      root.innerHTML.includes("No study was run") &&
+      root.innerHTML.includes("AI drafted a checked setup"),
     "study-builder settings should run live draft through the backend helper and render non-executing metadata",
   );
 
@@ -1487,6 +1493,30 @@ async function testAssistantApiHelpers() {
       "study-plan recipe helper should GET backend recipes with query params",
     );
 
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "saved-study-v1",
+          limit: 50,
+          savedStudies: [{ id: "risk", name: "Risk" }],
+          savedStudy: null,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const savedStudiesPayload = await fetchSavedStudies({ limit: 10 });
+    assert(
+      savedStudiesPayload.savedStudies.length === 1 &&
+        requests[0].url.endsWith("/api/saved-studies?limit=10") &&
+        !requests[0].init.method,
+      "saved-study helper should GET saved studies with query params",
+    );
+
     globalThis.fetch = async () =>
       new Response(
         JSON.stringify({
@@ -1536,6 +1566,39 @@ async function testAssistantApiHelpers() {
         requests[0].url.endsWith("/api/study-builder/recipes/save") &&
         JSON.parse(requests[0].init.body).name === "Risk",
       "study-plan recipe save helper should POST recipes to the backend",
+    );
+
+    requests.length = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      requests.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          version: "saved-study-v1",
+          ok: true,
+          savedStudy: { id: "risk" },
+          savedStudies: [{ id: "risk" }],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    };
+    const refreshSavedStudyPayload = await refreshSavedStudyReadiness({ id: "risk" });
+    assert(
+      refreshSavedStudyPayload.ok &&
+        requests[0].url.endsWith("/api/saved-studies/refresh-readiness") &&
+        JSON.parse(requests[0].init.body).id === "risk",
+      "saved-study readiness helper should POST saved study ids to the backend",
+    );
+
+    requests.length = 0;
+    const archiveSavedStudyPayload = await archiveSavedStudy({ id: "risk" });
+    assert(
+      archiveSavedStudyPayload.ok &&
+        requests[0].url.endsWith("/api/saved-studies/archive") &&
+        JSON.parse(requests[0].init.body).id === "risk",
+      "saved-study archive helper should POST saved study ids to the backend",
     );
 
     requests.length = 0;
@@ -3751,7 +3814,7 @@ async function main() {
   await testStudyBuilderLiveDraftInteraction();
   await testAssistantApiHelpers();
   assertionCount += runMetricRegistryChecks();
-  assertionCount += runStudyBuilderChecks();
+  assertionCount += await runStudyBuilderChecks();
   runSymbolDiscoveryChecks();
   await testRunHistoryStore();
   testAvailableStudyWindow();
