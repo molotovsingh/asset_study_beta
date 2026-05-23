@@ -1,5 +1,6 @@
 import { studyRegistry, getStudyById } from "./studies/registry.js";
 import {
+  archiveSavedStudy,
   deleteAutomationConfig,
   deleteStudyPlanRecipe,
   discoverSymbols,
@@ -12,11 +13,14 @@ import {
   fetchStudyRuns,
   loadRememberedIndexCatalog,
   liveDraftAssistantStudyPlan,
+  registerManualSymbol,
   recordStudyRunLedgerEntry,
   runAutomationNow,
   saveAutomationConfig,
+  refreshSavedStudyReadiness,
   saveStudyPlanRecipe,
   validateStudyBuilderPlan,
+  verifySymbol,
 } from "./lib/syncedData.js";
 import {
   getActiveSubjectQuery,
@@ -113,6 +117,28 @@ function renderActiveSubjectStatus(message = "") {
   activeSubjectStatus.textContent = message;
 }
 
+function formatCapabilityBadges(capabilities = {}) {
+  const labels = [
+    capabilities.priceHistory ? "history" : null,
+    capabilities.profile ? "profile" : null,
+    capabilities.fundamentals ? "fundamentals" : null,
+    capabilities.optionsUnderlying ? "options" : null,
+    capabilities.optionContract ? "contract" : null,
+    capabilities.cryptoHistory ? "crypto" : null,
+  ].filter(Boolean);
+  return labels.length ? labels.join(" / ") : "verify required";
+}
+
+function describeSuggestionStatus(suggestion) {
+  if (suggestion?.verified === true) {
+    return `verified: ${formatCapabilityBadges(suggestion.capabilities)}`;
+  }
+  if (suggestion?.verified === false) {
+    return "not verified yet";
+  }
+  return null;
+}
+
 function renderActiveSubjectSuggestions() {
   if (!activeSubjectResults) {
     return;
@@ -126,12 +152,14 @@ function renderActiveSubjectSuggestions() {
   activeSubjectResults.innerHTML = `
     ${activeSubjectSuggestions
       .map(
-        (suggestion) => `
+        (suggestion, index) => `
           <button
             type="button"
             class="active-asset-result"
+            data-suggestion-index="${index}"
             data-subject-query="${escapeHtml(suggestion.subjectQuery || "")}"
             data-input-value="${escapeHtml(suggestion.inputValue || suggestion.subjectQuery || "")}"
+            data-verified="${suggestion.verified === true ? "true" : suggestion.verified === false ? "false" : "unknown"}"
           >
             <span class="active-asset-result-main">${escapeHtml(
               suggestion.label || suggestion.symbol || suggestion.subjectQuery || "",
@@ -142,7 +170,11 @@ function renderActiveSubjectSuggestions() {
                   ? suggestion.symbol
                   : null,
                 suggestion.family || null,
+                suggestion.assetClass || null,
+                suggestion.exchange || null,
+                suggestion.currency || null,
                 suggestion.providerName || null,
+                describeSuggestionStatus(suggestion),
               ]
                 .filter(Boolean)
                 .join(" · "),
@@ -217,6 +249,85 @@ function combineActiveSubjectSuggestions(localSuggestions, remoteSuggestions) {
     .slice(0, 8);
 }
 
+function buildSymbolVerificationRequest({
+  query,
+  suggestion = null,
+  manualSelection = null,
+}) {
+  if (manualSelection) {
+    return {
+      query,
+      label: manualSelection.label,
+      symbol: manualSelection.symbol,
+      requiredCapability: "priceHistory",
+    };
+  }
+
+  return {
+    query,
+    label: suggestion?.label || undefined,
+    symbol: suggestion?.symbol || suggestion?.displaySymbol || suggestion?.subjectQuery || query,
+    displaySymbol: suggestion?.displaySymbol || undefined,
+    assetClass: suggestion?.assetClass || suggestion?.family || undefined,
+    exchange: suggestion?.exchange || undefined,
+    mic: suggestion?.mic || undefined,
+    currency: suggestion?.currency || undefined,
+    country: suggestion?.country || undefined,
+    preferredProvider: suggestion?.provider === "yfinance" ? "yfinance" : undefined,
+    requiredCapability: "priceHistory",
+  };
+}
+
+function renderVerificationFailure(payload, fallbackSymbol) {
+  const capability = payload?.requiredCapability || "priceHistory";
+  const symbol = payload?.selection?.symbol || fallbackSymbol || "This symbol";
+  renderActiveSubjectStatus(
+    `This symbol is not verified for this study yet. Missing ${capability} capability for ${symbol}.`,
+  );
+}
+
+async function verifyAndApplyActiveSubject({ query, suggestion = null }) {
+  const manualSelection = parseManualSelectionInput(query);
+  const symbol = suggestion?.symbol || manualSelection?.symbol || query;
+  renderActiveSubjectStatus(`Verifying ${symbol}...`);
+
+  let payload;
+  try {
+    payload = manualSelection
+      ? await registerManualSymbol(
+          buildSymbolVerificationRequest({
+            query,
+            manualSelection,
+          }),
+        )
+      : await verifySymbol(
+          buildSymbolVerificationRequest({
+            query,
+            suggestion,
+          }),
+        );
+  } catch (error) {
+    renderActiveSubjectStatus(
+      `This symbol is not verified for this study yet. Verification could not prove the required data capability.`,
+    );
+    return false;
+  }
+
+  if (!payload.verified) {
+    renderVerificationFailure(payload, symbol);
+    return false;
+  }
+
+  const subjectQuery =
+    payload.selection?.subjectQuery ||
+    suggestion?.subjectQuery ||
+    payload.selection?.symbol ||
+    symbol;
+  activeSubjectInput.value = payload.selection?.inputValue || subjectQuery;
+  applyActiveSubjectQuery(subjectQuery);
+  return true;
+}
+
 async function refreshActiveSubjectSuggestions({
   query = activeSubjectInput.value,
   includeRemote = true,
@@ -286,13 +397,13 @@ async function refreshActiveSubjectSuggestions({
 
   if (manualSelectionInput) {
     renderActiveSubjectStatus(
-      `Press Enter to use ${manualSelectionInput.label} (${manualSelectionInput.symbol}) as a local manual entry.`,
+      `Press Enter to verify and save ${manualSelectionInput.label} (${manualSelectionInput.symbol}).`,
     );
     return combinedSuggestions;
   }
 
   if (isExplicitMarketSymbol(trimmedQuery)) {
-    renderActiveSubjectStatus("Press Enter to try the raw symbol.");
+    renderActiveSubjectStatus("Press Enter to verify the raw symbol.");
     return combinedSuggestions;
   }
 
@@ -425,6 +536,14 @@ async function applyActiveSubjectFromSidebar() {
     return;
   }
 
+  const manualSelectionInput = parseManualSelectionInput(nextSubject);
+  if (manualSelectionInput) {
+    await verifyAndApplyActiveSubject({
+      query: nextSubject,
+    });
+    return;
+  }
+
   const suggestions = await refreshActiveSubjectSuggestions({
     query: nextSubject,
     includeRemote: true,
@@ -436,6 +555,13 @@ async function applyActiveSubjectFromSidebar() {
   );
 
   if (autoResolvedSuggestion) {
+    if (autoResolvedSuggestion.verified === false) {
+      await verifyAndApplyActiveSubject({
+        query: nextSubject,
+        suggestion: autoResolvedSuggestion,
+      });
+      return;
+    }
     activeSubjectInput.value =
       autoResolvedSuggestion.inputValue || autoResolvedSuggestion.subjectQuery;
     applyActiveSubjectQuery(
@@ -449,7 +575,9 @@ async function applyActiveSubjectFromSidebar() {
     return;
   }
 
-  applyActiveSubjectQuery(nextSubject);
+  await verifyAndApplyActiveSubject({
+    query: nextSubject,
+  });
 }
 
 function parseRouteHash() {
@@ -531,13 +659,13 @@ function renderSettingsMeta(section = DEFAULT_SETTINGS_SECTION) {
     [STUDY_BUILDER_SETTINGS_SECTION]: {
       currentViewLabel: "Study Builder",
       summaryText:
-        "Validate assistant-generated StudyPlan JSON and preview the route handoff before execution.",
+        "Tell AI what study you want, review the setup, then open it to check the actual data.",
       inputText:
-        "StudyPlan JSON, route params, deterministic validation issues, and confirmation preview fields.",
+        "Study request, saved links, editable setup JSON, safety notes, and setup preview.",
       supportPills: `
-        <span class="meta-pill ready">StudyPlan v1</span>
-        <span class="meta-pill ready">Validation Issues</span>
-        <span class="meta-pill ready">Route Preview</span>
+        <span class="meta-pill ready">AI Draft</span>
+        <span class="meta-pill ready">Safety Check</span>
+        <span class="meta-pill ready">Data Checked Later</span>
       `,
     },
   };
@@ -805,11 +933,13 @@ function mountSettingsRoute(route) {
 
     if (route.section === STUDY_BUILDER_SETTINGS_SECTION) {
       unmountCurrentView = mountStudyBuilderSettingsPage(studyRoot, {
+        archiveSavedStudy,
         deleteStudyPlanRecipe,
         draftStudyBuilderPlan,
         fetchAssistantReadiness,
         fetchStudyPlanRecipes,
         liveDraftAssistantStudyPlan,
+        refreshSavedStudyReadiness,
         saveStudyPlanRecipe,
         validateStudyBuilderPlan,
       });
@@ -905,6 +1035,10 @@ activeSubjectResults?.addEventListener("click", (event) => {
     return;
   }
 
+  const suggestionIndex = Number(trigger.dataset.suggestionIndex);
+  const suggestion = Number.isInteger(suggestionIndex)
+    ? activeSubjectSuggestions[suggestionIndex] || null
+    : null;
   const subjectQuery = String(trigger.dataset.subjectQuery || "").trim();
   const inputValue = String(trigger.dataset.inputValue || subjectQuery).trim();
   if (!subjectQuery) {
@@ -912,6 +1046,14 @@ activeSubjectResults?.addEventListener("click", (event) => {
   }
 
   activeSubjectInput.value = inputValue || subjectQuery;
+  if (suggestion?.verified === false || suggestion?.kind === "provider") {
+    void verifyAndApplyActiveSubject({
+      query: activeSubjectSuggestionQuery || inputValue || subjectQuery,
+      suggestion,
+    });
+    return;
+  }
+
   applyActiveSubjectQuery(subjectQuery);
 });
 

@@ -21,6 +21,7 @@ def test_run_data_maintenance_reports_attention_from_thresholds_and_failures():
     original_list_symbol_universes = maintenance_service.list_symbol_universes
     original_collect_market_universe = maintenance_service.market_collector.collect_market_universe
     original_collect_options_evidence = maintenance_service.options_service.collect_options_evidence_for_universe
+    original_collect_fundamental_universe = maintenance_service.fundamentals_collector.collect_fundamental_universe
     original_collector_universes = dict(maintenance_service.options_service.COLLECTOR_UNIVERSES)
     original_build_runtime_health_payload = maintenance_service.ops_service.build_runtime_health_payload
 
@@ -55,7 +56,17 @@ def test_run_data_maintenance_reports_attention_from_thresholds_and_failures():
             raise RuntimeError("options provider unavailable")
         return {"universeId": universe_id, "signalVersion": "options-signal-v1"}
 
+    def fake_collect_fundamentals(universe_id, **kwargs):
+        if universe_id == "broken-fundamentals":
+            raise RuntimeError("fundamental provider unavailable")
+        return {
+            "universeId": universe_id,
+            "periodDays": kwargs.get("period_days"),
+            "successCount": 2,
+        }
+
     maintenance_service.options_service.collect_options_evidence_for_universe = fake_collect_options
+    maintenance_service.fundamentals_collector.collect_fundamental_universe = fake_collect_fundamentals
     maintenance_service.ops_service.build_runtime_health_payload = lambda request: {
         "generatedAt": "2026-04-20T00:00:00+00:00",
         "summary": {
@@ -69,6 +80,9 @@ def test_run_data_maintenance_reports_attention_from_thresholds_and_failures():
         payload = maintenance_service.run_data_maintenance(
             market_universe_ids=["us-core"],
             options_universe_ids=["us-liquid-10", "broken"],
+            fundamental_universe_ids=["sp500-current", "broken-fundamentals"],
+            run_fundamental_collection=True,
+            fundamental_period_days=366,
             health_stale_after_days=3,
             max_attention_symbols=3,
             max_sync_errors=1,
@@ -77,6 +91,7 @@ def test_run_data_maintenance_reports_attention_from_thresholds_and_failures():
         maintenance_service.list_symbol_universes = original_list_symbol_universes
         maintenance_service.market_collector.collect_market_universe = original_collect_market_universe
         maintenance_service.options_service.collect_options_evidence_for_universe = original_collect_options_evidence
+        maintenance_service.fundamentals_collector.collect_fundamental_universe = original_collect_fundamental_universe
         maintenance_service.options_service.COLLECTOR_UNIVERSES = original_collector_universes
         maintenance_service.ops_service.build_runtime_health_payload = original_build_runtime_health_payload
 
@@ -97,6 +112,16 @@ def test_run_data_maintenance_reports_attention_from_thresholds_and_failures():
         "options failure should be captured",
     )
     assert_equal(
+        payload["fundamentals"]["results"][0]["universeId"],
+        "sp500-current",
+        "successful fundamental collection should round-trip",
+    )
+    assert_equal(
+        payload["fundamentals"]["failures"][0]["universeId"],
+        "broken-fundamentals",
+        "fundamental failure should be captured",
+    )
+    assert_equal(
         payload["runtimeHealth"]["requestEcho"]["staleAfterDays"],
         3,
         "health request thresholds should be forwarded",
@@ -105,6 +130,7 @@ def test_run_data_maintenance_reports_attention_from_thresholds_and_failures():
         payload["failureReasons"],
         [
             "optionsFailures=1",
+            "fundamentalFailures=1",
             "attentionSymbols=5>3",
             "syncErrors=2>1",
         ],

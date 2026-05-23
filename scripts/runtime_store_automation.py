@@ -23,6 +23,15 @@ def _clean_int(value) -> int | None:
         return None
 
 
+def _clean_float(value) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _clean_bool(value) -> bool:
     if isinstance(value, bool):
         return value
@@ -73,6 +82,12 @@ def _row_to_automation_config(row: sqlite3.Row) -> dict:
         "marketUniverseIds": json.loads(row["market_universe_ids_json"] or "[]"),
         "runOptionsCollection": bool(row["run_options_collection"]),
         "optionsUniverseIds": json.loads(row["options_universe_ids_json"] or "[]"),
+        "runFundamentalCollection": bool(row["run_fundamental_collection"]),
+        "fundamentalUniverseIds": json.loads(row["fundamental_universe_ids_json"] or "[]"),
+        "seedFundamentalUniverses": bool(row["seed_fundamental_universes"]),
+        "fundamentalPeriodDays": int(row["fundamental_period_days"] or 0),
+        "fundamentalLimit": row["fundamental_limit"],
+        "fundamentalDelaySeconds": row["fundamental_delay_seconds"],
         "refreshExchangeSymbolMasters": bool(row["refresh_exchange_symbol_masters"]),
         "marketProviderOrder": json.loads(row["market_provider_order_json"] or "[]"),
         "marketFullSync": bool(row["market_full_sync"]),
@@ -111,6 +126,12 @@ def list_automation_configs(*, open_runtime_store) -> list[dict]:
                 market_universe_ids_json,
                 run_options_collection,
                 options_universe_ids_json,
+                run_fundamental_collection,
+                fundamental_universe_ids_json,
+                seed_fundamental_universes,
+                fundamental_period_days,
+                fundamental_limit,
+                fundamental_delay_seconds,
                 refresh_exchange_symbol_masters,
                 market_provider_order_json,
                 market_full_sync,
@@ -161,6 +182,12 @@ def load_automation_config(
                 market_universe_ids_json,
                 run_options_collection,
                 options_universe_ids_json,
+                run_fundamental_collection,
+                fundamental_universe_ids_json,
+                seed_fundamental_universes,
+                fundamental_period_days,
+                fundamental_limit,
+                fundamental_delay_seconds,
                 refresh_exchange_symbol_masters,
                 market_provider_order_json,
                 market_full_sync,
@@ -216,6 +243,10 @@ def upsert_automation_config(
         automation.get("optionsUniverseIds"),
         normalize_item=lambda value: str(value or "").strip(),
     )
+    fundamental_universe_ids = _normalize_string_list(
+        automation.get("fundamentalUniverseIds"),
+        normalize_item=lambda value: normalize_dataset_id(value),
+    )
     market_provider_order = _normalize_string_list(
         automation.get("marketProviderOrder"),
         normalize_item=lambda value: str(value or "").strip().lower(),
@@ -234,6 +265,12 @@ def upsert_automation_config(
                 market_universe_ids_json,
                 run_options_collection,
                 options_universe_ids_json,
+                run_fundamental_collection,
+                fundamental_universe_ids_json,
+                seed_fundamental_universes,
+                fundamental_period_days,
+                fundamental_limit,
+                fundamental_delay_seconds,
                 refresh_exchange_symbol_masters,
                 market_provider_order_json,
                 market_full_sync,
@@ -255,7 +292,7 @@ def upsert_automation_config(
                 last_run_error,
                 created_at,
                 updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, '{}', NULL, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, '{}', NULL, ?, ?)
             ON CONFLICT(automation_id) DO UPDATE SET
                 label = excluded.label,
                 kind = excluded.kind,
@@ -265,6 +302,12 @@ def upsert_automation_config(
                 market_universe_ids_json = excluded.market_universe_ids_json,
                 run_options_collection = excluded.run_options_collection,
                 options_universe_ids_json = excluded.options_universe_ids_json,
+                run_fundamental_collection = excluded.run_fundamental_collection,
+                fundamental_universe_ids_json = excluded.fundamental_universe_ids_json,
+                seed_fundamental_universes = excluded.seed_fundamental_universes,
+                fundamental_period_days = excluded.fundamental_period_days,
+                fundamental_limit = excluded.fundamental_limit,
+                fundamental_delay_seconds = excluded.fundamental_delay_seconds,
                 refresh_exchange_symbol_masters = excluded.refresh_exchange_symbol_masters,
                 market_provider_order_json = excluded.market_provider_order_json,
                 market_full_sync = excluded.market_full_sync,
@@ -290,6 +333,12 @@ def upsert_automation_config(
                 json.dumps(market_universe_ids, separators=(",", ":")),
                 1 if _clean_bool(automation.get("runOptionsCollection", True)) else 0,
                 json.dumps(options_universe_ids, separators=(",", ":")),
+                1 if _clean_bool(automation.get("runFundamentalCollection", False)) else 0,
+                json.dumps(fundamental_universe_ids, separators=(",", ":")),
+                1 if _clean_bool(automation.get("seedFundamentalUniverses", True)) else 0,
+                max(1, _clean_int(automation.get("fundamentalPeriodDays")) or 366),
+                _clean_int(automation.get("fundamentalLimit")),
+                max(0.0, _clean_float(automation.get("fundamentalDelaySeconds")) or 0.0),
                 1 if _clean_bool(automation.get("refreshExchangeSymbolMasters", False)) else 0,
                 json.dumps(market_provider_order, separators=(",", ":")),
                 1 if _clean_bool(automation.get("marketFullSync", False)) else 0,

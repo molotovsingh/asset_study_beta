@@ -218,6 +218,7 @@ function testSymbolDiscoveryPolicy() {
       subjectQuery: "AAPL",
       matchKind: "exact-company",
       matchScore: 240,
+      verified: true,
     },
     {
       kind: "provider",
@@ -226,6 +227,7 @@ function testSymbolDiscoveryPolicy() {
       subjectQuery: "APLE",
       matchKind: "starts-with-company",
       matchScore: 180,
+      verified: false,
     },
   ];
   const autoResolvedProvider = chooseAutoResolvedSuggestion(
@@ -235,6 +237,22 @@ function testSymbolDiscoveryPolicy() {
   assert(
     autoResolvedProvider?.symbol === "AAPL",
     "strong exact provider matches should auto-resolve on Enter",
+  );
+
+  const unverifiedProviderSuggestions = [
+    {
+      kind: "provider",
+      label: "Imaginary Exact Co",
+      symbol: "ZZZNOTREAL123",
+      subjectQuery: "ZZZNOTREAL123",
+      matchKind: "exact-company",
+      matchScore: 240,
+      verified: false,
+    },
+  ];
+  assert(
+    chooseAutoResolvedSuggestion("imaginary exact co", unverifiedProviderSuggestions) === null,
+    "unverified provider matches should not auto-resolve on Enter",
   );
 }
 

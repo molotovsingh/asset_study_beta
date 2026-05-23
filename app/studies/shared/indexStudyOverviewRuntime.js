@@ -6,6 +6,7 @@ import {
   loadRememberedIndexCatalog,
   loadSyncManifest,
   loadSyncedSeries,
+  verifySymbol,
 } from "../../lib/syncedData.js";
 import {
   buildSelectionSignature,
@@ -126,6 +127,20 @@ function createIndexStudyOverviewRuntime({
           : null;
 
       return loadSyncedSeries(selection.sync, manifestDataset);
+    }
+
+    if (selection.kind === "adhoc") {
+      const verification = await verifySymbol({
+        query: selection.label || selection.symbol,
+        label: selection.label,
+        symbol: selection.symbol,
+        requiredCapability: "priceHistory",
+      });
+      if (!verification.verified) {
+        throw new Error(
+          `This symbol is not verified for this study yet. Missing priceHistory capability for ${selection.symbol}.`,
+        );
+      }
     }
 
     return fetchIndexSeries(buildSeriesRequest(selection));

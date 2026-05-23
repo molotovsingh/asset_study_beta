@@ -60,6 +60,8 @@ Shared support across studies includes:
 - bundled snapshot loading from `data/snapshots/...`
 - local backend fetch and machine-local SQLite cache under
   `data/local-cache/yfinance/index/cache.sqlite3`
+- saved studies as durable SQLite records with StudyPlan, route, dependency,
+  readiness, and latest-run artifacts
 - optional synthetic demo data mode
 - study-specific inputs, visuals, and CSV/XLS exports
 
@@ -120,10 +122,16 @@ fragments.
 
 - NSE historical and TRI data:
   `https://www.niftyindices.com/reports/historical-data`
+- NSE/Nifty current Nifty 500 membership CSV:
+  `https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv`
 - BSE index archive:
   `https://www.bseindia.com/indices/IndexArchiveData.html`
 - RBI data reference for the manual risk-free rate:
   `https://data.rbi.org.in`
+- Finnhub for exchange-backed symbol discovery, S&P 500 constituents, and
+  company basic-financial metrics when `FINNHUB_API_KEY` is configured.
+- Verified instrument registry in local SQLite for provider mappings,
+  capability flags, aliases, and discovery/verification events.
 
 ## Running locally
 
@@ -317,14 +325,81 @@ The collector keeps the symbol universe, member metadata, and run summaries in
 the local SQLite runtime store. `--limit` only caps the current collection run;
 it does not shrink the stored universe.
 
+### Refresh instrument registry
+
+Seed built-in aliases and optionally record a discovery/verification pass:
+
+```bash
+python3 scripts/refresh_instrument_registry.py --query "nifty energy"
+```
+
+Verify one provider symbol for price history:
+
+```bash
+python3 scripts/refresh_instrument_registry.py --verify-symbol AAPL
+```
+
+The app uses the same registry through:
+
+- `POST /api/symbols/discover`
+- `POST /api/symbols/verify`
+- `POST /api/symbols/register-manual`
+
+Unverified raw symbols are blocked before study execution instead of being
+silently treated as runnable.
+
+### Collect fundamentals
+
+The fundamentals collector stores current universe membership, raw Finnhub
+metric payloads, filtered scalar/annual/quarterly metric rows, and run summaries
+in the local SQLite runtime store. It is intentionally separate from price
+history collection.
+
+Seed and collect a bounded S&P 500 fundamentals smoke:
+
+```bash
+./.venv/bin/python scripts/collect_fundamentals.py \
+  --universe-id sp500-current \
+  --seed-built-in \
+  --limit 25
+```
+
+Seed and collect a bounded Nifty 500 fundamentals smoke:
+
+```bash
+./.venv/bin/python scripts/collect_fundamentals.py \
+  --universe-id nifty-500-current \
+  --seed-built-in \
+  --limit 25
+```
+
+Run the same lane through the maintenance/automation entrypoint:
+
+```bash
+./.venv/bin/python scripts/run_data_maintenance.py \
+  --skip-market \
+  --skip-options \
+  --run-fundamentals \
+  --seed-fundamental-universes \
+  --fundamental-universe-id sp500-current \
+  --fundamental-limit 25
+```
+
+The app settings page at `#settings/automations` exposes the same lane as
+`Run fundamentals snapshots`. The default is off and capped because a full
+S&P 500 plus Nifty 500 run is roughly one thousand provider calls.
+
 ### Current limits
 
 - The local backend currently uses `yfinance` directly.
 - yfinance profile metadata is opportunistic. It is useful for orientation, but
   it should not be treated as audited fundamentals.
-- The active-asset sidebar now supports remembered symbols, derived India sector
-  indexes, and manual `Label | SYMBOL` entries, but it is still not a full
-  market-security master.
+- Finnhub fundamentals are now stored as point-in-time local snapshots, but they
+  are still provider data. Do not treat them as audited financial statements.
+- The active-asset sidebar now verifies raw/manual symbols through the local
+  instrument registry before treating them as runnable. The registry is still
+  local-first and provider-specific; it is not a licensed institutional security
+  master.
 - There is currently no approved true-TRI source configured in this repo.
   `Nifty 50 TRI` and `S&P BSE Sensex TRI` currently use price index proxies from
   Yahoo Finance, not true TRI series. They are marked `returnBasis: "proxy"` so

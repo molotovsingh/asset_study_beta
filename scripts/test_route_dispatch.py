@@ -301,6 +301,64 @@ def test_study_run_record_route_dispatches():
     assert_equal(payload["run"]["studyId"], "monthly-straddle", "study-run record route should return builder payload")
 
 
+def test_symbol_registry_routes_dispatch():
+    original_discover = dev_server.server_routes.instrument_service.build_symbol_discovery_payload
+    original_verify = dev_server.server_routes.instrument_service.build_symbol_verification_payload
+    original_manual = dev_server.server_routes.instrument_service.build_manual_symbol_registration_payload
+    captured: dict[str, object] = {}
+
+    def fake_discover(request):
+        captured["discover"] = request
+        return {"version": "instrument-discovery-v1", "query": request["query"], "results": []}
+
+    def fake_verify(request):
+        captured["verify"] = request
+        return {"version": "instrument-verification-v1", "verified": True}
+
+    def fake_manual(request):
+        captured["manual"] = request
+        return {"version": "instrument-verification-v1", "verified": True, "manual": True}
+
+    dev_server.server_routes.instrument_service.build_symbol_discovery_payload = fake_discover
+    dev_server.server_routes.instrument_service.build_symbol_verification_payload = fake_verify
+    dev_server.server_routes.instrument_service.build_manual_symbol_registration_payload = fake_manual
+    try:
+        discover_payload = dev_server.server_routes.dispatch_request(
+            "POST",
+            "/api/symbols/discover",
+            {"query": "nifty energy"},
+        )
+        verify_payload = dev_server.server_routes.dispatch_request(
+            "POST",
+            "/api/symbols/verify",
+            {"query": "AAPL", "requiredCapability": "priceHistory"},
+        )
+        manual_payload = dev_server.server_routes.dispatch_request(
+            "POST",
+            "/api/symbols/register-manual",
+            {"label": "Nifty Oil & Gas", "symbol": "^CNXOILGAS"},
+        )
+    finally:
+        dev_server.server_routes.instrument_service.build_symbol_discovery_payload = original_discover
+        dev_server.server_routes.instrument_service.build_symbol_verification_payload = original_verify
+        dev_server.server_routes.instrument_service.build_manual_symbol_registration_payload = original_manual
+
+    assert_equal(discover_payload["version"], "instrument-discovery-v1", "discover route should return builder payload")
+    assert_equal(verify_payload["verified"], True, "verify route should return builder payload")
+    assert_equal(manual_payload["manual"], True, "manual route should return builder payload")
+    assert_equal(captured["discover"], {"query": "nifty energy"}, "discover route should forward request")
+    assert_equal(
+        captured["verify"],
+        {"query": "AAPL", "requiredCapability": "priceHistory"},
+        "verify route should forward request",
+    )
+    assert_equal(
+        captured["manual"],
+        {"label": "Nifty Oil & Gas", "symbol": "^CNXOILGAS"},
+        "manual route should forward request",
+    )
+
+
 def test_assistant_study_run_brief_route_dispatches():
     original_builder = dev_server.server_routes.assistant_service.build_study_run_brief_payload
     captured: dict[str, object] = {}
@@ -612,6 +670,93 @@ def test_study_builder_routes_dispatch_and_map_errors():
     )
 
 
+def test_saved_study_routes_dispatch():
+    captured = {}
+    original_state = dev_server.server_routes.saved_study_service.build_saved_study_state_payload
+    original_save = dev_server.server_routes.study_builder_service.save_saved_study
+    original_archive = dev_server.server_routes.saved_study_service.archive_saved_study
+    original_refresh = dev_server.server_routes.saved_study_service.refresh_saved_study_readiness
+
+    def fake_state(request):
+        captured["state"] = request
+        return {"version": "saved-study-v1", "savedStudies": [], "savedStudy": None}
+
+    def fake_save(request):
+        captured["save"] = request
+        return {"version": "saved-study-v1", "ok": True, "savedStudy": {"id": "risk"}, "savedStudies": []}
+
+    def fake_archive(request):
+        captured["archive"] = request
+        return {"version": "saved-study-v1", "ok": True, "savedStudy": {"id": "risk"}, "savedStudies": []}
+
+    def fake_refresh(request):
+        captured["refresh"] = request
+        return {"version": "saved-study-v1", "ok": True, "savedStudy": {"id": "risk"}, "savedStudies": []}
+
+    dev_server.server_routes.saved_study_service.build_saved_study_state_payload = fake_state
+    dev_server.server_routes.study_builder_service.save_saved_study = fake_save
+    dev_server.server_routes.saved_study_service.archive_saved_study = fake_archive
+    dev_server.server_routes.saved_study_service.refresh_saved_study_readiness = fake_refresh
+    try:
+        state_payload = dev_server.server_routes.dispatch_request(
+            "GET",
+            "/api/saved-studies",
+            {"limit": "20"},
+        )
+        save_payload = dev_server.server_routes.dispatch_request(
+            "POST",
+            "/api/saved-studies/save",
+            {"name": "Risk", "plan": {"version": "study-plan-v1"}},
+        )
+        archive_payload = dev_server.server_routes.dispatch_request(
+            "POST",
+            "/api/saved-studies/archive",
+            {"id": "risk"},
+        )
+        refresh_payload = dev_server.server_routes.dispatch_request(
+            "POST",
+            "/api/saved-studies/refresh-readiness",
+            {"id": "risk"},
+        )
+    finally:
+        dev_server.server_routes.saved_study_service.build_saved_study_state_payload = original_state
+        dev_server.server_routes.study_builder_service.save_saved_study = original_save
+        dev_server.server_routes.saved_study_service.archive_saved_study = original_archive
+        dev_server.server_routes.saved_study_service.refresh_saved_study_readiness = original_refresh
+
+    assert_equal(captured["state"], {"limit": "20"}, "saved studies GET route should forward query params")
+    assert_equal(captured["save"]["name"], "Risk", "saved study save route should forward request body")
+    assert_equal(captured["archive"], {"id": "risk"}, "saved study archive route should forward request body")
+    assert_equal(captured["refresh"], {"id": "risk"}, "saved study refresh route should forward request body")
+    assert_equal(state_payload["version"], "saved-study-v1", "saved study state route should return payload")
+    assert_equal(save_payload["ok"], True, "saved study save route should return payload")
+    assert_equal(archive_payload["ok"], True, "saved study archive route should return payload")
+    assert_equal(refresh_payload["ok"], True, "saved study refresh route should return payload")
+
+    status, payload = dev_server.dispatch_api_request(
+        "POST",
+        "/api/saved-studies/save",
+        b"[]",
+    )
+    assert_equal(status, HTTPStatus.BAD_REQUEST, "non-object saved-study save should return 400")
+    assert_equal(
+        payload,
+        {"error": "Study builder request must be a JSON object."},
+        "non-object saved-study save error should be specific",
+    )
+    status, payload = dev_server.dispatch_api_request(
+        "POST",
+        "/api/saved-studies/save",
+        b'{"plan":{"version":"bad"}}',
+    )
+    assert_equal(status, HTTPStatus.BAD_REQUEST, "invalid saved-study plan should return 400")
+    assert_equal(
+        payload,
+        {"error": "Invalid StudyPlan."},
+        "invalid saved-study plan error should be specific",
+    )
+
+
 def test_study_factory_proposal_route_dispatches():
     original_builder = dev_server.server_routes.study_factory_service.build_study_proposal_payload
     captured: dict[str, object] = {}
@@ -756,6 +901,7 @@ def main() -> int:
     test_trade_validation_route_dispatches()
     test_automation_post_routes_dispatch()
     test_study_run_record_route_dispatches()
+    test_symbol_registry_routes_dispatch()
     test_assistant_study_run_brief_route_dispatches()
     test_assistant_study_plan_dry_run_route_dispatches()
     test_assistant_study_plan_live_draft_route_dispatches()
@@ -763,6 +909,7 @@ def main() -> int:
     test_assistant_study_run_not_found_maps_to_404()
     test_assistant_contract_bridge_failure_maps_to_502()
     test_study_builder_routes_dispatch_and_map_errors()
+    test_saved_study_routes_dispatch()
     test_study_factory_proposal_route_dispatches()
     test_study_factory_proposal_errors_map()
     test_malformed_json_maps_to_bad_request()

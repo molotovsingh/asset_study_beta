@@ -118,8 +118,10 @@ def test_automation_service_save_run_and_delete():
                 "symbols": ["AAPL"],
             }
         }
+        captured_runner_kwargs = {}
 
         def fake_runner(**kwargs):
+            captured_runner_kwargs.update(kwargs)
             return {
                 "status": "ok",
                 "failureReasons": [],
@@ -130,6 +132,11 @@ def test_automation_service_save_run_and_delete():
                 },
                 "optionsEvidence": {
                     "requestedUniverseIds": kwargs.get("options_universe_ids") or [],
+                    "results": [],
+                    "failures": [],
+                },
+                "fundamentals": {
+                    "requestedUniverseIds": kwargs.get("fundamental_universe_ids") or [],
                     "results": [],
                     "failures": [],
                 },
@@ -152,6 +159,12 @@ def test_automation_service_save_run_and_delete():
                     "marketUniverseIds": ["smoke-aapl"],
                     "runOptionsCollection": True,
                     "optionsUniverseIds": ["us-liquid-10"],
+                    "runFundamentalCollection": True,
+                    "fundamentalUniverseIds": ["sp500-current"],
+                    "seedFundamentalUniverses": True,
+                    "fundamentalPeriodDays": 366,
+                    "fundamentalLimit": 10,
+                    "fundamentalDelaySeconds": 0.25,
                     "maxAttentionSymbols": 0,
                     "maxSyncErrors": 0,
                     "isActive": True,
@@ -167,11 +180,26 @@ def test_automation_service_save_run_and_delete():
                 ["finnhub", "yfinance"],
                 "save should preserve the default market provider order when the form omits it",
             )
+            assert_equal(
+                saved_payload["automation"]["fundamentalUniverseIds"],
+                ["sp500-current"],
+                "fundamental universes should round-trip through save",
+            )
 
             run_payload = automation_service.run_automation_now(
                 {"automationId": "daily-maintenance"},
             )
             assert_equal(run_payload["result"]["status"], "ok", "run-now should return execution result")
+            assert_equal(
+                captured_runner_kwargs["fundamental_universe_ids"],
+                ["sp500-current"],
+                "run-now should forward fundamental universes to maintenance",
+            )
+            assert_equal(
+                captured_runner_kwargs["fundamental_limit"],
+                10,
+                "run-now should forward the fundamental safety limit",
+            )
             updated = next(
                 entry
                 for entry in run_payload["state"]["automations"]

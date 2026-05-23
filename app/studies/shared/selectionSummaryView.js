@@ -147,7 +147,7 @@ function renderSelectionDetails(
     runtimeMeta =
       backendState === "ready"
         ? selection.kind === "adhoc"
-          ? `<p class="summary-meta">Unverified symbol. Run the study once to confirm <span class="mono">${selection.symbol}</span> before profile metadata is shown or the entry is saved locally.</p>`
+          ? `<p class="summary-meta">Verification required. The app will block the run unless the backend proves priceHistory capability for <span class="mono">${selection.symbol}</span>.</p>`
           : `<p class="summary-meta">Will fetch <span class="mono">${selection.symbol}</span> through the local backend.</p>`
         : `<p class="summary-meta">This selection needs the local backend. Start <span class="mono">${LOCAL_API_COMMAND}</span> first.</p>`;
   } else {

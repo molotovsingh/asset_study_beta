@@ -5,6 +5,8 @@ try:
 except ModuleNotFoundError:
     from scripts.runtime_store import list_study_runs, record_study_run
 
+from . import saved_study_service
+
 
 def _clean_text(value) -> str:
     return str(value or "").strip()
@@ -45,6 +47,8 @@ def record_study_run_entry(request: dict) -> dict:
         raise ValueError("Subject query is required.")
 
     recorded_run = record_study_run(request)
+    linked_saved_studies = saved_study_service.link_run_to_matching_saved_studies(recorded_run)
     return {
         "run": recorded_run,
+        "linkedSavedStudies": linked_saved_studies,
     }

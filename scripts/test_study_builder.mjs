@@ -52,6 +52,22 @@ import {
   saveStudyPlanRecipe,
 } from "../app/studyBuilder/studyPlanRecipes.js";
 import {
+  appendBackendFallbackNote,
+  buildLocalPlannerPayload,
+  buildLocalValidationPayload,
+  convertStudyBuilderRoute,
+  draftStudyBuilderIntent,
+  getLiveDraftStatusMessage,
+  parseStudyPlanJson,
+  runLiveStudyBuilderDraft,
+  validateStudyBuilderPlanText,
+} from "../app/studyBuilder/studyBuilderWorkflow.js";
+import {
+  deleteStudyPlanRecipeWithFallback,
+  loadInitialStudyPlanRecipes,
+  saveStudyPlanRecipeWithFallback,
+} from "../app/studyBuilder/studyPlanRecipeClient.js";
+import {
   STUDY_RUN_EXPLANATION_CONFIDENCE,
   STUDY_RUN_EXPLANATION_ISSUE_CODES,
   buildStudyRunExplanationSeed,
@@ -115,7 +131,7 @@ function toLocalInputDate(date) {
   ].join("-");
 }
 
-function runStudyBuilderChecks() {
+async function runStudyBuilderChecks() {
   const validPlan = validateStudyPlan({
     version: STUDY_PLAN_VERSION,
     studyId: "risk-adjusted-return",
@@ -1076,6 +1092,135 @@ function runStudyBuilderChecks() {
       backendRoutePayload.preview.normalizedPlan.studyId === "drawdown-study",
     "study-builder validation bridge should convert route hashes through the StudyPlan validator",
   );
+  const workflowPlanPayload = buildLocalPlannerPayload(
+    "Compare Nifty 50 against Sensex from 2021 to 2024",
+  );
+  assert(
+    workflowPlanPayload.version === "study-builder-plan-response-v1" &&
+      JSON.stringify(workflowPlanPayload.plannerResult) === JSON.stringify(relativeDraft) &&
+      workflowPlanPayload.preview.canRun,
+    "study-builder workflow should own local deterministic planner fallback payloads",
+  );
+  const workflowValidationPayload = buildLocalValidationPayload({
+    routeHash: "#drawdown-study/overview?subject=TSLA",
+  });
+  assert(
+    workflowValidationPayload.version === "study-builder-validation-response-v1" &&
+      workflowValidationPayload.mode === "route" &&
+      workflowValidationPayload.route.ok &&
+      workflowValidationPayload.preview.normalizedPlan.studyId === "drawdown-study",
+    "study-builder workflow should own local route conversion fallback payloads",
+  );
+  const workflowDraft = await draftStudyBuilderIntent(
+    {
+      draftStudyBuilderPlan: async () => {
+        throw new Error("backend offline");
+      },
+    },
+    "Compare Nifty 50 against Sensex from 2021 to 2024",
+  );
+  assert(
+    workflowDraft.usedFallback &&
+      workflowDraft.plannerResult.templateId === "risk-relative" &&
+      workflowDraft.planText.includes('"studyId": "risk-adjusted-return"') &&
+      workflowDraft.statusMessage.includes("Used the browser copy"),
+    "study-builder workflow should orchestrate backend planner fallback outside settings UI",
+  );
+  const workflowRoute = await convertStudyBuilderRoute(
+    {
+      validateStudyBuilderPlan: async () => {
+        throw new Error("backend offline");
+      },
+    },
+    "#drawdown-study/overview?subject=TSLA",
+  );
+  assert(
+    workflowRoute.usedFallback &&
+      workflowRoute.preview.canRun &&
+      workflowRoute.planText.includes('"studyId": "drawdown-study"'),
+    "study-builder workflow should orchestrate route conversion fallback outside settings UI",
+  );
+  const invalidWorkflowValidation = await validateStudyBuilderPlanText({}, "{bad");
+  assert(
+    !invalidWorkflowValidation.preview.canRun &&
+      invalidWorkflowValidation.statusMessage === "Could not read the study setup JSON.",
+    "study-builder workflow should own invalid JSON preview construction",
+  );
+  assert(
+    parseStudyPlanJson(JSON.stringify(EXAMPLE_STUDY_PLAN)).version === STUDY_PLAN_VERSION,
+    "study-builder workflow should expose StudyPlan JSON parsing",
+  );
+  const liveDraftWorkflow = await runLiveStudyBuilderDraft(
+    {
+      liveDraftAssistantStudyPlan: async (request) => ({
+        version: "assistant-study-plan-live-draft-v1",
+        provider: "openai",
+        model: "gpt-test",
+        intent: request.intent,
+        modelResult: { responseId: "resp_workflow_test" },
+        plan: EXAMPLE_STUDY_PLAN,
+        validation: { ok: true },
+        preview: validPreview,
+        execution: { executed: false },
+      }),
+    },
+    EXAMPLE_STUDY_INTENT,
+  );
+  assert(
+    liveDraftWorkflow.liveDraftResult.modelResult.responseId === "resp_workflow_test" &&
+      liveDraftWorkflow.planText.includes('"studyId": "risk-adjusted-return"') &&
+      getLiveDraftStatusMessage(liveDraftWorkflow.liveDraftResult).includes(
+        "Data is checked after opening",
+      ),
+    "study-builder workflow should own live AI request orchestration outside settings UI",
+  );
+  assert(
+    appendBackendFallbackNote("Plan validated.", { usedFallback: true }).includes(
+      "Used the browser copy",
+    ),
+    "study-builder workflow should own fallback status copy",
+  );
+  const clientStorage = createMemoryStorage();
+  const initialClientRecipes = loadInitialStudyPlanRecipes({ storage: clientStorage });
+  assert(
+    Array.isArray(initialClientRecipes) && initialClientRecipes.length === 0,
+    "recipe client should expose browser-local initial recipe loading",
+  );
+  const clientSavedRecipe = await saveStudyPlanRecipeWithFallback(
+    {
+      saveStudyPlanRecipe: async () => {
+        throw new Error("backend offline");
+      },
+    },
+    {
+      name: "Workflow Risk",
+      plan: EXAMPLE_STUDY_PLAN,
+      storage: clientStorage,
+    },
+  );
+  assert(
+    clientSavedRecipe.usedFallback &&
+      clientSavedRecipe.recipe.routeHash.includes("#risk-adjusted-return/overview") &&
+      loadStudyPlanRecipes(clientStorage).length === 1,
+    "recipe client should own backend save fallback to local recipe storage",
+  );
+  const clientDeletedRecipe = await deleteStudyPlanRecipeWithFallback(
+    {
+      deleteStudyPlanRecipe: async () => {
+        throw new Error("backend offline");
+      },
+    },
+    {
+      recipeId: clientSavedRecipe.recipe.id,
+      storage: clientStorage,
+    },
+  );
+  assert(
+    clientDeletedRecipe.usedFallback &&
+      clientDeletedRecipe.recipes.length === 0 &&
+      loadStudyPlanRecipes(clientStorage).length === 0,
+    "recipe client should own backend delete fallback to local recipe storage",
+  );
   const validSettingsHtml = renderStudyBuilderSettingsPage({
     intentText: EXAMPLE_STUDY_INTENT,
     routeHashText: EXAMPLE_STUDY_ROUTE_HASH,
@@ -1086,20 +1231,20 @@ function runStudyBuilderChecks() {
     statusMessage: "Plan validated.",
   });
   assert(
-    validSettingsHtml.includes("Study Builder Preview") &&
-      validSettingsHtml.includes("Backend-owned harness") &&
-      validSettingsHtml.includes("Experimental: Live AI Draft") &&
-      validSettingsHtml.includes("Intent Draft") &&
-      validSettingsHtml.includes("Both paths stop at StudyPlan validation") &&
-      validSettingsHtml.includes("Convert Route") &&
-      validSettingsHtml.includes("Saved Recipes") &&
+    validSettingsHtml.includes("Build a Study with AI") &&
+      validSettingsHtml.includes("Tell the app what you want to study") &&
+      validSettingsHtml.includes("Ask AI to Draft") &&
+      validSettingsHtml.includes("Your Request") &&
+      validSettingsHtml.includes("Convert Link") &&
+      validSettingsHtml.includes("Saved Studies") &&
       validSettingsHtml.includes("Nifty 50 Risk Overview") &&
-      validSettingsHtml.includes("Backend recipes when the local server is available") &&
-      validSettingsHtml.includes("copied app URLs") &&
-      validSettingsHtml.includes("Matched Template") &&
-      validSettingsHtml.includes("Go to route") &&
+      validSettingsHtml.includes("Saved studies are reusable setups, not completed results or evidence.") &&
+      validSettingsHtml.includes("saved app link") &&
+      validSettingsHtml.includes("App chose") &&
+      validSettingsHtml.includes("Open and check data") &&
+      validSettingsHtml.includes("Not checked on this page") &&
       validSettingsHtml.includes("Subject"),
-    "study builder settings page should render intent drafting and a labeled confirmation preview",
+    "study builder settings page should render plain-language intent drafting and preview",
   );
   const liveDraftSettingsHtml = renderStudyBuilderSettingsPage({
     intentText: EXAMPLE_STUDY_INTENT,
@@ -1114,15 +1259,14 @@ function runStudyBuilderChecks() {
       preview: validPreview,
       execution: { executed: false },
     },
-    statusMessage: "Live AI drafted a valid non-executing StudyPlan.",
+    statusMessage: "AI drafted a checked setup.",
   });
   assert(
-    liveDraftSettingsHtml.includes("Experimental Live AI Draft") &&
+    liveDraftSettingsHtml.includes("AI Draft Result") &&
       liveDraftSettingsHtml.includes("gpt-test") &&
-      liveDraftSettingsHtml.includes("resp_test") &&
-      liveDraftSettingsHtml.includes("Validated by StudyPlan contract") &&
-      liveDraftSettingsHtml.includes("no study execution") &&
-      liveDraftSettingsHtml.includes("Valid Draft"),
+      liveDraftSettingsHtml.includes("Setup OK, data not checked here") &&
+      liveDraftSettingsHtml.includes("No study was run") &&
+      liveDraftSettingsHtml.includes("Setup OK"),
     "study builder settings page should render live AI draft metadata without implying execution",
   );
   const blockedSettingsHtml = renderStudyBuilderSettingsPage({
@@ -1143,7 +1287,7 @@ function runStudyBuilderChecks() {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
-    const checks = runStudyBuilderChecks();
+    const checks = await runStudyBuilderChecks();
     console.log(`study builder checks passed (${checks} assertions)`);
   } catch (error) {
     console.error(error.message);
