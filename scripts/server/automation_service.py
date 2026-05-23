@@ -22,7 +22,7 @@ except ModuleNotFoundError:
         upsert_automation_config,
     )
 
-from . import maintenance_service, options_service
+from . import fundamentals_collector, maintenance_service, options_service
 
 
 _AUTOMATION_RUN_LOCK = Lock()
@@ -43,6 +43,12 @@ def _default_automation_template() -> dict:
         "marketUniverseIds": [],
         "runOptionsCollection": True,
         "optionsUniverseIds": sorted(options_service.COLLECTOR_UNIVERSES.keys()),
+        "runFundamentalCollection": False,
+        "fundamentalUniverseIds": sorted(fundamentals_collector.BUILTIN_FUNDAMENTAL_UNIVERSES.keys()),
+        "seedFundamentalUniverses": True,
+        "fundamentalPeriodDays": fundamentals_collector.DEFAULT_FUNDAMENTAL_PERIOD_DAYS,
+        "fundamentalLimit": 25,
+        "fundamentalDelaySeconds": 0.0,
         "refreshExchangeSymbolMasters": False,
         "marketProviderOrder": ["finnhub", "yfinance"],
         "marketFullSync": False,
@@ -86,6 +92,24 @@ def _available_options_universes() -> list[dict]:
     ]
 
 
+def _available_fundamental_universes() -> list[dict]:
+    return [
+        {
+            "universeId": str(universe.get("universeId") or ""),
+            "label": universe.get("label"),
+            "sourceKind": universe.get("sourceKind"),
+            "sourceProvider": universe.get("sourceProvider"),
+            "sourceSymbol": universe.get("sourceSymbol"),
+            "activeMembers": universe.get("activeMembers"),
+            "memberCount": universe.get("memberCount"),
+            "asOfDate": universe.get("asOfDate"),
+            "isBuiltIn": bool(universe.get("isBuiltIn")),
+            "isStored": bool(universe.get("isStored")),
+        }
+        for universe in fundamentals_collector.list_available_fundamental_universes()
+    ]
+
+
 def _hydrate_automation_config(automation: dict | None) -> dict | None:
     if automation is None:
         return None
@@ -93,6 +117,14 @@ def _hydrate_automation_config(automation: dict | None) -> dict | None:
     defaults = _default_automation_template()
     if not hydrated.get("marketProviderOrder"):
         hydrated["marketProviderOrder"] = list(defaults["marketProviderOrder"])
+    if not hydrated.get("fundamentalUniverseIds"):
+        hydrated["fundamentalUniverseIds"] = list(defaults["fundamentalUniverseIds"])
+    if hydrated.get("fundamentalPeriodDays") in (None, 0, ""):
+        hydrated["fundamentalPeriodDays"] = defaults["fundamentalPeriodDays"]
+    if hydrated.get("fundamentalLimit") is None:
+        hydrated["fundamentalLimit"] = defaults["fundamentalLimit"]
+    if hydrated.get("fundamentalDelaySeconds") in (None, ""):
+        hydrated["fundamentalDelaySeconds"] = defaults["fundamentalDelaySeconds"]
     return hydrated
 
 
@@ -107,6 +139,7 @@ def build_automation_state_payload() -> dict:
         "catalogs": {
             "marketUniverses": _available_market_universes(),
             "optionsUniverses": _available_options_universes(),
+            "fundamentalUniverses": _available_fundamental_universes(),
         },
     }
 
@@ -149,6 +182,20 @@ def _clean_optional_int(value, *, label: str, minimum: int | None = None, maximu
     return normalized
 
 
+def _clean_optional_float(value, *, label: str, minimum: float | None = None, maximum: float | None = None) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label} must be a number.") from error
+    if minimum is not None and normalized < minimum:
+        raise ValueError(f"{label} must be at least {minimum}.")
+    if maximum is not None and normalized > maximum:
+        raise ValueError(f"{label} must be at most {maximum}.")
+    return normalized
+
+
 def _normalize_automation_request(request: dict) -> dict:
     automation_id = str(request.get("automationId") or request.get("id") or "").strip().lower()
     if not automation_id:
@@ -173,6 +220,7 @@ def _normalize_automation_request(request: dict) -> dict:
 
     market_universe_ids = _normalize_string_list(request.get("marketUniverseIds"), lower=True)
     options_universe_ids = _normalize_string_list(request.get("optionsUniverseIds"))
+    fundamental_universe_ids = _normalize_string_list(request.get("fundamentalUniverseIds"), lower=True)
     market_provider_order = _normalize_string_list(request.get("marketProviderOrder"), lower=True)
     if not market_provider_order:
         market_provider_order = list(defaults["marketProviderOrder"])
@@ -185,6 +233,19 @@ def _normalize_automation_request(request: dict) -> dict:
         raise ValueError(
             f"Unknown options automation universe(s): {', '.join(invalid_options_universe_ids)}",
         )
+    known_fundamental_universe_ids = {
+        str(universe.get("universeId") or "").strip().lower()
+        for universe in fundamentals_collector.list_available_fundamental_universes()
+    }
+    invalid_fundamental_universe_ids = [
+        universe_id
+        for universe_id in fundamental_universe_ids
+        if universe_id not in known_fundamental_universe_ids
+    ]
+    if invalid_fundamental_universe_ids:
+        raise ValueError(
+            f"Unknown fundamental automation universe(s): {', '.join(invalid_fundamental_universe_ids)}",
+        )
 
     return {
         "automationId": automation_id,
@@ -196,6 +257,12 @@ def _normalize_automation_request(request: dict) -> dict:
         "marketUniverseIds": market_universe_ids,
         "runOptionsCollection": _normalize_boolean(request.get("runOptionsCollection", True)),
         "optionsUniverseIds": options_universe_ids,
+        "runFundamentalCollection": _normalize_boolean(request.get("runFundamentalCollection", False)),
+        "fundamentalUniverseIds": fundamental_universe_ids or list(defaults["fundamentalUniverseIds"]),
+        "seedFundamentalUniverses": _normalize_boolean(request.get("seedFundamentalUniverses", True)),
+        "fundamentalPeriodDays": _clean_optional_int(request.get("fundamentalPeriodDays"), label="fundamentalPeriodDays", minimum=1, maximum=3650) or defaults["fundamentalPeriodDays"],
+        "fundamentalLimit": _clean_optional_int(request.get("fundamentalLimit"), label="fundamentalLimit", minimum=1, maximum=5000),
+        "fundamentalDelaySeconds": _clean_optional_float(request.get("fundamentalDelaySeconds"), label="fundamentalDelaySeconds", minimum=0, maximum=30) or 0.0,
         "refreshExchangeSymbolMasters": _normalize_boolean(request.get("refreshExchangeSymbolMasters", False)),
         "marketProviderOrder": market_provider_order,
         "marketFullSync": _normalize_boolean(request.get("marketFullSync", False)),
@@ -264,14 +331,21 @@ def execute_automation(automation_id: str) -> dict:
             payload = maintenance_service.run_data_maintenance(
                 market_universe_ids=current.get("marketUniverseIds"),
                 options_universe_ids=current.get("optionsUniverseIds"),
+                fundamental_universe_ids=current.get("fundamentalUniverseIds"),
                 run_market_collection=bool(current.get("runMarketCollection")),
                 run_options_collection=bool(current.get("runOptionsCollection")),
+                run_fundamental_collection=bool(current.get("runFundamentalCollection")),
+                seed_fundamental_universes=bool(current.get("seedFundamentalUniverses")),
                 refresh_exchange_symbol_masters=bool(current.get("refreshExchangeSymbolMasters")),
                 market_provider_order=current.get("marketProviderOrder"),
                 market_full_sync=bool(current.get("marketFullSync")),
                 market_limit=current.get("marketLimit"),
                 options_minimum_dte=current.get("optionsMinimumDte"),
                 options_max_contracts=current.get("optionsMaxContracts"),
+                fundamental_period_days=current.get("fundamentalPeriodDays")
+                or fundamentals_collector.DEFAULT_FUNDAMENTAL_PERIOD_DAYS,
+                fundamental_limit=current.get("fundamentalLimit"),
+                fundamental_delay_seconds=current.get("fundamentalDelaySeconds") or 0.0,
                 health_stale_after_days=current.get("healthStaleAfterDays") or 7,
                 health_symbol_limit=current.get("healthSymbolLimit") or 20,
                 health_universe_limit=current.get("healthUniverseLimit") or 20,

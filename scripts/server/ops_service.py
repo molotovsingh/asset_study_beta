@@ -7,7 +7,10 @@ from datetime import date, datetime, timezone
 try:
     from runtime_store import (
         CACHE_DB_PATH,
+        build_instrument_registry_health,
         list_symbol_universes,
+        load_latest_app_runtime_session,
+        load_recent_app_runtime_events,
         load_recent_options_screener_runs,
         load_tracked_option_positions,
         open_runtime_store,
@@ -15,7 +18,10 @@ try:
 except ModuleNotFoundError:
     from scripts.runtime_store import (
         CACHE_DB_PATH,
+        build_instrument_registry_health,
         list_symbol_universes,
+        load_latest_app_runtime_session,
+        load_recent_app_runtime_events,
         load_recent_options_screener_runs,
         load_tracked_option_positions,
         open_runtime_store,
@@ -270,6 +276,53 @@ def _load_recent_market_collection_runs(*, limit: int) -> list[dict]:
     ]
 
 
+def _load_recent_fundamental_collection_runs(*, limit: int) -> list[dict]:
+    with open_runtime_store() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                run_id,
+                universe_id,
+                universe_label,
+                provider,
+                source_kind,
+                period_days,
+                symbol_count,
+                success_count,
+                failure_count,
+                skipped_count,
+                as_of_date,
+                started_at,
+                completed_at,
+                failure_json
+            FROM fundamental_collection_runs
+            ORDER BY completed_at DESC, run_id DESC
+            LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+
+    return [
+        {
+            "runId": int(row["run_id"]),
+            "universeId": row["universe_id"],
+            "universeLabel": row["universe_label"],
+            "provider": row["provider"],
+            "sourceKind": row["source_kind"],
+            "periodDays": int(row["period_days"] or 0),
+            "symbolCount": int(row["symbol_count"] or 0),
+            "successCount": int(row["success_count"] or 0),
+            "failureCount": int(row["failure_count"] or 0),
+            "skippedCount": int(row["skipped_count"] or 0),
+            "asOfDate": row["as_of_date"],
+            "startedAt": row["started_at"],
+            "completedAt": row["completed_at"],
+            "failures": json.loads(row["failure_json"] or "[]"),
+        }
+        for row in rows
+    ]
+
+
 def _load_open_position_health(*, reference_date: date, limit: int) -> tuple[list[dict], dict]:
     with open_runtime_store() as connection:
         rows = connection.execute(
@@ -332,6 +385,14 @@ def _load_open_position_health(*, reference_date: date, limit: int) -> tuple[lis
     }
 
 
+def _load_app_runtime_health(*, limit: int) -> dict:
+    return {
+        "version": "app-runtime-health-v1",
+        "latestSession": load_latest_app_runtime_session(),
+        "recentEvents": load_recent_app_runtime_events(limit=limit),
+    }
+
+
 def build_runtime_health_payload(request: dict | None = None) -> dict:
     request = request or {}
     stale_after_days = _normalize_positive_int(
@@ -373,6 +434,9 @@ def build_runtime_health_payload(request: dict | None = None) -> dict:
                 (SELECT COUNT(*) FROM sync_state WHERE observations > 0) AS synced_symbols,
                 (SELECT COUNT(*) FROM symbol_universes) AS total_universes,
                 (SELECT COUNT(*) FROM market_collection_runs) AS total_collection_runs,
+                (SELECT COUNT(*) FROM fundamental_universes) AS total_fundamental_universes,
+                (SELECT COUNT(*) FROM fundamental_snapshots) AS total_fundamental_snapshots,
+                (SELECT COUNT(*) FROM fundamental_collection_runs) AS total_fundamental_collection_runs,
                 (SELECT COUNT(*) FROM options_screener_runs) AS total_screener_runs,
                 (SELECT COUNT(*) FROM tracked_option_positions) AS total_tracked_positions,
                 (SELECT COUNT(*) FROM tracked_option_positions WHERE closed_at IS NULL) AS open_tracked_positions,
@@ -387,6 +451,7 @@ def build_runtime_health_payload(request: dict | None = None) -> dict:
     )
     universe_health = _load_universe_health(limit=universe_limit)
     recent_collection_runs = _load_recent_market_collection_runs(limit=run_limit)
+    recent_fundamental_collection_runs = _load_recent_fundamental_collection_runs(limit=run_limit)
     open_position_health, position_counts = _load_open_position_health(
         reference_date=reference_date,
         limit=run_limit,
@@ -394,6 +459,8 @@ def build_runtime_health_payload(request: dict | None = None) -> dict:
     recent_screener_runs = load_recent_options_screener_runs(limit=run_limit)
     tracked_positions_total = load_tracked_option_positions(open_only=False, limit=5000)
     closed_tracked_position_count = sum(1 for position in tracked_positions_total if position.get("closedAt"))
+    instrument_registry_health = build_instrument_registry_health(stale_after_days=30)
+    app_runtime_health = _load_app_runtime_health(limit=run_limit)
 
     return {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -410,6 +477,9 @@ def build_runtime_health_payload(request: dict | None = None) -> dict:
             "syncedSymbols": int(summary_row["synced_symbols"] or 0),
             "totalUniverses": int(summary_row["total_universes"] or 0),
             "totalCollectionRuns": int(summary_row["total_collection_runs"] or 0),
+            "totalFundamentalUniverses": int(summary_row["total_fundamental_universes"] or 0),
+            "totalFundamentalSnapshots": int(summary_row["total_fundamental_snapshots"] or 0),
+            "totalFundamentalCollectionRuns": int(summary_row["total_fundamental_collection_runs"] or 0),
             "totalScreenerRuns": int(summary_row["total_screener_runs"] or 0),
             "totalTrackedPositions": int(summary_row["total_tracked_positions"] or 0),
             "closedTrackedPositionCount": closed_tracked_position_count,
@@ -420,7 +490,10 @@ def build_runtime_health_payload(request: dict | None = None) -> dict:
         "attentionSymbols": attention_symbols,
         "universeHealth": universe_health,
         "recentCollectionRuns": recent_collection_runs,
+        "recentFundamentalCollectionRuns": recent_fundamental_collection_runs,
         "recentScreenerRuns": recent_screener_runs,
         "openPositionHealth": open_position_health,
         "positionSummary": position_counts,
+        "instrumentRegistry": instrument_registry_health,
+        "appRuntime": app_runtime_health,
     }

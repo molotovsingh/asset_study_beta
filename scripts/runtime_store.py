@@ -10,8 +10,11 @@ from urllib.parse import quote
 
 import runtime_store_metadata as metadata_store
 import runtime_store_automation as automation_store
+import runtime_store_fundamentals as fundamentals_store
+import runtime_store_instruments as instruments_store
 import runtime_store_options as options_store
 import runtime_store_runs as runs_store
+import runtime_store_saved_studies as saved_studies_store
 import runtime_store_study_builder as study_builder_store
 
 
@@ -246,6 +249,90 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             website TEXT,
             raw_info_json TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS instruments (
+            instrument_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            canonical_key TEXT NOT NULL UNIQUE,
+            canonical_symbol TEXT NOT NULL,
+            display_label TEXT NOT NULL,
+            asset_class TEXT NOT NULL DEFAULT 'equity',
+            exchange TEXT,
+            mic TEXT,
+            currency TEXT,
+            country TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            verification_status TEXT NOT NULL DEFAULT 'unverified',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_instruments_symbol
+            ON instruments (canonical_symbol);
+
+        CREATE INDEX IF NOT EXISTS idx_instruments_asset_class
+            ON instruments (asset_class, status);
+
+        CREATE TABLE IF NOT EXISTS instrument_provider_mappings (
+            mapping_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instrument_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            provider_symbol TEXT NOT NULL,
+            provider_name TEXT NOT NULL,
+            asset_class TEXT NOT NULL DEFAULT 'equity',
+            exchange TEXT,
+            mic TEXT,
+            currency TEXT,
+            country TEXT,
+            capabilities_json TEXT NOT NULL DEFAULT '{}',
+            verification_status TEXT NOT NULL DEFAULT 'unverified',
+            verified_at TEXT,
+            last_checked_at TEXT,
+            failure_reason TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(instrument_id, provider, provider_symbol),
+            FOREIGN KEY (instrument_id) REFERENCES instruments(instrument_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_instrument_provider_mappings_provider_symbol
+            ON instrument_provider_mappings (provider, provider_symbol);
+
+        CREATE INDEX IF NOT EXISTS idx_instrument_provider_mappings_capability
+            ON instrument_provider_mappings (verification_status, provider);
+
+        CREATE TABLE IF NOT EXISTS instrument_aliases (
+            alias_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instrument_id INTEGER NOT NULL,
+            alias TEXT NOT NULL,
+            normalized_alias TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'system',
+            created_at TEXT NOT NULL,
+            UNIQUE(instrument_id, normalized_alias, source),
+            FOREIGN KEY (instrument_id) REFERENCES instruments(instrument_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_instrument_aliases_alias
+            ON instrument_aliases (normalized_alias);
+
+        CREATE TABLE IF NOT EXISTS instrument_discovery_events (
+            event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_kind TEXT NOT NULL,
+            query TEXT,
+            provider TEXT,
+            selected_instrument_id INTEGER,
+            selected_mapping_id INTEGER,
+            candidates_json TEXT NOT NULL DEFAULT '[]',
+            verification_result_json TEXT NOT NULL DEFAULT '{}',
+            failure_reason TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (selected_instrument_id) REFERENCES instruments(instrument_id) ON DELETE SET NULL,
+            FOREIGN KEY (selected_mapping_id) REFERENCES instrument_provider_mappings(mapping_id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_instrument_discovery_events_created
+            ON instrument_discovery_events (created_at DESC, event_kind);
 
         CREATE TABLE IF NOT EXISTS option_monthly_snapshots (
             symbol_id INTEGER NOT NULL,
@@ -544,6 +631,104 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_market_collection_runs_completed_at
             ON market_collection_runs (completed_at DESC);
 
+        CREATE TABLE IF NOT EXISTS fundamental_universes (
+            universe_id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            source_provider TEXT NOT NULL,
+            source_kind TEXT NOT NULL DEFAULT 'manual',
+            source_symbol TEXT,
+            source_url TEXT,
+            as_of_date TEXT,
+            member_count INTEGER NOT NULL DEFAULT 0,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS fundamental_universe_members (
+            universe_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            provider_symbol TEXT NOT NULL,
+            label TEXT,
+            exchange TEXT,
+            mic TEXT,
+            sector TEXT,
+            industry TEXT,
+            currency TEXT,
+            isin TEXT,
+            cusip TEXT,
+            weight REAL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            source_provider TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (universe_id, symbol),
+            FOREIGN KEY (universe_id) REFERENCES fundamental_universes(universe_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fundamental_universe_members_active
+            ON fundamental_universe_members (universe_id, is_active, symbol);
+
+        CREATE TABLE IF NOT EXISTS fundamental_snapshots (
+            snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            universe_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            provider_symbol TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            as_of_date TEXT NOT NULL,
+            period_start_date TEXT,
+            period_end_date TEXT,
+            metric_type TEXT NOT NULL DEFAULT 'all',
+            source_url TEXT,
+            fetched_at TEXT NOT NULL,
+            raw_payload_json TEXT NOT NULL DEFAULT '{}',
+            metric_count INTEGER NOT NULL DEFAULT 0,
+            series_metric_count INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(universe_id, provider_symbol, provider, as_of_date, metric_type),
+            FOREIGN KEY (universe_id) REFERENCES fundamental_universes(universe_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fundamental_snapshots_universe_date
+            ON fundamental_snapshots (universe_id, as_of_date DESC, provider_symbol);
+
+        CREATE TABLE IF NOT EXISTS fundamental_metrics (
+            metric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            snapshot_id INTEGER NOT NULL,
+            metric_name TEXT NOT NULL,
+            period_type TEXT NOT NULL,
+            period_end_date TEXT,
+            value_number REAL,
+            value_text TEXT,
+            unit TEXT,
+            source_field TEXT,
+            FOREIGN KEY (snapshot_id) REFERENCES fundamental_snapshots(snapshot_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fundamental_metrics_snapshot
+            ON fundamental_metrics (snapshot_id, period_type, metric_name);
+
+        CREATE TABLE IF NOT EXISTS fundamental_collection_runs (
+            run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            universe_id TEXT NOT NULL,
+            universe_label TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            source_kind TEXT NOT NULL,
+            period_days INTEGER NOT NULL DEFAULT 366,
+            symbol_count INTEGER NOT NULL DEFAULT 0,
+            success_count INTEGER NOT NULL DEFAULT 0,
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            skipped_count INTEGER NOT NULL DEFAULT 0,
+            as_of_date TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            failure_json TEXT NOT NULL DEFAULT '[]',
+            FOREIGN KEY (universe_id) REFERENCES fundamental_universes(universe_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fundamental_collection_runs_completed_at
+            ON fundamental_collection_runs (completed_at DESC);
+
         CREATE TABLE IF NOT EXISTS automation_configs (
             automation_id TEXT PRIMARY KEY,
             label TEXT NOT NULL,
@@ -554,6 +739,12 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
             market_universe_ids_json TEXT NOT NULL DEFAULT '[]',
             run_options_collection INTEGER NOT NULL DEFAULT 1,
             options_universe_ids_json TEXT NOT NULL DEFAULT '[]',
+            run_fundamental_collection INTEGER NOT NULL DEFAULT 0,
+            fundamental_universe_ids_json TEXT NOT NULL DEFAULT '[]',
+            seed_fundamental_universes INTEGER NOT NULL DEFAULT 1,
+            fundamental_period_days INTEGER NOT NULL DEFAULT 366,
+            fundamental_limit INTEGER,
+            fundamental_delay_seconds REAL NOT NULL DEFAULT 0,
             refresh_exchange_symbol_masters INTEGER NOT NULL DEFAULT 0,
             market_provider_order_json TEXT NOT NULL DEFAULT '[]',
             market_full_sync INTEGER NOT NULL DEFAULT 0,
@@ -579,6 +770,24 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_automation_configs_active
             ON automation_configs (is_active, is_running, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS app_runtime_events (
+            event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            event_at TEXT NOT NULL,
+            process_id INTEGER,
+            host TEXT,
+            port INTEGER,
+            message TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_app_runtime_events_event_at
+            ON app_runtime_events (event_at DESC, event_id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_app_runtime_events_session
+            ON app_runtime_events (session_id, event_at, event_id);
 
         CREATE TABLE IF NOT EXISTS study_runs (
             run_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -657,6 +866,80 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_study_plan_recipes_updated_at
             ON study_plan_recipes (updated_at DESC, recipe_id ASC);
+
+        CREATE TABLE IF NOT EXISTS saved_studies (
+            saved_study_id TEXT PRIMARY KEY,
+            version TEXT NOT NULL DEFAULT 'saved-study-v1',
+            name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            study_id TEXT NOT NULL,
+            view_id TEXT NOT NULL,
+            route_hash TEXT NOT NULL,
+            plan_json TEXT NOT NULL DEFAULT '{}',
+            keep_warm INTEGER NOT NULL DEFAULT 1,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            archived_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_saved_studies_status_updated
+            ON saved_studies (status, updated_at DESC, saved_study_id ASC);
+
+        CREATE INDEX IF NOT EXISTS idx_saved_studies_route_hash
+            ON saved_studies (route_hash);
+
+        CREATE TABLE IF NOT EXISTS saved_study_dependencies (
+            dependency_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            saved_study_id TEXT NOT NULL,
+            dependency_key TEXT NOT NULL,
+            dependency_kind TEXT NOT NULL,
+            label TEXT,
+            query TEXT,
+            symbol TEXT,
+            universe_id TEXT,
+            required_capability TEXT NOT NULL,
+            instrument_id INTEGER,
+            mapping_id INTEGER,
+            verification_status TEXT NOT NULL DEFAULT 'unverified',
+            issue_json TEXT NOT NULL DEFAULT '{}',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            updated_at TEXT NOT NULL,
+            UNIQUE(saved_study_id, dependency_key),
+            FOREIGN KEY (saved_study_id) REFERENCES saved_studies(saved_study_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_saved_study_dependencies_study
+            ON saved_study_dependencies (saved_study_id, dependency_key);
+
+        CREATE TABLE IF NOT EXISTS saved_study_artifacts (
+            artifact_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            saved_study_id TEXT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            artifact_version TEXT NOT NULL,
+            artifact_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (saved_study_id) REFERENCES saved_studies(saved_study_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_saved_study_artifacts_study
+            ON saved_study_artifacts (saved_study_id, artifact_type, artifact_id DESC);
+
+        CREATE TABLE IF NOT EXISTS saved_study_refresh_runs (
+            refresh_run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            saved_study_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            refreshed_count INTEGER NOT NULL DEFAULT 0,
+            skipped_count INTEGER NOT NULL DEFAULT 0,
+            failed_count INTEGER NOT NULL DEFAULT 0,
+            details_json TEXT NOT NULL DEFAULT '{}',
+            FOREIGN KEY (saved_study_id) REFERENCES saved_studies(saved_study_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_saved_study_refresh_runs_study
+            ON saved_study_refresh_runs (saved_study_id, refresh_run_id DESC);
         """
     )
     existing_series_columns = {
@@ -664,6 +947,21 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
     }
     if "currency" not in existing_series_columns:
         connection.execute("ALTER TABLE series_cache ADD COLUMN currency TEXT")
+
+    existing_symbol_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(symbols)")
+    }
+    for column_name, column_sql in [
+        ("provider", "TEXT NOT NULL DEFAULT 'yfinance'"),
+        ("currency", "TEXT"),
+        ("source_series_type", "TEXT NOT NULL DEFAULT 'Price'"),
+        ("created_at", "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00+00:00'"),
+        ("updated_at", "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00+00:00'"),
+    ]:
+        if column_name not in existing_symbol_columns:
+            connection.execute(
+                f"ALTER TABLE symbols ADD COLUMN {column_name} {column_sql}",
+            )
 
     existing_remembered_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(remembered_datasets)")
@@ -720,7 +1018,149 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
                 f"ALTER TABLE options_screener_rows ADD COLUMN {column_name} {column_sql}",
             )
 
+    existing_automation_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(automation_configs)")
+    }
+    for column_name, column_sql in [
+        ("run_fundamental_collection", "INTEGER NOT NULL DEFAULT 0"),
+        ("fundamental_universe_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("seed_fundamental_universes", "INTEGER NOT NULL DEFAULT 1"),
+        ("fundamental_period_days", "INTEGER NOT NULL DEFAULT 366"),
+        ("fundamental_limit", "INTEGER"),
+        ("fundamental_delay_seconds", "REAL NOT NULL DEFAULT 0"),
+    ]:
+        if column_name not in existing_automation_columns:
+            connection.execute(
+                f"ALTER TABLE automation_configs ADD COLUMN {column_name} {column_sql}",
+            )
+
     connection.commit()
+
+
+def migrate_legacy_symbols_to_instrument_registry(connection: sqlite3.Connection) -> None:
+    now = to_iso(now_utc())
+    capabilities_json = json.dumps(
+        {
+            "priceHistory": True,
+            "profile": False,
+            "fundamentals": False,
+            "optionsUnderlying": False,
+            "optionContract": False,
+            "cryptoHistory": False,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    legacy_rows = connection.execute(
+        """
+        SELECT
+            symbols.symbol,
+            COALESCE(remembered_datasets.label, symbols.symbol) AS label,
+            symbols.provider,
+            COALESCE(remembered_datasets.provider_name, symbols.provider, 'yfinance') AS provider_name,
+            COALESCE(remembered_datasets.currency, symbols.currency) AS currency
+        FROM symbols
+        LEFT JOIN remembered_datasets
+          ON remembered_datasets.symbol = symbols.symbol
+        """
+    ).fetchall()
+
+    for row in legacy_rows:
+        symbol = normalize_symbol(row["symbol"])
+        if not symbol:
+            continue
+        asset_class = "index" if symbol.startswith("^") else "equity"
+        canonical_key = instruments_store.build_canonical_key(
+            canonical_symbol=symbol,
+            asset_class=asset_class,
+        )
+        connection.execute(
+            """
+            INSERT INTO instruments (
+                canonical_key,
+                canonical_symbol,
+                display_label,
+                asset_class,
+                currency,
+                status,
+                verification_status,
+                metadata_json,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, 'legacy', 'legacy', ?, ?, ?)
+            ON CONFLICT(canonical_key) DO NOTHING
+            """,
+            (
+                canonical_key,
+                symbol,
+                row["label"] or symbol,
+                asset_class,
+                row["currency"],
+                json.dumps({"source": "legacy-runtime-symbol"}, separators=(",", ":"), sort_keys=True),
+                now,
+                now,
+            ),
+        )
+        instrument_row = connection.execute(
+            "SELECT instrument_id FROM instruments WHERE canonical_key = ?",
+            (canonical_key,),
+        ).fetchone()
+        if instrument_row is None:
+            continue
+        instrument_id = int(instrument_row["instrument_id"])
+        provider = str(row["provider"] or "yfinance").strip().lower() or "yfinance"
+        provider_name = row["provider_name"] or provider
+        connection.execute(
+            """
+            INSERT INTO instrument_provider_mappings (
+                instrument_id,
+                provider,
+                provider_symbol,
+                provider_name,
+                asset_class,
+                currency,
+                capabilities_json,
+                verification_status,
+                last_checked_at,
+                metadata_json,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'legacy', ?, ?, ?, ?)
+            ON CONFLICT(instrument_id, provider, provider_symbol) DO NOTHING
+            """,
+            (
+                instrument_id,
+                provider,
+                symbol,
+                provider_name,
+                asset_class,
+                row["currency"],
+                capabilities_json,
+                now,
+                json.dumps({"source": "legacy-runtime-symbol"}, separators=(",", ":"), sort_keys=True),
+                now,
+                now,
+            ),
+        )
+        for alias in {symbol.lower(), str(row["label"] or symbol).strip().lower()}:
+            if not alias:
+                continue
+            connection.execute(
+                """
+                INSERT INTO instrument_aliases (
+                    instrument_id,
+                    alias,
+                    normalized_alias,
+                    source,
+                    created_at
+                )
+                VALUES (?, ?, ?, 'legacy', ?)
+                ON CONFLICT(instrument_id, normalized_alias, source) DO NOTHING
+                """,
+                (instrument_id, alias, alias, now),
+            )
 
 
 def row_to_cached_snapshot(row: sqlite3.Row) -> dict:
@@ -1024,6 +1464,145 @@ def _ensure_symbol_row(
         raise RuntimeError(f"Could not create local cache row for {normalized_symbol}.")
 
     return int(row["symbol_id"])
+
+
+def _upsert_price_history_registry_mapping(
+    connection: sqlite3.Connection,
+    *,
+    symbol: str,
+    provider: str | None,
+    currency: str | None,
+    timestamp: str,
+) -> None:
+    normalized_symbol = normalize_symbol(symbol)
+    if not normalized_symbol:
+        return
+
+    asset_class = "index" if normalized_symbol.startswith("^") else "equity"
+    canonical_key = instruments_store.build_canonical_key(
+        canonical_symbol=normalized_symbol,
+        asset_class=asset_class,
+    )
+    metadata_json = json.dumps(
+        {"source": "price-history-write"},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    capabilities_json = json.dumps(
+        {
+            "priceHistory": True,
+            "profile": False,
+            "fundamentals": False,
+            "optionsUnderlying": False,
+            "optionContract": False,
+            "cryptoHistory": normalized_symbol.endswith("-USD"),
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    normalized_provider = str(provider or "yfinance").strip().lower() or "yfinance"
+    provider_name = (
+        "Yahoo Finance (yfinance)"
+        if normalized_provider == "yfinance"
+        else normalized_provider
+    )
+    connection.execute(
+        """
+        INSERT INTO instruments (
+            canonical_key,
+            canonical_symbol,
+            display_label,
+            asset_class,
+            currency,
+            status,
+            verification_status,
+            metadata_json,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, 'active', 'verified', ?, ?, ?)
+        ON CONFLICT(canonical_key) DO UPDATE SET
+            currency = COALESCE(excluded.currency, instruments.currency),
+            status = 'active',
+            verification_status = 'verified',
+            updated_at = excluded.updated_at
+        """,
+        (
+            canonical_key,
+            normalized_symbol,
+            normalized_symbol,
+            asset_class,
+            str(currency or "").strip().upper() or None,
+            metadata_json,
+            timestamp,
+            timestamp,
+        ),
+    )
+    instrument_row = connection.execute(
+        "SELECT instrument_id FROM instruments WHERE canonical_key = ?",
+        (canonical_key,),
+    ).fetchone()
+    if instrument_row is None:
+        return
+
+    instrument_id = int(instrument_row["instrument_id"])
+    connection.execute(
+        """
+        INSERT INTO instrument_provider_mappings (
+            instrument_id,
+            provider,
+            provider_symbol,
+            provider_name,
+            asset_class,
+            currency,
+            capabilities_json,
+            verification_status,
+            verified_at,
+            last_checked_at,
+            metadata_json,
+            created_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'verified', ?, ?, ?, ?, ?)
+        ON CONFLICT(instrument_id, provider, provider_symbol) DO UPDATE SET
+            currency = COALESCE(excluded.currency, instrument_provider_mappings.currency),
+            capabilities_json = excluded.capabilities_json,
+            verification_status = 'verified',
+            verified_at = excluded.verified_at,
+            last_checked_at = excluded.last_checked_at,
+            metadata_json = excluded.metadata_json,
+            updated_at = excluded.updated_at
+        """,
+        (
+            instrument_id,
+            normalized_provider,
+            normalized_symbol,
+            provider_name,
+            asset_class,
+            str(currency or "").strip().upper() or None,
+            capabilities_json,
+            timestamp,
+            timestamp,
+            metadata_json,
+            timestamp,
+            timestamp,
+        ),
+    )
+    alias = normalized_symbol.lower()
+    connection.execute(
+        """
+        INSERT INTO instrument_aliases (
+            instrument_id,
+            alias,
+            normalized_alias,
+            source,
+            created_at
+        )
+        VALUES (?, ?, ?, 'price-history', ?)
+        ON CONFLICT(instrument_id, normalized_alias, source) DO NOTHING
+        """,
+        (instrument_id, alias, alias, timestamp),
+    )
 
 
 def _price_points_from_rows(rows: list[sqlite3.Row]) -> list[list[str | float]]:
@@ -1352,6 +1931,13 @@ def _write_price_history_to_connection(
         raise RuntimeError(f"Cached price history for {normalized_symbol} is incomplete.")
 
     upsert_cached_snapshot(connection, snapshot)
+    _upsert_price_history_registry_mapping(
+        connection,
+        symbol=normalized_symbol,
+        provider=provider,
+        currency=currency,
+        timestamp=timestamp,
+    )
     return snapshot
 
 
@@ -1709,9 +2295,209 @@ def ensure_runtime_store() -> None:
             initialize_runtime_store(connection)
             migrate_legacy_local_cache(connection)
             migrate_cached_series_to_price_history(connection)
+            migrate_legacy_symbols_to_instrument_registry(connection)
             connection.commit()
 
         _RUNTIME_STORE_READY = True
+
+
+def _clean_app_runtime_text(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _app_runtime_metadata_json(metadata: dict | None) -> str:
+    payload = metadata if isinstance(metadata, dict) else {}
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True, default=str)
+
+
+def _parse_app_runtime_metadata(payload: str | None) -> dict:
+    try:
+        decoded = json.loads(payload or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _row_to_app_runtime_event(row: sqlite3.Row) -> dict:
+    port = row["port"]
+    process_id = row["process_id"]
+    return {
+        "eventId": int(row["event_id"]),
+        "sessionId": row["session_id"],
+        "eventType": row["event_type"],
+        "eventAt": row["event_at"],
+        "processId": int(process_id) if process_id is not None else None,
+        "host": row["host"],
+        "port": int(port) if port is not None else None,
+        "message": row["message"],
+        "metadata": _parse_app_runtime_metadata(row["metadata_json"]),
+    }
+
+
+def record_app_runtime_event(
+    *,
+    session_id: str,
+    event_type: str,
+    process_id: int | None = None,
+    host: str | None = None,
+    port: int | None = None,
+    event_at: str | None = None,
+    message: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    normalized_session_id = _clean_app_runtime_text(session_id)
+    normalized_event_type = _clean_app_runtime_text(event_type)
+    if not normalized_session_id:
+        raise ValueError("session_id is required.")
+    if not normalized_event_type:
+        raise ValueError("event_type is required.")
+
+    timestamp = _clean_app_runtime_text(event_at) or to_iso(now_utc())
+    with open_runtime_store() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO app_runtime_events (
+                session_id,
+                event_type,
+                event_at,
+                process_id,
+                host,
+                port,
+                message,
+                metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalized_session_id,
+                normalized_event_type,
+                timestamp,
+                int(process_id) if process_id is not None else None,
+                _clean_app_runtime_text(host),
+                int(port) if port is not None else None,
+                _clean_app_runtime_text(message),
+                _app_runtime_metadata_json(metadata),
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            """
+            SELECT
+                event_id,
+                session_id,
+                event_type,
+                event_at,
+                process_id,
+                host,
+                port,
+                message,
+                metadata_json
+            FROM app_runtime_events
+            WHERE event_id = ?
+            """,
+            (cursor.lastrowid,),
+        ).fetchone()
+    return _row_to_app_runtime_event(row)
+
+
+def load_recent_app_runtime_events(limit: int = 20) -> list[dict]:
+    try:
+        normalized_limit = int(limit)
+    except (TypeError, ValueError):
+        normalized_limit = 20
+    normalized_limit = max(1, min(normalized_limit, 200))
+
+    with open_runtime_store() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                event_id,
+                session_id,
+                event_type,
+                event_at,
+                process_id,
+                host,
+                port,
+                message,
+                metadata_json
+            FROM app_runtime_events
+            ORDER BY event_at DESC, event_id DESC
+            LIMIT ?
+            """,
+            (normalized_limit,),
+        ).fetchall()
+    return [_row_to_app_runtime_event(row) for row in rows]
+
+
+def _latest_non_empty_event_value(events: list[dict], key: str):
+    for event in reversed(events):
+        value = event.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _first_app_runtime_event_at(events: list[dict], event_type: str) -> str | None:
+    for event in events:
+        if event.get("eventType") == event_type:
+            return event.get("eventAt")
+    return None
+
+
+def _last_app_runtime_event_at(events: list[dict], event_type: str) -> str | None:
+    for event in reversed(events):
+        if event.get("eventType") == event_type:
+            return event.get("eventAt")
+    return None
+
+
+def load_latest_app_runtime_session() -> dict | None:
+    latest = load_recent_app_runtime_events(limit=1)
+    if not latest:
+        return None
+
+    session_id = latest[0]["sessionId"]
+    with open_runtime_store() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                event_id,
+                session_id,
+                event_type,
+                event_at,
+                process_id,
+                host,
+                port,
+                message,
+                metadata_json
+            FROM app_runtime_events
+            WHERE session_id = ?
+            ORDER BY event_at ASC, event_id ASC
+            """,
+            (session_id,),
+        ).fetchall()
+
+    events = [_row_to_app_runtime_event(row) for row in rows]
+    if not events:
+        return None
+
+    first_event = events[0]
+    last_event = events[-1]
+    stopped_at = _last_app_runtime_event_at(events, "server_stopped")
+    return {
+        "sessionId": session_id,
+        "processId": _latest_non_empty_event_value(events, "processId"),
+        "host": _latest_non_empty_event_value(events, "host"),
+        "port": _latest_non_empty_event_value(events, "port"),
+        "startedAt": _first_app_runtime_event_at(events, "server_starting") or first_event["eventAt"],
+        "readyAt": _first_app_runtime_event_at(events, "server_ready"),
+        "stoppedAt": stopped_at,
+        "lastEventType": last_event["eventType"],
+        "lastEventAt": last_event["eventAt"],
+        "isOpen": last_event["eventType"] not in {"server_failed", "server_stopped"},
+        "eventCount": len(events),
+    }
 
 
 def load_cached_series(symbol: str) -> dict | None:
@@ -1869,6 +2655,136 @@ def list_symbol_universes() -> list[dict]:
     )
 
 
+def upsert_instrument(
+    *,
+    canonical_symbol: str,
+    label: str | None = None,
+    asset_class: str | None = None,
+    exchange: str | None = None,
+    mic: str | None = None,
+    currency: str | None = None,
+    country: str | None = None,
+    status: str | None = None,
+    verification_status: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    return instruments_store.upsert_instrument(
+        canonical_symbol=canonical_symbol,
+        label=label,
+        asset_class=asset_class,
+        exchange=exchange,
+        mic=mic,
+        currency=currency,
+        country=country,
+        status=status,
+        verification_status=verification_status,
+        metadata=metadata,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def upsert_instrument_provider_mapping(
+    *,
+    instrument_id: int,
+    provider: str,
+    provider_symbol: str,
+    provider_name: str | None = None,
+    asset_class: str | None = None,
+    exchange: str | None = None,
+    mic: str | None = None,
+    currency: str | None = None,
+    country: str | None = None,
+    capabilities: dict | None = None,
+    verification_status: str | None = None,
+    verified_at: str | None = None,
+    last_checked_at: str | None = None,
+    failure_reason: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    return instruments_store.upsert_instrument_provider_mapping(
+        instrument_id=instrument_id,
+        provider=provider,
+        provider_symbol=provider_symbol,
+        provider_name=provider_name,
+        asset_class=asset_class,
+        exchange=exchange,
+        mic=mic,
+        currency=currency,
+        country=country,
+        capabilities=capabilities,
+        verification_status=verification_status,
+        verified_at=verified_at,
+        last_checked_at=last_checked_at,
+        failure_reason=failure_reason,
+        metadata=metadata,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def sync_instrument_aliases(
+    instrument_id: int,
+    aliases: list[str],
+    *,
+    source: str = "system",
+) -> list[dict]:
+    return instruments_store.sync_instrument_aliases(
+        instrument_id,
+        aliases,
+        source=source,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def record_instrument_discovery_event(
+    *,
+    event_kind: str,
+    query: str | None = None,
+    provider: str | None = None,
+    selected_instrument_id: int | None = None,
+    selected_mapping_id: int | None = None,
+    candidates: list[dict] | None = None,
+    verification_result: dict | None = None,
+    failure_reason: str | None = None,
+) -> dict:
+    return instruments_store.record_instrument_discovery_event(
+        event_kind=event_kind,
+        query=query,
+        provider=provider,
+        selected_instrument_id=selected_instrument_id,
+        selected_mapping_id=selected_mapping_id,
+        candidates=candidates,
+        verification_result=verification_result,
+        failure_reason=failure_reason,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def search_instruments(query: str, *, limit: int = 8) -> list[dict]:
+    return instruments_store.search_instruments(
+        query,
+        limit=limit,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_instrument_provider_mappings(instrument_id: int) -> list[dict]:
+    return instruments_store.load_provider_mappings(
+        instrument_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def build_instrument_registry_health(*, stale_after_days: int = 30) -> dict:
+    return instruments_store.build_registry_health(
+        stale_after_days=stale_after_days,
+        open_runtime_store=open_runtime_store,
+    )
+
+
 def load_symbol_sync_state(symbol: str) -> dict | None:
     return metadata_store.load_symbol_sync_state(
         symbol,
@@ -1905,6 +2821,152 @@ def record_market_collection_run(
         skipped_count=skipped_count,
         refresh_symbol_master=refresh_symbol_master,
         full_sync=full_sync,
+        as_of_date=as_of_date,
+        started_at=started_at,
+        completed_at=completed_at,
+        failures=failures,
+        normalize_dataset_id=normalize_dataset_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def upsert_fundamental_universe(
+    *,
+    universe_id: str,
+    label: str,
+    source_provider: str,
+    source_kind: str,
+    source_symbol: str | None = None,
+    source_url: str | None = None,
+    as_of_date: str | None = None,
+    member_count: int = 0,
+    note: str | None = None,
+) -> dict:
+    return fundamentals_store.upsert_fundamental_universe(
+        universe_id=universe_id,
+        label=label,
+        source_provider=source_provider,
+        source_kind=source_kind,
+        source_symbol=source_symbol,
+        source_url=source_url,
+        as_of_date=as_of_date,
+        member_count=member_count,
+        note=note,
+        normalize_dataset_id=normalize_dataset_id,
+        to_iso=to_iso,
+        now_utc=now_utc,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def sync_fundamental_universe_members(
+    universe_id: str,
+    members: list[dict],
+    *,
+    source_provider: str | None = None,
+    replace: bool = True,
+) -> list[dict]:
+    return fundamentals_store.sync_fundamental_universe_members(
+        universe_id,
+        members,
+        source_provider=source_provider,
+        replace=replace,
+        normalize_dataset_id=normalize_dataset_id,
+        normalize_symbol=normalize_symbol,
+        to_iso=to_iso,
+        now_utc=now_utc,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_fundamental_universe(universe_id: str) -> dict | None:
+    return fundamentals_store.load_fundamental_universe(
+        universe_id,
+        normalize_dataset_id=normalize_dataset_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def list_fundamental_universes() -> list[dict]:
+    return fundamentals_store.list_fundamental_universes(
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_fundamental_universe_members(
+    universe_id: str,
+    *,
+    include_inactive: bool = False,
+) -> list[dict]:
+    return fundamentals_store.load_fundamental_universe_members(
+        universe_id,
+        include_inactive=include_inactive,
+        normalize_dataset_id=normalize_dataset_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def upsert_fundamental_snapshot(snapshot: dict, metrics: list[dict]) -> dict:
+    return fundamentals_store.upsert_fundamental_snapshot(
+        snapshot,
+        metrics,
+        normalize_dataset_id=normalize_dataset_id,
+        normalize_symbol=normalize_symbol,
+        to_iso=to_iso,
+        now_utc=now_utc,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_fundamental_snapshots(
+    *,
+    universe_id: str | None = None,
+    symbol: str | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    return fundamentals_store.load_fundamental_snapshots(
+        universe_id=universe_id,
+        symbol=symbol,
+        limit=limit,
+        normalize_dataset_id=normalize_dataset_id,
+        normalize_symbol=normalize_symbol,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_fundamental_metrics(snapshot_id: int) -> list[dict]:
+    return fundamentals_store.load_fundamental_metrics(
+        snapshot_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def record_fundamental_collection_run(
+    *,
+    universe_id: str,
+    universe_label: str,
+    provider: str,
+    source_kind: str,
+    period_days: int,
+    symbol_count: int,
+    success_count: int,
+    failure_count: int,
+    skipped_count: int,
+    as_of_date: str,
+    started_at: str,
+    completed_at: str,
+    failures: list[dict],
+) -> dict:
+    return fundamentals_store.record_fundamental_collection_run(
+        universe_id=universe_id,
+        universe_label=universe_label,
+        provider=provider,
+        source_kind=source_kind,
+        period_days=period_days,
+        symbol_count=symbol_count,
+        success_count=success_count,
+        failure_count=failure_count,
+        skipped_count=skipped_count,
         as_of_date=as_of_date,
         started_at=started_at,
         completed_at=completed_at,
@@ -2033,6 +3095,98 @@ def upsert_study_plan_recipe(recipe: dict) -> dict:
 def delete_study_plan_recipe(recipe_id: str) -> bool:
     return study_builder_store.delete_study_plan_recipe(
         recipe_id,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def upsert_saved_study(saved_study: dict) -> dict:
+    return saved_studies_store.upsert_saved_study(
+        saved_study,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def replace_saved_study_dependencies(saved_study_id: str, dependencies: list[dict]) -> list[dict]:
+    return saved_studies_store.replace_saved_study_dependencies(
+        saved_study_id,
+        dependencies,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def append_saved_study_artifact(
+    saved_study_id: str,
+    *,
+    artifact_type: str,
+    artifact_version: str,
+    artifact: dict,
+) -> dict:
+    return saved_studies_store.append_saved_study_artifact(
+        saved_study_id,
+        artifact_type=artifact_type,
+        artifact_version=artifact_version,
+        artifact=artifact,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def record_saved_study_refresh_run(
+    saved_study_id: str,
+    *,
+    status: str,
+    details: dict | None = None,
+    refreshed_count: int = 0,
+    skipped_count: int = 0,
+    failed_count: int = 0,
+) -> dict:
+    return saved_studies_store.record_saved_study_refresh_run(
+        saved_study_id,
+        status=status,
+        details=details,
+        refreshed_count=refreshed_count,
+        skipped_count=skipped_count,
+        failed_count=failed_count,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def list_saved_studies(
+    *,
+    limit: int = 50,
+    status: str | None = None,
+    include_archived: bool = False,
+) -> list[dict]:
+    return saved_studies_store.list_saved_studies(
+        limit=limit,
+        status=status,
+        include_archived=include_archived,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def load_saved_study(saved_study_id: str, *, include_archived: bool = False) -> dict | None:
+    return saved_studies_store.load_saved_study(
+        saved_study_id,
+        include_archived=include_archived,
+        open_runtime_store=open_runtime_store,
+    )
+
+
+def archive_saved_study(saved_study_id: str) -> dict | None:
+    return saved_studies_store.archive_saved_study(
+        saved_study_id,
+        open_runtime_store=open_runtime_store,
+        now_iso=lambda: to_iso(now_utc()),
+    )
+
+
+def find_saved_studies_by_route_hash(route_hash: str) -> list[dict]:
+    return saved_studies_store.find_saved_studies_by_route_hash(
+        route_hash,
         open_runtime_store=open_runtime_store,
     )
 

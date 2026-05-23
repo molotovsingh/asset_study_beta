@@ -26,8 +26,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--market-universe-id", action="append")
     parser.add_argument("--options-universe-id", action="append")
+    parser.add_argument("--fundamental-universe-id", action="append")
     parser.add_argument("--skip-market", action="store_true")
     parser.add_argument("--skip-options", action="store_true")
+    parser.add_argument("--run-fundamentals", action="store_true")
+    parser.add_argument("--seed-fundamental-universes", action="store_true")
     parser.add_argument("--refresh-exchange-symbol-masters", action="store_true")
     parser.add_argument("--market-provider-order")
     parser.add_argument("--market-full-sync", action="store_true")
@@ -35,6 +38,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--options-minimum-dte", type=int)
     parser.add_argument("--options-max-contracts", type=int)
     parser.add_argument("--options-as-of-date")
+    parser.add_argument("--fundamental-period-days", type=int, default=366)
+    parser.add_argument("--fundamental-limit", type=int)
+    parser.add_argument("--fundamental-delay-seconds", type=float, default=0.0)
     parser.add_argument("--health-as-of-date")
     parser.add_argument("--health-stale-after-days", type=int, default=7)
     parser.add_argument("--health-symbol-limit", type=int, default=20)
@@ -59,8 +65,11 @@ def main() -> int:
     payload = maintenance_service.run_data_maintenance(
         market_universe_ids=args.market_universe_id,
         options_universe_ids=args.options_universe_id,
+        fundamental_universe_ids=args.fundamental_universe_id,
         run_market_collection=not bool(args.skip_market),
         run_options_collection=not bool(args.skip_options),
+        run_fundamental_collection=bool(args.run_fundamentals),
+        seed_fundamental_universes=bool(args.seed_fundamental_universes),
         refresh_exchange_symbol_masters=bool(args.refresh_exchange_symbol_masters),
         market_provider_order=args.market_provider_order,
         market_full_sync=bool(args.market_full_sync),
@@ -68,6 +77,9 @@ def main() -> int:
         options_minimum_dte=args.options_minimum_dte,
         options_max_contracts=args.options_max_contracts,
         options_as_of_date=args.options_as_of_date,
+        fundamental_period_days=args.fundamental_period_days,
+        fundamental_limit=args.fundamental_limit,
+        fundamental_delay_seconds=args.fundamental_delay_seconds,
         health_stale_after_days=args.health_stale_after_days,
         health_symbol_limit=args.health_symbol_limit,
         health_universe_limit=args.health_universe_limit,

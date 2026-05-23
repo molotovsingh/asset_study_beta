@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-try:
-    from providers.finnhub import search_symbols as search_finnhub_symbols
-except ModuleNotFoundError:
-    from scripts.providers.finnhub import search_symbols as search_finnhub_symbols
-
 from . import (
     assistant_service,
     automation_service,
     index_service,
+    instrument_service,
     ops_service,
     options_service,
+    saved_study_service,
     study_factory_service,
     study_builder_service,
     study_run_service,
@@ -57,25 +54,20 @@ def get_study_builder_recipes(request: dict) -> dict:
     return study_builder_service.build_study_plan_recipe_state_payload(request or {})
 
 
+def get_saved_studies(request: dict) -> dict:
+    return saved_study_service.build_saved_study_state_payload(request or {})
+
+
 def post_symbols_discover(request: dict) -> dict:
-    query = str(request.get("query") or "").strip()
-    if len(query) < 2:
-        raise ValueError("Enter at least two characters to search.")
+    return instrument_service.build_symbol_discovery_payload(request)
 
-    limit = int(request.get("limit") or 8)
-    limit = max(1, min(limit, 12))
-    warning = None
-    try:
-        results = search_finnhub_symbols(query, limit=limit)
-    except RuntimeError as error:
-        results = []
-        warning = str(error)
 
-    return {
-        "query": query,
-        "results": results,
-        "warning": warning,
-    }
+def post_symbols_verify(request: dict) -> dict:
+    return instrument_service.build_symbol_verification_payload(request)
+
+
+def post_symbols_register_manual(request: dict) -> dict:
+    return instrument_service.build_manual_symbol_registration_payload(request)
 
 
 def post_yfinance_instrument_profile(request: dict) -> dict:
@@ -138,6 +130,18 @@ def post_study_builder_recipes_delete(request: dict) -> dict:
     return study_builder_service.remove_study_plan_recipe(request)
 
 
+def post_saved_studies_save(request: dict) -> dict:
+    return study_builder_service.save_saved_study(request)
+
+
+def post_saved_studies_archive(request: dict) -> dict:
+    return saved_study_service.archive_saved_study(request)
+
+
+def post_saved_studies_refresh_readiness(request: dict) -> dict:
+    return saved_study_service.refresh_saved_study_readiness(request)
+
+
 def post_study_factory_proposal(request: dict) -> dict:
     return study_factory_service.build_study_proposal_payload(request)
 
@@ -162,6 +166,7 @@ GET_ROUTE_HANDLERS = {
     "/api/assistant/contract": get_assistant_contract,
     "/api/assistant/contract-bundle": get_assistant_contract_bundle,
     "/api/assistant/readiness": get_assistant_readiness,
+    "/api/saved-studies": get_saved_studies,
     "/api/study-builder/recipes": get_study_builder_recipes,
     "/api/study-runs": get_study_runs,
     "/api/system/runtime-health": get_system_runtime_health,
@@ -175,6 +180,9 @@ POST_ROUTE_HANDLERS = {
     "/api/assistant/study-plan-dry-run": post_assistant_study_plan_dry_run,
     "/api/assistant/study-plan-live-draft": post_assistant_study_plan_live_draft,
     "/api/assistant/study-run-brief": post_assistant_study_run_brief,
+    "/api/saved-studies/archive": post_saved_studies_archive,
+    "/api/saved-studies/refresh-readiness": post_saved_studies_refresh_readiness,
+    "/api/saved-studies/save": post_saved_studies_save,
     "/api/study-builder/plan": post_study_builder_plan,
     "/api/study-factory/proposal": post_study_factory_proposal,
     "/api/study-builder/recipes/delete": post_study_builder_recipes_delete,
@@ -182,6 +190,8 @@ POST_ROUTE_HANDLERS = {
     "/api/study-builder/validate": post_study_builder_validate,
     "/api/study-runs/record": post_study_runs_record,
     "/api/symbols/discover": post_symbols_discover,
+    "/api/symbols/register-manual": post_symbols_register_manual,
+    "/api/symbols/verify": post_symbols_verify,
     "/api/yfinance/instrument-profile": post_yfinance_instrument_profile,
     "/api/yfinance/index-series": post_yfinance_index_series,
     "/api/yfinance/monthly-straddle": post_yfinance_monthly_straddle,
@@ -204,4 +214,4 @@ def dispatch_request(method: str, path: str, request: dict | None = None) -> dic
     handler = handlers.get(path)
     if handler is None:
         raise UnknownApiRouteError("Unknown API endpoint.")
-    return handler(request or {})
+    return handler({} if request is None else request)

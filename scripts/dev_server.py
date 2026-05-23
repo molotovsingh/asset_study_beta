@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import uuid
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -31,6 +33,7 @@ try:
         load_corporate_actions,
         load_price_rows,
         normalize_symbol,
+        record_app_runtime_event,
         write_price_history,
     )
 except ModuleNotFoundError:
@@ -41,6 +44,7 @@ except ModuleNotFoundError:
         load_corporate_actions,
         load_price_rows,
         normalize_symbol,
+        record_app_runtime_event,
         write_price_history,
     )
 
@@ -346,19 +350,106 @@ class AutomationScheduler:
             self._thread = None
 
 
+def build_server_session_id(*, process_id: int, host: str, port: int) -> str:
+    normalized_host = str(host or "unknown").replace(":", "_")
+    return f"dev-server-{process_id}-{normalized_host}-{port}-{uuid.uuid4().hex[:8]}"
+
+
+def record_server_lifecycle_event(
+    *,
+    session_id: str,
+    event_type: str,
+    host: str,
+    port: int,
+    process_id: int | None = None,
+    message: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    event_metadata = dict(metadata or {})
+    event_metadata.setdefault("serverVersion", DevServerHandler.server_version)
+    return record_app_runtime_event(
+        session_id=session_id,
+        event_type=event_type,
+        process_id=process_id if process_id is not None else os.getpid(),
+        host=host,
+        port=port,
+        message=message,
+        metadata=event_metadata,
+    )
+
+
+def _safe_record_server_lifecycle_event(**kwargs) -> dict | None:
+    try:
+        return record_server_lifecycle_event(**kwargs)
+    except Exception as error:
+        print(f"[runtime-lifecycle] failed to record {kwargs.get('event_type')}: {error}")
+        return None
+
+
 def main() -> int:
     args = parse_args()
     ensure_runtime_store()
+    process_id = os.getpid()
+    session_id = build_server_session_id(
+        process_id=process_id,
+        host=args.host,
+        port=args.port,
+    )
+    lifecycle_context = {
+        "session_id": session_id,
+        "host": args.host,
+        "port": args.port,
+        "process_id": process_id,
+    }
+    _safe_record_server_lifecycle_event(
+        **lifecycle_context,
+        event_type="server_starting",
+        message="server starting",
+    )
     handler = partial(DevServerHandler, directory=str(REPO_ROOT))
-    server = ThreadingHTTPServer((args.host, args.port), handler)
-    scheduler = AutomationScheduler()
-    scheduler.start()
-    print(f"Serving Index Study Lab on http://{args.host}:{args.port}")
+    server = None
+    scheduler = None
     try:
-        server.serve_forever()
+        server = ThreadingHTTPServer((args.host, args.port), handler)
+    except Exception as error:
+        _safe_record_server_lifecycle_event(
+            **lifecycle_context,
+            event_type="server_failed",
+            message=str(error),
+            metadata={
+                "serverVersion": DevServerHandler.server_version,
+                "errorType": type(error).__name__,
+            },
+        )
+        raise
+
+    try:
+        scheduler = AutomationScheduler()
+        scheduler.start()
+        _safe_record_server_lifecycle_event(
+            **lifecycle_context,
+            event_type="server_ready",
+            message="server ready",
+        )
+        print(f"Serving Index Study Lab on http://{args.host}:{args.port}")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            print("\nStopping Index Study Lab")
     finally:
-        scheduler.stop()
-        server.server_close()
+        if scheduler is not None:
+            scheduler.stop()
+        if server is not None:
+            server.server_close()
+        _safe_record_server_lifecycle_event(
+            **lifecycle_context,
+            event_type="server_stopped",
+            message="server stopped",
+            metadata={
+                "serverVersion": DevServerHandler.server_version,
+                "shutdown": "finally",
+            },
+        )
     return 0
 
 

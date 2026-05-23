@@ -37,7 +37,7 @@ _TYPE_PRIORITY = {
 }
 
 
-def _request_json(path: str, **params) -> dict:
+def _request_json(path: str, **params):
     api_key = _load_api_key()
     query_params = {key: value for key, value in params.items() if value not in {None, ""}}
     if "_from" in query_params:
@@ -54,7 +54,7 @@ def _request_json(path: str, **params) -> dict:
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    if not isinstance(payload, dict):
+    if not isinstance(payload, (dict, list)):
         raise RuntimeError("Finnhub returned an invalid JSON payload.")
     return payload
 
@@ -358,6 +358,79 @@ def fetch_exchange_symbols(
 
     normalized_results.sort(key=lambda entry: (entry["symbol"], entry["description"]))
     return normalized_results
+
+
+def fetch_index_constituents(symbol: str) -> dict:
+    normalized_symbol = str(symbol or "").strip().upper()
+    if not normalized_symbol:
+        raise RuntimeError("Finnhub index constituents fetch requires an index symbol.")
+
+    payload = _request_json("/index/constituents", symbol=normalized_symbol)
+    if not isinstance(payload, dict):
+        raise RuntimeError("Finnhub returned an invalid index constituents payload.")
+
+    raw_members = payload.get("constituentsBreakdown")
+    if not isinstance(raw_members, list) or not raw_members:
+        raw_symbols = payload.get("constituents")
+        raw_members = (
+            [{"symbol": raw_symbol} for raw_symbol in raw_symbols]
+            if isinstance(raw_symbols, list)
+            else []
+        )
+    if not raw_members:
+        raise RuntimeError(f"Finnhub returned no index constituents for {normalized_symbol}.")
+
+    members: list[dict] = []
+    seen_symbols: set[str] = set()
+    for raw_member in raw_members:
+        if not isinstance(raw_member, dict):
+            continue
+        member_symbol = str(raw_member.get("symbol") or "").strip().upper()
+        if not member_symbol or member_symbol in seen_symbols:
+            continue
+        seen_symbols.add(member_symbol)
+        members.append(
+            {
+                "symbol": member_symbol,
+                "providerSymbol": member_symbol,
+                "label": str(raw_member.get("name") or member_symbol).strip() or member_symbol,
+                "isin": str(raw_member.get("isin") or "").strip() or None,
+                "cusip": str(raw_member.get("cusip") or "").strip() or None,
+                "weight": raw_member.get("weight"),
+                "sourceProvider": PROVIDER_ID,
+                "metadata": raw_member,
+            },
+        )
+
+    return {
+        "symbol": str(payload.get("symbol") or normalized_symbol).strip() or normalized_symbol,
+        "asOfDate": str(payload.get("atDate") or "").strip() or None,
+        "members": members,
+        "rawPayload": payload,
+    }
+
+
+def fetch_basic_financials(
+    symbol: str,
+    *,
+    metric: str = "all",
+) -> dict:
+    normalized_symbol = str(symbol or "").strip().upper()
+    if not normalized_symbol:
+        raise RuntimeError("Finnhub fundamental fetch requires a symbol.")
+
+    payload = _request_json("/stock/metric", symbol=normalized_symbol, metric=metric or "all")
+    if not isinstance(payload, dict):
+        raise RuntimeError("Finnhub returned an invalid fundamental metric payload.")
+    metric_values = payload.get("metric")
+    series_values = payload.get("series")
+    if not isinstance(metric_values, dict):
+        metric_values = {}
+    if not isinstance(series_values, dict):
+        series_values = {}
+    if not metric_values and not series_values:
+        raise RuntimeError(f"Finnhub returned no fundamental metrics for {normalized_symbol}.")
+    return payload
 
 
 def fetch_history(

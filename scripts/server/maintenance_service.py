@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 try:
-    from server import market_collector, ops_service, options_service
+    from server import fundamentals_collector, market_collector, ops_service, options_service
 except ModuleNotFoundError:
-    from scripts.server import market_collector, ops_service, options_service
+    from scripts.server import fundamentals_collector, market_collector, ops_service, options_service
 
 try:
     from runtime_store import list_symbol_universes
@@ -45,12 +45,28 @@ def _normalize_options_universe_ids(raw_ids: list[str] | None) -> list[str]:
     return sorted(options_service.COLLECTOR_UNIVERSES.keys())
 
 
+def _normalize_fundamental_universe_ids(raw_ids: list[str] | None) -> list[str]:
+    if raw_ids:
+        normalized: list[str] = []
+        for raw_id in raw_ids:
+            universe_id = str(raw_id or "").strip().lower()
+            if not universe_id or universe_id in normalized:
+                continue
+            normalized.append(universe_id)
+        return normalized
+
+    return sorted(fundamentals_collector.BUILTIN_FUNDAMENTAL_UNIVERSES.keys())
+
+
 def run_data_maintenance(
     *,
     market_universe_ids: list[str] | None = None,
     options_universe_ids: list[str] | None = None,
+    fundamental_universe_ids: list[str] | None = None,
     run_market_collection: bool = True,
     run_options_collection: bool = True,
+    run_fundamental_collection: bool = False,
+    seed_fundamental_universes: bool = True,
     refresh_exchange_symbol_masters: bool = False,
     market_provider_order: str | list[str] | None = None,
     market_full_sync: bool = False,
@@ -58,6 +74,9 @@ def run_data_maintenance(
     options_minimum_dte: int | None = None,
     options_max_contracts: int | None = None,
     options_as_of_date: str | None = None,
+    fundamental_period_days: int = fundamentals_collector.DEFAULT_FUNDAMENTAL_PERIOD_DAYS,
+    fundamental_limit: int | None = None,
+    fundamental_delay_seconds: float = 0.0,
     health_stale_after_days: int = 7,
     health_symbol_limit: int = 20,
     health_universe_limit: int = 20,
@@ -74,6 +93,11 @@ def run_data_maintenance(
     selected_options_universe_ids = (
         _normalize_options_universe_ids(options_universe_ids)
         if run_options_collection
+        else []
+    )
+    selected_fundamental_universe_ids = (
+        _normalize_fundamental_universe_ids(fundamental_universe_ids)
+        if run_fundamental_collection
         else []
     )
 
@@ -141,6 +165,31 @@ def run_data_maintenance(
                     }
                 )
 
+    fundamental_results: list[dict] = []
+    fundamental_failures: list[dict] = []
+    if run_fundamental_collection:
+        for universe_id in selected_fundamental_universe_ids:
+            try:
+                fundamental_results.append(
+                    fundamentals_collector.collect_fundamental_universe(
+                        universe_id,
+                        seed_builtin=(
+                            bool(seed_fundamental_universes)
+                            and universe_id in fundamentals_collector.BUILTIN_FUNDAMENTAL_UNIVERSES
+                        ),
+                        period_days=fundamental_period_days,
+                        limit=fundamental_limit,
+                        delay_seconds=fundamental_delay_seconds,
+                    )
+                )
+            except Exception as error:  # noqa: BLE001
+                fundamental_failures.append(
+                    {
+                        "universeId": universe_id,
+                        "error": str(error),
+                    }
+                )
+
     health = ops_service.build_runtime_health_payload(
         {
             "staleAfterDays": health_stale_after_days,
@@ -157,6 +206,8 @@ def run_data_maintenance(
         failure_reasons.append(f"marketFailures={len(market_failures)}")
     if options_failures:
         failure_reasons.append(f"optionsFailures={len(options_failures)}")
+    if fundamental_failures:
+        failure_reasons.append(f"fundamentalFailures={len(fundamental_failures)}")
     if max_attention_symbols is not None and int(health_summary.get("attentionSymbolCount") or 0) > int(max_attention_symbols):
         failure_reasons.append(
             f"attentionSymbols={int(health_summary.get('attentionSymbolCount') or 0)}>{int(max_attention_symbols)}"
@@ -178,6 +229,11 @@ def run_data_maintenance(
             "requestedUniverseIds": selected_options_universe_ids,
             "results": options_results,
             "failures": options_failures,
+        },
+        "fundamentals": {
+            "requestedUniverseIds": selected_fundamental_universe_ids,
+            "results": fundamental_results,
+            "failures": fundamental_failures,
         },
         "runtimeHealth": health,
     }
