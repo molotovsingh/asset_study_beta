@@ -149,6 +149,8 @@ The new backend entrypoints are `POST /api/symbols/discover`, `POST /api/symbols
 
 There is an important maturity detail: successful price-history writes now update the registry too. That keeps the registry from becoming a stale side ledger. Older local symbols are migrated as `legacy`, not magically upgraded to freshly verified. That distinction is deliberate. A legacy mapping means "we saw this before"; a verified mapping means "the backend just proved this provider can serve the needed data."
 
+Crypto tickers exposed a useful edge case. Yahoo-style symbols like `BTC-USD` and `ETH-USD` look like ordinary tickers, but they are a different asset class with a different capability flag: `cryptoHistory`. The registry now seeds Bitcoin and Ethereum as verified yfinance crypto instruments, and legacy `*-USD` rows migrate as crypto instead of equity. The subtle bug was ranking, not just classification: an old local database could already have `ETH-USD` saved as a legacy equity row, so exact-symbol search had two matches. The fix was to rank verified active mappings ahead of legacy duplicates. The lesson is that additive migrations often leave old identities beside new ones; search has to prefer the stronger evidence, not merely the oldest row.
+
 For operations, runtime health now includes an instrument-registry snapshot, and the non-UI refresh command is:
 
 ```bash

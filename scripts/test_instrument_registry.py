@@ -108,6 +108,136 @@ def test_discovery_ranks_builtin_alias_and_records_event():
         )
 
 
+def test_discovery_ranks_builtin_crypto_and_exposes_crypto_history():
+    with isolated_runtime_store():
+        payload = instrument_service.build_symbol_discovery_payload(
+            {"query": "BTC-USD", "limit": 5},
+        )
+
+        assert_true(payload["results"], "BTC-USD should produce a local crypto suggestion")
+        top_result = payload["results"][0]
+        assert_equal(top_result["label"], "Bitcoin USD", "top crypto label")
+        assert_equal(top_result["symbol"], "BTC-USD", "top crypto yfinance symbol")
+        assert_equal(top_result["assetClass"], "crypto", "top crypto asset class")
+        assert_equal(top_result["verified"], True, "built-in crypto mapping should be verified")
+        assert_equal(
+            top_result["capabilities"]["cryptoHistory"],
+            True,
+            "built-in crypto mapping should expose crypto history",
+        )
+
+
+def test_discovery_prefers_verified_crypto_over_legacy_exact_symbol_duplicate():
+    with isolated_runtime_store():
+        runtime_store.ensure_runtime_store()
+        capabilities_json = (
+            '{"cryptoHistory":false,"fundamentals":false,"optionContract":false,'
+            '"optionsUnderlying":false,"priceHistory":true,"profile":false}'
+        )
+        with runtime_store.open_runtime_store() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO instruments (
+                    canonical_key,
+                    canonical_symbol,
+                    display_label,
+                    asset_class,
+                    currency,
+                    status,
+                    verification_status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "equity|eth-usd|||",
+                    "ETH-USD",
+                    "Ethereum USD",
+                    "equity",
+                    "USD",
+                    "legacy",
+                    "legacy",
+                    '{"source":"legacy-runtime-symbol"}',
+                    "2026-05-22T00:00:00+00:00",
+                    "2026-05-22T00:00:00+00:00",
+                ),
+            )
+            legacy_instrument_id = int(cursor.lastrowid)
+            connection.execute(
+                """
+                INSERT INTO instrument_provider_mappings (
+                    instrument_id,
+                    provider,
+                    provider_symbol,
+                    provider_name,
+                    asset_class,
+                    currency,
+                    capabilities_json,
+                    verification_status,
+                    last_checked_at,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    legacy_instrument_id,
+                    "yfinance",
+                    "ETH-USD",
+                    "Yahoo Finance",
+                    "equity",
+                    "USD",
+                    capabilities_json,
+                    "legacy",
+                    "2026-05-22T00:00:00+00:00",
+                    '{"source":"legacy-runtime-symbol"}',
+                    "2026-05-22T00:00:00+00:00",
+                    "2026-05-22T00:00:00+00:00",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO instrument_aliases (
+                    instrument_id,
+                    alias,
+                    normalized_alias,
+                    source,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    legacy_instrument_id,
+                    "ETH-USD",
+                    "eth-usd",
+                    "legacy",
+                    "2026-05-22T00:00:00+00:00",
+                ),
+            )
+            connection.commit()
+
+        payload = instrument_service.build_symbol_discovery_payload(
+            {"query": "ETH-USD", "limit": 5},
+        )
+
+        assert_true(payload["results"], "ETH-USD should produce a crypto suggestion")
+        top_result = payload["results"][0]
+        assert_equal(
+            top_result["assetClass"],
+            "crypto",
+            "verified crypto mapping should outrank legacy exact-symbol duplicates",
+        )
+        assert_equal(top_result["verified"], True, "top ETH-USD result should be verified")
+        assert_equal(
+            top_result["capabilities"]["cryptoHistory"],
+            True,
+            "top ETH-USD result should expose crypto history",
+        )
+
+
 def test_legacy_price_symbols_migrate_as_legacy_registry_entries():
     with isolated_runtime_store():
         runtime_store.ensure_runtime_store()
@@ -126,6 +256,27 @@ def test_legacy_price_symbols_migrate_as_legacy_registry_entries():
                 """,
                 (
                     "LEGACY",
+                    "yfinance",
+                    "USD",
+                    "Price",
+                    "2026-05-23T00:00:00+00:00",
+                    "2026-05-23T00:00:00+00:00",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO symbols (
+                    symbol,
+                    provider,
+                    currency,
+                    source_series_type,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "ETH-USD",
                     "yfinance",
                     "USD",
                     "Price",
@@ -153,6 +304,22 @@ def test_legacy_price_symbols_migrate_as_legacy_registry_entries():
                 """,
                 ("LEGACY",),
             ).fetchone()
+            crypto_instrument_row = connection.execute(
+                """
+                SELECT asset_class
+                FROM instruments
+                WHERE canonical_symbol = ?
+                """,
+                ("ETH-USD",),
+            ).fetchone()
+            crypto_mapping_row = connection.execute(
+                """
+                SELECT capabilities_json
+                FROM instrument_provider_mappings
+                WHERE provider_symbol = ?
+                """,
+                ("ETH-USD",),
+            ).fetchone()
 
         assert_true(instrument_row is not None, "legacy price symbol should migrate")
         assert_equal(
@@ -169,6 +336,16 @@ def test_legacy_price_symbols_migrate_as_legacy_registry_entries():
         assert_true(
             '"priceHistory":true' in mapping_row["capabilities_json"],
             "legacy provider mapping should preserve known history capability",
+        )
+        assert_true(crypto_instrument_row is not None, "legacy crypto symbol should migrate")
+        assert_equal(
+            crypto_instrument_row["asset_class"],
+            "crypto",
+            "legacy yfinance crypto symbols should migrate as crypto",
+        )
+        assert_true(
+            '"cryptoHistory":true' in crypto_mapping_row["capabilities_json"],
+            "legacy crypto mappings should expose crypto history capability",
         )
 
 
@@ -344,6 +521,8 @@ def test_manual_registration_requires_successful_verification():
 def main() -> int:
     test_registry_schema_initializes_without_touching_legacy_tables()
     test_discovery_ranks_builtin_alias_and_records_event()
+    test_discovery_ranks_builtin_crypto_and_exposes_crypto_history()
+    test_discovery_prefers_verified_crypto_over_legacy_exact_symbol_duplicate()
     test_legacy_price_symbols_migrate_as_legacy_registry_entries()
     test_successful_price_history_write_updates_verified_registry_mapping()
     test_price_history_verification_persists_mapping_and_blocks_fake_symbol()
