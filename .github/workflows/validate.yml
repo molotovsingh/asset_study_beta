@@ -46,9 +46,13 @@ jobs:
           python3 scripts/test_yfinance_sync_idempotence.py
           python3 scripts/test_automation_service.py
           python3 scripts/test_maintenance_service.py
+          python3 scripts/test_saved_studies.py
           python3 scripts/test_market_collector.py
+          python3 scripts/test_fundamentals_collector.py
+          python3 scripts/test_instrument_registry.py
           python3 scripts/test_options_screener_history.py
           python3 scripts/test_options_service_facade.py
+          python3 scripts/test_yfinance_options_helpers.py
           python3 scripts/test_study_run_service.py
           python3 scripts/test_runtime_store_cache.py
           python3 scripts/test_runtime_health.py
