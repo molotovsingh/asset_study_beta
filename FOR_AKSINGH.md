@@ -491,6 +491,8 @@ One small ops lesson: a cache refresh can finish as `rebuilt` instead of plain `
 
 Runtime health also separates chronology from current state. `latestSession` is the latest lifecycle event in the log, which might be a temporary helper server that already stopped. `openSession` is the latest session whose last event is still open and whose recorded process still exists. Keep both: chronology is useful for audit, but the sidebar and settings page need the open-session view when answering "is the app server running?"
 
+The operations UI now shows that `openSession` directly as an app-server metric. That small integration matters: if the backend grows a better truth source, the user should see that truth in the app, not only in a JSON endpoint or terminal command.
+
 Run one combined maintenance pass suitable for cron or another external scheduler:
 
 ```bash

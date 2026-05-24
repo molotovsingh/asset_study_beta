@@ -92,6 +92,13 @@ function renderRuntimeHealthSummary(automationRuntimeHealth, { compact = false }
 
   const summary = automationRuntimeHealth.summary;
   const registrySummary = automationRuntimeHealth.instrumentRegistry?.summary || {};
+  const openSession = automationRuntimeHealth.appRuntime?.openSession || null;
+  const serverValue = openSession?.isOpen ? "Open" : openSession ? "Stopped" : "Unknown";
+  const serverMeta = openSession?.isOpen
+    ? `App server · port ${openSession.port || "unknown"}`
+    : openSession
+      ? `App server · last port ${openSession.port || "unknown"}`
+      : "App server · not recorded";
   const topIssues = automationRuntimeHealth.attentionSymbols?.length
     ? automationRuntimeHealth.attentionSymbols
         .slice(0, compact ? 2 : 5)
@@ -121,6 +128,10 @@ function renderRuntimeHealthSummary(automationRuntimeHealth, { compact = false }
         <div class="automation-health-metric">
           <span class="automation-health-value">${escapeHtml(summary.syncErrorCount || 0)}</span>
           <span class="summary-meta">Sync errors</span>
+        </div>
+        <div class="automation-health-metric">
+          <span class="automation-health-value">${escapeHtml(serverValue)}</span>
+          <span class="summary-meta">${escapeHtml(serverMeta)}</span>
         </div>
         <div class="automation-health-metric">
           <span class="automation-health-value">${escapeHtml(summary.totalCollectionRuns || 0)}</span>

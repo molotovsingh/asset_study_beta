@@ -514,6 +514,13 @@ function testAppRouteModel() {
         syncErrorCount: 1,
         totalCollectionRuns: 4,
       },
+      appRuntime: {
+        openSession: {
+          isOpen: true,
+          port: 8772,
+          processId: 21400,
+        },
+      },
       attentionSymbols: [{ symbol: "AAPL", issue: "stale-check" }],
     },
   );
@@ -524,6 +531,10 @@ function testAppRouteModel() {
   assert(
     sidebarSummary.includes("Attention"),
     "sidebar summary should expose the runtime tone",
+  );
+  assert(
+    sidebarSummary.includes("App server") && sidebarSummary.includes("8772"),
+    "sidebar summary should expose the current open app server",
   );
 
   const settingsPage = renderAutomationSettingsPage({
@@ -552,6 +563,13 @@ function testAppRouteModel() {
         syncErrorCount: 1,
         totalCollectionRuns: 4,
       },
+      appRuntime: {
+        openSession: {
+          isOpen: true,
+          port: 8772,
+          processId: 21400,
+        },
+      },
       attentionSymbols: [{ symbol: "AAPL", issue: "stale-check", historyEndDate: "2026-04-10" }],
       universeHealth: [],
     },
@@ -565,6 +583,10 @@ function testAppRouteModel() {
   assert(
     settingsPage.includes("System visibility"),
     "settings page should include runtime health detail",
+  );
+  assert(
+    settingsPage.includes("App server") && settingsPage.includes("8772"),
+    "settings page should include current app server state",
   );
 
   const historyPage = renderRunHistorySettingsPage({
