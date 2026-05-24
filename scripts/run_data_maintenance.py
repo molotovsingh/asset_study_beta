@@ -53,6 +53,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fundamental-period-days", type=int, default=366)
     parser.add_argument("--fundamental-limit", type=int)
     parser.add_argument("--fundamental-delay-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--refresh-saved-study-readiness",
+        action="store_true",
+        help="Refresh readiness artifacts for active keep-warm saved studies without running studies.",
+    )
+    parser.add_argument(
+        "--refresh-saved-study-include-cold",
+        action="store_true",
+        help="When refreshing saved-study readiness, include keepWarm=false saved studies too.",
+    )
     parser.add_argument("--health-as-of-date")
     parser.add_argument("--health-stale-after-days", type=int, default=7)
     parser.add_argument("--health-symbol-limit", type=int, default=20)
@@ -92,6 +102,8 @@ def main() -> int:
         fundamental_period_days=args.fundamental_period_days,
         fundamental_limit=args.fundamental_limit,
         fundamental_delay_seconds=args.fundamental_delay_seconds,
+        refresh_saved_study_readiness=bool(args.refresh_saved_study_readiness),
+        refresh_saved_study_include_cold=bool(args.refresh_saved_study_include_cold),
         health_stale_after_days=args.health_stale_after_days,
         health_symbol_limit=args.health_symbol_limit,
         health_universe_limit=args.health_universe_limit,

@@ -294,11 +294,67 @@ def test_saved_study_edge_cases_and_archived_listing():
             assert_true("not found" in str(error), "unknown refresh error should be specific")
 
 
+def test_batch_readiness_refresh_only_updates_active_keep_warm_saved_studies():
+    with isolated_runtime_store():
+        warm_plan = {
+            "version": "study-plan-v1",
+            "studyId": "risk-adjusted-return",
+            "viewId": "overview",
+            "params": {"subject": "AAPL"},
+            "requiresConfirmation": True,
+        }
+        cold_plan = {
+            "version": "study-plan-v1",
+            "studyId": "seasonality",
+            "viewId": "overview",
+            "params": {"subject": "MSFT"},
+            "requiresConfirmation": True,
+        }
+        warm = saved_study_service.save_validated_saved_study(
+            {
+                "id": "warm-aapl-risk",
+                "name": "Warm AAPL risk",
+                "plan": warm_plan,
+                "routeHash": "#risk-adjusted-return/overview?subject=AAPL",
+                "keepWarm": True,
+            }
+        )["savedStudy"]
+        cold = saved_study_service.save_validated_saved_study(
+            {
+                "id": "cold-msft-seasonality",
+                "name": "Cold MSFT seasonality",
+                "plan": cold_plan,
+                "routeHash": "#seasonality/overview?subject=MSFT",
+                "keepWarm": False,
+            }
+        )["savedStudy"]
+
+        payload = saved_study_service.refresh_saved_study_readiness_batch({})
+
+        assert_equal(payload["version"], "saved-study-v1", "batch refresh payload version")
+        assert_equal(payload["status"], "ok", "warm-only batch should succeed")
+        assert_equal(payload["refreshedCount"], 1, "only keep-warm saved studies should refresh by default")
+        assert_equal(payload["skippedCount"], 1, "cold saved studies should be skipped by default")
+        assert_equal(payload["failedCount"], 0, "batch refresh should not fail")
+        assert_equal(payload["results"][0]["savedStudyId"], warm["id"], "warm saved study should refresh")
+        assert_equal(payload["skipped"][0]["savedStudyId"], cold["id"], "cold saved study should be skipped")
+
+        reloaded_warm = runtime_store.load_saved_study(warm["id"])
+        reloaded_cold = runtime_store.load_saved_study(cold["id"])
+        assert_true(reloaded_warm["latestRefreshRun"], "warm saved study should have a refresh receipt")
+        assert_equal(
+            reloaded_cold["latestRefreshRun"],
+            None,
+            "cold saved study should not receive a refresh receipt from warm-only batch",
+        )
+
+
 def main():
     test_saved_study_persists_plan_dependencies_artifacts_and_recipe_projection()
     test_saved_study_archives_without_deleting_artifacts_and_refreshes_readiness()
     test_study_builder_recipe_save_uses_saved_studies_without_breaking_recipe_api()
     test_saved_study_edge_cases_and_archived_listing()
+    test_batch_readiness_refresh_only_updates_active_keep_warm_saved_studies()
     print("ok saved studies")
 
 

@@ -181,9 +181,53 @@ def test_run_data_maintenance_defaults_to_ok_when_no_thresholds_are_breached():
     assert_equal(payload["failureReasons"], [], "ok runs should have no failure reasons")
 
 
+def test_run_data_maintenance_can_refresh_saved_study_readiness_explicitly():
+    original_refresh_saved_studies = maintenance_service.saved_study_service.refresh_saved_study_readiness_batch
+    original_build_runtime_health_payload = maintenance_service.ops_service.build_runtime_health_payload
+
+    refresh_requests = []
+
+    def fake_refresh_saved_studies(request):
+        refresh_requests.append(request)
+        return {
+            "status": "ok",
+            "refreshedCount": 2,
+            "skippedCount": 1,
+            "failedCount": 0,
+        }
+
+    maintenance_service.saved_study_service.refresh_saved_study_readiness_batch = fake_refresh_saved_studies
+    maintenance_service.ops_service.build_runtime_health_payload = lambda request: {
+        "summary": {
+            "attentionSymbolCount": 0,
+            "syncErrorCount": 0,
+        },
+    }
+
+    try:
+        payload = maintenance_service.run_data_maintenance(
+            run_market_collection=False,
+            run_options_collection=False,
+            refresh_saved_study_readiness=True,
+            refresh_saved_study_include_cold=False,
+        )
+    finally:
+        maintenance_service.saved_study_service.refresh_saved_study_readiness_batch = original_refresh_saved_studies
+        maintenance_service.ops_service.build_runtime_health_payload = original_build_runtime_health_payload
+
+    assert_equal(refresh_requests, [{"includeCold": False}], "maintenance should pass saved-study refresh policy")
+    assert_equal(
+        payload["savedStudies"]["refreshedCount"],
+        2,
+        "maintenance payload should include saved-study readiness result",
+    )
+    assert_equal(payload["status"], "ok", "successful saved-study refresh should keep maintenance ok")
+
+
 def main():
     test_run_data_maintenance_reports_attention_from_thresholds_and_failures()
     test_run_data_maintenance_defaults_to_ok_when_no_thresholds_are_breached()
+    test_run_data_maintenance_can_refresh_saved_study_readiness_explicitly()
     print("ok maintenance service")
 
 
