@@ -201,6 +201,14 @@ def test_study_builder_recipe_save_uses_saved_studies_without_breaking_recipe_ap
         assert_equal(len(payload["recipes"]), 1, "recipe API should still list saved item")
         assert_equal(payload["recipes"][0]["id"], payload["savedStudy"]["id"], "recipe id should align")
 
+        saved_study_service.archive_saved_study({"id": payload["savedStudy"]["id"]})
+        archived_recipe_state = study_builder_service.build_study_plan_recipe_state_payload({})
+        assert_equal(
+            archived_recipe_state["recipes"],
+            [],
+            "archived saved studies should stay hidden from the compatibility recipe list",
+        )
+
 
 def test_saved_study_edge_cases_and_archived_listing():
     with isolated_runtime_store():
