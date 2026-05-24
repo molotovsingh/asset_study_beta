@@ -130,7 +130,7 @@ The discipline here is that each part has one job. UI modules orchestrate. Data 
 
 Bundled data lives in `data/snapshots/yfinance/index/`. It is committed to the repo and can be loaded by a static file server. This path is simple, stable, and good for repeatable studies.
 
-Local backend data goes through `/api/yfinance/index-series`. It is needed for ad hoc symbols like `AAPL`, remembered manual labels like `Apple | AAPL`, profiles, options snapshots, and local SQLite cache behavior.
+Local backend data now has two layers. First, symbol discovery and verification go through `/api/symbols/discover`, `/api/symbols/verify`, and `/api/symbols/register-manual` so the app can prove a provider capability before a study runs. After that gate, provider data can flow through endpoints such as `/api/yfinance/index-series`, profile APIs, options snapshots, and the evidence collectors. This is needed for ad hoc symbols like `AAPL`, manual labels like `Apple | AAPL`, saved studies, automations, and local SQLite cache behavior.
 
 This distinction matters. If a built-in dataset has a `sync` config and a committed snapshot, the browser can load it directly. If it only has a symbol, like `Nifty 500` with `^CRSLDX`, it needs the local backend because no committed snapshot exists yet.
 
@@ -411,7 +411,7 @@ For bundled snapshots only:
 python3 -m http.server 8000
 ```
 
-For raw symbols, profiles, options, and local cache:
+For provider-backed discovery, raw symbols, profiles, options, saved studies, automations, and local cache:
 
 ```bash
 ./.venv/bin/python scripts/dev_server.py --port 8000
