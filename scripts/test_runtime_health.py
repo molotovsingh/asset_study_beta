@@ -315,6 +315,46 @@ def test_runtime_health_payload_flags_attention_and_reports_operational_state():
         assert_equal(payload["openPositionHealth"][0]["markCount"], 0, "open position should show no marks yet")
 
 
+def test_runtime_health_treats_rebuilt_sync_status_as_success():
+    with isolated_runtime_store():
+        _write_symbol("COST")
+        with runtime_store.open_runtime_store() as connection:
+            connection.execute(
+                """
+                UPDATE sync_state
+                SET last_checked_at = ?, last_price_date = ?, last_sync_status = ?, last_sync_message = ?
+                WHERE symbol_id = (SELECT symbol_id FROM symbols WHERE symbol = ?)
+                """,
+                (
+                    "2026-04-20T08:00:00+00:00",
+                    "2026-04-19",
+                    "rebuilt",
+                    "Overlap changed, rebuilt full history successfully.",
+                    "COST",
+                ),
+            )
+            connection.commit()
+
+        payload = ops_service.build_runtime_health_payload(
+            {
+                "asOfDate": "2026-04-20",
+                "staleAfterDays": 3,
+                "symbolLimit": 10,
+            }
+        )
+
+        assert_equal(
+            payload["summary"]["attentionSymbolCount"],
+            0,
+            "successful rebuild status should not create attention",
+        )
+        assert_equal(
+            payload["summary"]["syncErrorCount"],
+            0,
+            "successful rebuild status should not count as a sync error",
+        )
+
+
 def test_app_runtime_lifecycle_events_round_trip_and_surface_in_health():
     with isolated_runtime_store():
         session_id = "session-test-1"
@@ -404,6 +444,7 @@ def test_dev_server_lifecycle_helper_records_runtime_events():
 
 def main():
     test_runtime_health_payload_flags_attention_and_reports_operational_state()
+    test_runtime_health_treats_rebuilt_sync_status_as_success()
     test_app_runtime_lifecycle_events_round_trip_and_surface_in_health()
     test_dev_server_lifecycle_helper_records_runtime_events()
     print("ok runtime health")

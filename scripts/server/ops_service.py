@@ -28,6 +28,9 @@ except ModuleNotFoundError:
     )
 
 
+SUCCESSFUL_SYNC_STATUSES = {"ok", "rebuilt"}
+
+
 def _utc_today() -> date:
     return datetime.now(timezone.utc).date()
 
@@ -95,7 +98,7 @@ def _load_attention_symbols(*, reference_date: date, stale_after_days: int, limi
         issue = None
         if row["last_checked_at"] is None:
             issue = "never-checked"
-        elif status and status != "ok":
+        elif status and status not in SUCCESSFUL_SYNC_STATUSES:
             issue = "sync-error"
         elif days_since_check is not None and days_since_check > stale_after_days:
             issue = "stale-check"
