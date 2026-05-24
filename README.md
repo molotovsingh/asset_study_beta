@@ -178,29 +178,34 @@ machine caching backed by SQLite:
 Then open `http://127.0.0.1:8000`.
 
 The study shell can load built-in bundled datasets from committed snapshots
-with either server. Raw symbols and remembered local symbols need the local
-server because they go through `/api/yfinance/...`.
+with either server. Raw symbols, provider-backed discovery, saved studies,
+automations, and local evidence features need the local server because they go
+through `/api/...` and the SQLite runtime store.
 
 ## Data Flow
 
-Type a built-in name like `Nifty 50`, a bundled custom dataset label, or any
-yfinance symbol like `AAPL`, `^NSEI`, or `ETH-USD` into the main input and run
+Type a built-in name like `Nifty 50`, a bundled custom dataset label, or a
+provider symbol like `AAPL`, `^NSEI`, or `ETH-USD` into the main input and run
 the study.
 
 What happens:
 
 - built-in and bundled datasets load from committed snapshots under
   `data/snapshots/`
-- raw symbols are sent to the local backend
-- successful ad hoc symbols are remembered locally on that machine
-- selected symbols can be enriched with cached yfinance profile metadata such as
+- raw symbols are first checked through the local instrument registry and
+  provider capability verification
+- verified ad hoc instruments, provider mappings, aliases, and discovery events
+  are remembered locally on that machine
+- selected symbols can be enriched with cached provider profile metadata such as
   quote type, sector, industry, country, exchange, market cap, beta, and
-  valuation basics when Yahoo provides them
-- backend-fetched series and remembered symbols are stored in
+  valuation basics when the provider supplies them
+- backend-fetched series, registry records, saved studies, automations, and
+  evidence ledgers are stored in
   `data/local-cache/yfinance/index/cache.sqlite3`
 
-The browser never talks to Yahoo directly. Bundled snapshots come from this
-repo, and ad hoc backend fetches are mediated through Python.
+The browser never talks to Yahoo, Finnhub, or RapidAPI directly. Bundled
+snapshots come from this repo, and ad hoc provider fetches are mediated through
+Python so capability checks and local audit records stay in one place.
 
 To smoke-test a Databento key from the same environment:
 
