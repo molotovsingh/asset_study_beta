@@ -365,6 +365,8 @@ The Study Builder settings page now has saved studies too. This replaced the wea
 
 The old recipe endpoints still exist as compatibility wrappers: `GET /api/study-builder/recipes`, `POST /api/study-builder/recipes/save`, and `POST /api/study-builder/recipes/delete`. The first-class saved-study endpoints are `GET /api/saved-studies`, `POST /api/saved-studies/save`, `POST /api/saved-studies/archive`, and `POST /api/saved-studies/refresh-readiness`. Browser-local recipes remain only as an offline fallback.
 
+There is also an explicit batch readiness path for saved studies. `saved_study_service.refresh_saved_study_readiness_batch()` refreshes active `keepWarm=true` saved studies by default, and `scripts/run_data_maintenance.py --refresh-saved-study-readiness` can call it from the maintenance command. This is deliberately not startup auto-refresh. It gives us a safe manual/scheduler hook first, so the product decision about automatic provider work can be made later with a real foundation underneath it.
+
 The important maturity point is what saved studies are not. They are not proof that a study ran. They are not the trade ledger or the completed run ledger. They are closer to a saved order ticket plus a dependency checklist: useful for reuse and warm data, but not a result claim. That distinction keeps the future assistant from confusing "I can recreate this study request" with "this result is historically proven."
 
 The next guardrail is result explanation. `app/studyBuilder/studyRunExplanation.js` turns a durable `study_runs` ledger record into a deterministic explanation seed. The seed records the run id, study, subject, route, effective date window, summary items, evidence links, snapshot references, source policy, confidence, and caveats. The generated contract lives at `docs/study-run-explanation-contract.json`, checked by `node scripts/export_study_run_explanation_contract.mjs --check`.
@@ -497,6 +499,12 @@ Run one combined maintenance pass suitable for cron or another external schedule
 
 ```bash
 python3 scripts/run_data_maintenance.py --max-attention-symbols 0 --max-sync-errors 0
+```
+
+To refresh only saved-study readiness artifacts without running studies or collectors:
+
+```bash
+python3 scripts/run_data_maintenance.py --skip-market --skip-options --refresh-saved-study-readiness
 ```
 
 ## A Fresh Automation Lesson

@@ -1,9 +1,21 @@
 from __future__ import annotations
 
 try:
-    from server import fundamentals_collector, market_collector, ops_service, options_service
+    from server import (
+        fundamentals_collector,
+        market_collector,
+        ops_service,
+        options_service,
+        saved_study_service,
+    )
 except ModuleNotFoundError:
-    from scripts.server import fundamentals_collector, market_collector, ops_service, options_service
+    from scripts.server import (
+        fundamentals_collector,
+        market_collector,
+        ops_service,
+        options_service,
+        saved_study_service,
+    )
 
 try:
     from runtime_store import list_symbol_universes
@@ -77,6 +89,8 @@ def run_data_maintenance(
     fundamental_period_days: int = fundamentals_collector.DEFAULT_FUNDAMENTAL_PERIOD_DAYS,
     fundamental_limit: int | None = None,
     fundamental_delay_seconds: float = 0.0,
+    refresh_saved_study_readiness: bool = False,
+    refresh_saved_study_include_cold: bool = False,
     health_stale_after_days: int = 7,
     health_symbol_limit: int = 20,
     health_universe_limit: int = 20,
@@ -190,6 +204,32 @@ def run_data_maintenance(
                     }
                 )
 
+    saved_studies_result = {
+        "requested": False,
+        "status": "skipped",
+        "refreshedCount": 0,
+        "skippedCount": 0,
+        "failedCount": 0,
+        "failures": [],
+    }
+    if refresh_saved_study_readiness:
+        try:
+            saved_studies_result = {
+                "requested": True,
+                **saved_study_service.refresh_saved_study_readiness_batch(
+                    {"includeCold": bool(refresh_saved_study_include_cold)}
+                ),
+            }
+        except Exception as error:  # noqa: BLE001
+            saved_studies_result = {
+                "requested": True,
+                "status": "attention",
+                "refreshedCount": 0,
+                "skippedCount": 0,
+                "failedCount": 1,
+                "failures": [{"error": str(error)}],
+            }
+
     health = ops_service.build_runtime_health_payload(
         {
             "staleAfterDays": health_stale_after_days,
@@ -208,6 +248,9 @@ def run_data_maintenance(
         failure_reasons.append(f"optionsFailures={len(options_failures)}")
     if fundamental_failures:
         failure_reasons.append(f"fundamentalFailures={len(fundamental_failures)}")
+    saved_study_failed_count = int(saved_studies_result.get("failedCount") or 0)
+    if saved_study_failed_count:
+        failure_reasons.append(f"savedStudyReadinessFailures={saved_study_failed_count}")
     if max_attention_symbols is not None and int(health_summary.get("attentionSymbolCount") or 0) > int(max_attention_symbols):
         failure_reasons.append(
             f"attentionSymbols={int(health_summary.get('attentionSymbolCount') or 0)}>{int(max_attention_symbols)}"
@@ -235,5 +278,6 @@ def run_data_maintenance(
             "results": fundamental_results,
             "failures": fundamental_failures,
         },
+        "savedStudies": saved_studies_result,
         "runtimeHealth": health,
     }

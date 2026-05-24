@@ -538,6 +538,80 @@ def refresh_saved_study_readiness(request: dict | None) -> dict:
     }
 
 
+def refresh_saved_study_readiness_batch(request: dict | None = None) -> dict:
+    if request is None:
+        request = {}
+    if not isinstance(request, dict):
+        raise ValueError("Saved study request must be a JSON object.")
+
+    try:
+        limit = int(request.get("limit") or 200)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Saved study limit must be an integer.") from error
+    normalized_limit = max(1, min(limit, 200))
+    include_archived = str(request.get("includeArchived") or "").strip().lower() in {"1", "true", "yes"}
+    include_cold = str(request.get("includeCold") or "").strip().lower() in {"1", "true", "yes"}
+
+    saved_studies = runtime_store.list_saved_studies(
+        limit=normalized_limit,
+        include_archived=include_archived,
+    )
+    results: list[dict] = []
+    skipped: list[dict] = []
+    failures: list[dict] = []
+
+    for saved_study in saved_studies:
+        saved_study_id = saved_study["id"]
+        if not include_cold and not saved_study.get("keepWarm", True):
+            skipped.append(
+                {
+                    "savedStudyId": saved_study_id,
+                    "name": saved_study.get("name"),
+                    "reason": "keepWarm=false",
+                }
+            )
+            continue
+        try:
+            refreshed = refresh_saved_study_readiness({"id": saved_study_id})["savedStudy"]
+            readiness = refreshed.get("readiness") or {}
+            results.append(
+                {
+                    "savedStudyId": saved_study_id,
+                    "name": refreshed.get("name"),
+                    "readinessStatus": readiness.get("status"),
+                    "dependencyCount": readiness.get("dependencyCount", 0),
+                    "latestRefreshRun": refreshed.get("latestRefreshRun"),
+                }
+            )
+        except Exception as error:  # noqa: BLE001
+            failures.append(
+                {
+                    "savedStudyId": saved_study_id,
+                    "name": saved_study.get("name"),
+                    "error": str(error),
+                }
+            )
+
+    return {
+        "version": SAVED_STUDY_VERSION,
+        "ok": not failures,
+        "status": "ok" if not failures else "attention",
+        "includeArchived": include_archived,
+        "includeCold": include_cold,
+        "requestedCount": len(saved_studies),
+        "refreshedCount": len(results),
+        "skippedCount": len(skipped),
+        "failedCount": len(failures),
+        "results": results,
+        "skipped": skipped,
+        "failures": failures,
+        "savedStudies": runtime_store.list_saved_studies(
+            limit=normalized_limit,
+            include_archived=include_archived,
+        ),
+    }
+
+
 def saved_study_to_recipe(saved_study: dict) -> dict:
     return {
         "id": saved_study["id"],
