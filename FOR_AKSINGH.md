@@ -487,6 +487,8 @@ Inspect operational health of the local SQLite runtime store:
 python3 scripts/report_runtime_health.py
 ```
 
+One small ops lesson: a cache refresh can finish as `rebuilt` instead of plain `ok` when overlap validation detects changed vendor history and the app safely rebuilds the full series. That is a successful repair, not a sync error. Runtime health now treats `rebuilt` as healthy; actual provider failures still surface as attention.
+
 Run one combined maintenance pass suitable for cron or another external scheduler:
 
 ```bash
