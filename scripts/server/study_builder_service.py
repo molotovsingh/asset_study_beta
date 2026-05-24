@@ -8,12 +8,14 @@ from pathlib import Path
 try:
     from runtime_store import (
         delete_study_plan_recipe,
+        load_saved_study,
         list_study_plan_recipes,
         upsert_study_plan_recipe,
     )
 except ModuleNotFoundError:
     from scripts.runtime_store import (
         delete_study_plan_recipe,
+        load_saved_study,
         list_study_plan_recipes,
         upsert_study_plan_recipe,
     )
@@ -171,6 +173,9 @@ def build_study_plan_recipe_state_payload(request: dict | None = None) -> dict:
     ]
     recipes_by_id = {recipe["id"]: recipe for recipe in saved_recipes}
     for recipe in list_study_plan_recipes(limit=max(1, min(limit, 200))):
+        saved_study = load_saved_study(recipe["id"], include_archived=True)
+        if saved_study and saved_study.get("status") == "archived":
+            continue
         recipes_by_id.setdefault(recipe["id"], recipe)
     recipes = sorted(
         recipes_by_id.values(),
