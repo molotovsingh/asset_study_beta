@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -2461,12 +2462,7 @@ def _last_app_runtime_event_at(events: list[dict], event_type: str) -> str | Non
     return None
 
 
-def load_latest_app_runtime_session() -> dict | None:
-    latest = load_recent_app_runtime_events(limit=1)
-    if not latest:
-        return None
-
-    session_id = latest[0]["sessionId"]
+def _build_app_runtime_session_summary(session_id: str) -> dict | None:
     with open_runtime_store() as connection:
         rows = connection.execute(
             """
@@ -2507,6 +2503,53 @@ def load_latest_app_runtime_session() -> dict | None:
         "isOpen": last_event["eventType"] not in {"server_failed", "server_stopped"},
         "eventCount": len(events),
     }
+
+
+def load_latest_app_runtime_session() -> dict | None:
+    latest = load_recent_app_runtime_events(limit=1)
+    if not latest:
+        return None
+
+    return _build_app_runtime_session_summary(latest[0]["sessionId"])
+
+
+def _app_runtime_process_is_alive(process_id: int | None) -> bool:
+    if process_id is None:
+        return False
+    try:
+        os.kill(int(process_id), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def load_open_app_runtime_session(*, require_live_process: bool = False) -> dict | None:
+    with open_runtime_store() as connection:
+        rows = connection.execute(
+            """
+            SELECT session_id
+            FROM app_runtime_events
+            GROUP BY session_id
+            ORDER BY MAX(event_at) DESC, MAX(event_id) DESC
+            """,
+        ).fetchall()
+
+    for row in rows:
+        session = _build_app_runtime_session_summary(row["session_id"])
+        if (
+            session
+            and session.get("isOpen")
+            and (
+                not require_live_process
+                or _app_runtime_process_is_alive(session.get("processId"))
+            )
+        ):
+            return session
+    return None
 
 
 def load_cached_series(symbol: str) -> dict | None:
