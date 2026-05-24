@@ -24,9 +24,21 @@ def parse_args() -> argparse.Namespace:
             "checks in one automation-friendly command."
         ),
     )
-    parser.add_argument("--market-universe-id", action="append")
-    parser.add_argument("--options-universe-id", action="append")
-    parser.add_argument("--fundamental-universe-id", action="append")
+    parser.add_argument(
+        "--market-universe-id",
+        action="append",
+        help="Market universe to refresh. Repeat for more. Defaults to every active local market universe.",
+    )
+    parser.add_argument(
+        "--options-universe-id",
+        action="append",
+        help="Options evidence universe to refresh. Repeat for more. Defaults to every configured options universe.",
+    )
+    parser.add_argument(
+        "--fundamental-universe-id",
+        action="append",
+        help="Fundamental universe to refresh. Repeat for more. Defaults to built-in fundamental universes when fundamentals run.",
+    )
     parser.add_argument("--skip-market", action="store_true")
     parser.add_argument("--skip-options", action="store_true")
     parser.add_argument("--run-fundamentals", action="store_true")

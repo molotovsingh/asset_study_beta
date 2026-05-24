@@ -419,12 +419,15 @@ function renderAutomationSettingsPage({
 
             <label class="field-label" for="settings-automation-market-universes-input">Market Universe Ids</label>
             <input id="settings-automation-market-universes-input" class="input" type="text" placeholder="smoke-aapl, smoke-msft" value="${escapeHtml(Array.isArray(template.marketUniverseIds) ? template.marketUniverseIds.join(", ") : "")}">
+            <p class="field-help">Leave blank to run every active local market universe.</p>
 
             <label class="field-label" for="settings-automation-options-universes-input">Options Universe Ids</label>
             <input id="settings-automation-options-universes-input" class="input" type="text" placeholder="us-liquid-10" value="${escapeHtml(Array.isArray(template.optionsUniverseIds) ? template.optionsUniverseIds.join(", ") : "")}">
+            <p class="field-help">Leave blank to run every configured options evidence universe.</p>
 
             <label class="field-label" for="settings-automation-fundamental-universes-input">Fundamental Universe Ids</label>
             <input id="settings-automation-fundamental-universes-input" class="input" type="text" placeholder="sp500-current, nifty-500-current" value="${escapeHtml(Array.isArray(template.fundamentalUniverseIds) ? template.fundamentalUniverseIds.join(", ") : "")}">
+            <p class="field-help">Leave blank to use the built-in fundamental universes.</p>
 
             <label class="field-label" for="settings-automation-fundamental-period-input">Fundamental Period Days</label>
             <input id="settings-automation-fundamental-period-input" class="input" type="number" min="1" step="1" value="${escapeHtml(fundamentalPeriodValue)}">
