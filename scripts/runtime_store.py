@@ -78,6 +78,15 @@ def normalize_symbol(value: str | None) -> str:
     return str(value or "").strip().upper()
 
 
+def infer_registry_asset_class(symbol: str | None) -> str:
+    normalized_symbol = normalize_symbol(symbol)
+    if normalized_symbol.startswith("^"):
+        return "index"
+    if normalized_symbol.endswith("-USD"):
+        return "crypto"
+    return "equity"
+
+
 def build_range(points: list[list[str | float]]) -> dict:
     return {
         "startDate": points[0][0],
@@ -1039,18 +1048,6 @@ def initialize_runtime_store(connection: sqlite3.Connection) -> None:
 
 def migrate_legacy_symbols_to_instrument_registry(connection: sqlite3.Connection) -> None:
     now = to_iso(now_utc())
-    capabilities_json = json.dumps(
-        {
-            "priceHistory": True,
-            "profile": False,
-            "fundamentals": False,
-            "optionsUnderlying": False,
-            "optionContract": False,
-            "cryptoHistory": False,
-        },
-        separators=(",", ":"),
-        sort_keys=True,
-    )
     legacy_rows = connection.execute(
         """
         SELECT
@@ -1069,7 +1066,19 @@ def migrate_legacy_symbols_to_instrument_registry(connection: sqlite3.Connection
         symbol = normalize_symbol(row["symbol"])
         if not symbol:
             continue
-        asset_class = "index" if symbol.startswith("^") else "equity"
+        asset_class = infer_registry_asset_class(symbol)
+        capabilities_json = json.dumps(
+            {
+                "priceHistory": True,
+                "profile": False,
+                "fundamentals": False,
+                "optionsUnderlying": False,
+                "optionContract": False,
+                "cryptoHistory": asset_class == "crypto",
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
         canonical_key = instruments_store.build_canonical_key(
             canonical_symbol=symbol,
             asset_class=asset_class,
@@ -1478,7 +1487,7 @@ def _upsert_price_history_registry_mapping(
     if not normalized_symbol:
         return
 
-    asset_class = "index" if normalized_symbol.startswith("^") else "equity"
+    asset_class = infer_registry_asset_class(normalized_symbol)
     canonical_key = instruments_store.build_canonical_key(
         canonical_symbol=normalized_symbol,
         asset_class=asset_class,
@@ -1495,7 +1504,7 @@ def _upsert_price_history_registry_mapping(
             "fundamentals": False,
             "optionsUnderlying": False,
             "optionContract": False,
-            "cryptoHistory": normalized_symbol.endswith("-USD"),
+            "cryptoHistory": asset_class == "crypto",
         },
         separators=(",", ":"),
         sort_keys=True,

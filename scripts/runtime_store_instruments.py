@@ -561,6 +561,9 @@ def search_instruments(
     scored_rows.sort(
         key=lambda row: (
             -int(row["matchScore"]),
+            0 if row.get("mapping") and row["mapping"].get("verificationStatus") == "verified" else 1,
+            0 if row["instrument"].get("verificationStatus") == "verified" else 1,
+            0 if row["instrument"].get("status") == "active" else 1,
             len(str(row["instrument"].get("label") or "")),
             str(row["instrument"].get("canonicalSymbol") or ""),
         )
