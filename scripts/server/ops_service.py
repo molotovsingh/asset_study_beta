@@ -10,6 +10,7 @@ try:
         build_instrument_registry_health,
         list_symbol_universes,
         load_latest_app_runtime_session,
+        load_open_app_runtime_session,
         load_recent_app_runtime_events,
         load_recent_options_screener_runs,
         load_tracked_option_positions,
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
         build_instrument_registry_health,
         list_symbol_universes,
         load_latest_app_runtime_session,
+        load_open_app_runtime_session,
         load_recent_app_runtime_events,
         load_recent_options_screener_runs,
         load_tracked_option_positions,
@@ -392,6 +394,7 @@ def _load_app_runtime_health(*, limit: int) -> dict:
     return {
         "version": "app-runtime-health-v1",
         "latestSession": load_latest_app_runtime_session(),
+        "openSession": load_open_app_runtime_session(require_live_process=True),
         "recentEvents": load_recent_app_runtime_events(limit=limit),
     }
 

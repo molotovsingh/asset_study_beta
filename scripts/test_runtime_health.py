@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -416,6 +417,70 @@ def test_app_runtime_lifecycle_events_round_trip_and_surface_in_health():
         failed_latest = runtime_store.load_latest_app_runtime_session()
         assert_equal(failed_latest["lastEventType"], "server_failed", "failed session should become latest")
         assert_equal(failed_latest["isOpen"], False, "failed startup should not be treated as open")
+
+        open_session_id = "session-open"
+        runtime_store.record_app_runtime_event(
+            session_id=open_session_id,
+            event_type="server_starting",
+            process_id=os.getpid(),
+            host="127.0.0.1",
+            port=8772,
+            event_at="2026-05-23T10:07:00+00:00",
+            message="starting",
+        )
+        runtime_store.record_app_runtime_event(
+            session_id=open_session_id,
+            event_type="server_ready",
+            process_id=os.getpid(),
+            host="127.0.0.1",
+            port=8772,
+            event_at="2026-05-23T10:07:02+00:00",
+            message="ready",
+        )
+        runtime_store.record_app_runtime_event(
+            session_id="session-stale-open",
+            event_type="server_ready",
+            process_id=999999999,
+            host="127.0.0.1",
+            port=49603,
+            event_at="2026-05-23T10:07:30+00:00",
+            message="ready but process is gone",
+        )
+        runtime_store.record_app_runtime_event(
+            session_id="session-open-without-process",
+            event_type="server_ready",
+            process_id=None,
+            host="127.0.0.1",
+            port=49604,
+            event_at="2026-05-23T10:07:45+00:00",
+            message="ready but process was not recorded",
+        )
+        runtime_store.record_app_runtime_event(
+            session_id="session-later-stopped",
+            event_type="server_stopped",
+            process_id=12348,
+            host="127.0.0.1",
+            port=8001,
+            event_at="2026-05-23T10:08:00+00:00",
+            message="temporary helper stopped",
+        )
+
+        payload_with_open_session = ops_service.build_runtime_health_payload({"runLimit": 8})
+        assert_equal(
+            payload_with_open_session["appRuntime"]["latestSession"]["sessionId"],
+            "session-later-stopped",
+            "latest session should still reflect the latest lifecycle event",
+        )
+        assert_equal(
+            payload_with_open_session["appRuntime"]["openSession"]["sessionId"],
+            open_session_id,
+            "runtime health should expose the currently open server separately",
+        )
+        assert_equal(
+            payload_with_open_session["appRuntime"]["openSession"]["isOpen"],
+            True,
+            "open session summary should report open state",
+        )
 
 
 def test_dev_server_lifecycle_helper_records_runtime_events():

@@ -489,6 +489,8 @@ python3 scripts/report_runtime_health.py
 
 One small ops lesson: a cache refresh can finish as `rebuilt` instead of plain `ok` when overlap validation detects changed vendor history and the app safely rebuilds the full series. That is a successful repair, not a sync error. Runtime health now treats `rebuilt` as healthy; actual provider failures still surface as attention.
 
+Runtime health also separates chronology from current state. `latestSession` is the latest lifecycle event in the log, which might be a temporary helper server that already stopped. `openSession` is the latest session whose last event is still open and whose recorded process still exists. Keep both: chronology is useful for audit, but the sidebar and settings page need the open-session view when answering "is the app server running?"
+
 Run one combined maintenance pass suitable for cron or another external scheduler:
 
 ```bash
