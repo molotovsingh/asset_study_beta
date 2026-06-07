@@ -618,6 +618,47 @@ future in-app AI assistant needs to explain, replay, save, or test StudyPlans,
 it can now call stable non-UI helpers instead of scraping behavior out of a
 settings page.
 
+## Quality Pass: The Boring Edges That Keep Local Software Trustworthy
+
+A quality pass after the saved-study work found a cluster of issues that are
+not glamorous, but matter a lot in a local-first research app.
+
+The first bug was transaction shape. `migrate_legacy_local_cache` committed its
+own work halfway through startup. That sounds harmless until you imagine startup
+as one train crossing a bridge: if the first carriage reaches the other side and
+the bridge collapses under the second, you do not want half the train recorded
+as safely arrived. Startup migrations now rely on the outer `ensure_runtime_store`
+commit, so a later migration failure rolls back the legacy import too.
+
+The second bug was automation state after a crash. An automation row could be
+left with `is_running = 1`, which meant the scheduler would politely skip it
+forever. Startup now clears stale running flags and marks the prior run as
+`interrupted`. Importantly, it does not fake a completion timestamp. If the last
+real completion was old enough, the automation can become due again immediately.
+
+The third bug was lock scope. The app had a Python lock around the entire data
+maintenance job. That protected the state transition, but it also blocked other
+automation HTTP work while market, options, and fundamentals refreshes ran. The
+better pattern is narrower: take the lock, prove the automation is not already
+running, set the DB flag, release the lock, then do the slow provider work. The
+database flag remains the durable gate; the Python lock is only a short critical
+section.
+
+The fourth bug was a classic browser footgun: putting `error.message` into
+`innerHTML`. Most of the time an error is plain text. The one time it contains
+markup, the UI has accidentally become an HTML renderer for an untrusted string.
+The fix was to add a shared `escapeHtml` helper and use it in the relative
+comparison error state. The larger lesson is that `innerHTML` is not wrong, but
+it is a loaded tool. Every interpolated user or backend string needs escaping,
+or the code should render text nodes instead.
+
+One finding was intentionally not fixed in this pass: options evidence
+same-day deduplication and storage-failure propagation. That is a real product
+boundary, not just a code smell. Deduplicating repeated screener runs changes
+what counts as evidence. Escalating storage warnings changes the collector's
+success contract. Those should be handled in a dedicated evidence-ledger design
+slice rather than slipped into a runtime-safety patch.
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:

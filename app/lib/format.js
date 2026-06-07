@@ -43,4 +43,20 @@ function formatDateTime(date) {
   }).format(date);
 }
 
-export { formatPercent, formatNumber, formatDate, formatDateRange, formatDateTime };
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+export {
+  escapeHtml,
+  formatPercent,
+  formatNumber,
+  formatDate,
+  formatDateRange,
+  formatDateTime,
+};

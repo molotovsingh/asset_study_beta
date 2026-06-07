@@ -166,6 +166,67 @@ def test_legacy_series_cache_migrates_to_normalized_rows():
         )
 
 
+def test_legacy_migration_rolls_back_when_later_startup_migration_fails():
+    with isolated_runtime_store():
+        runtime_store.CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+        (runtime_store.CACHE_ROOT / "rollback-test.json").write_text(
+            """
+            {
+              "cacheKey": "rollback-key",
+              "symbol": "ROLL",
+              "generatedAt": "2024-01-10T00:00:00+00:00",
+              "currency": "USD",
+              "sourceSeriesType": "Price",
+              "points": [["2024-01-01", 10], ["2024-01-02", 11]]
+            }
+            """,
+            encoding="utf-8",
+        )
+
+        original_migration = runtime_store.migrate_cached_series_to_price_history
+
+        def failing_migration(_connection):
+            raise RuntimeError("forced later migration failure")
+
+        runtime_store.migrate_cached_series_to_price_history = failing_migration
+        try:
+            try:
+                runtime_store.ensure_runtime_store()
+            except RuntimeError as error:
+                assert_equal(
+                    str(error),
+                    "forced later migration failure",
+                    "startup should surface the later migration failure",
+                )
+            else:
+                raise AssertionError("startup should fail when a later migration raises")
+        finally:
+            runtime_store.migrate_cached_series_to_price_history = original_migration
+
+        connection = sqlite3.connect(runtime_store.CACHE_DB_PATH)
+        try:
+            table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'series_cache'
+                """,
+            ).fetchone()
+            if table is None:
+                return
+            row = connection.execute(
+                "SELECT COUNT(*) FROM series_cache WHERE symbol = ?",
+                ("ROLL",),
+            ).fetchone()
+            assert_equal(
+                int(row[0]),
+                0,
+                "legacy imports should roll back when a later startup migration fails",
+            )
+        finally:
+            connection.close()
+
+
 def test_legacy_options_screener_rows_migrate_with_defaults():
     with isolated_runtime_store():
         runtime_store.CACHE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -994,6 +1055,7 @@ def test_get_or_refresh_uses_full_then_incremental_then_rebuild():
 def main() -> int:
     test_normalized_store_full_and_incremental_merge()
     test_legacy_series_cache_migrates_to_normalized_rows()
+    test_legacy_migration_rolls_back_when_later_startup_migration_fails()
     test_legacy_options_screener_rows_migrate_with_defaults()
     test_overlap_validation_detects_price_and_action_changes()
     test_option_snapshot_and_realized_metrics_persist()

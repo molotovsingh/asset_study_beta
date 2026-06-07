@@ -110,6 +110,7 @@ import {
   serializeCsv,
   toIsoDate,
 } from "../app/lib/studyExport.js";
+import { escapeHtml } from "../app/lib/format.js";
 import {
   buildStudyFactoryProposal,
   archiveSavedStudy,
@@ -718,6 +719,18 @@ function testAppRouteModel() {
     "study builder settings page should render a plain-language route preview and saved-study boundary",
   );
   console.log("ok app routes");
+}
+
+function testHtmlEscaping() {
+  const escaped = escapeHtml(`<img src=x onerror="alert('x')">&`);
+  assert(
+    escaped === "&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;",
+    "escapeHtml should escape markup, quotes, and ampersands",
+  );
+  assert(
+    !escaped.includes("<img") && !escaped.includes("onerror=\""),
+    "escaped output should not preserve executable HTML",
+  );
 }
 
 async function testStudyBuilderBackendRecipeHydration() {
@@ -3831,6 +3844,7 @@ async function runExportRegressionChecks() {
 async function main() {
   testActiveSubjectStore();
   testAppRouteModel();
+  testHtmlEscaping();
   await testStudyBuilderBackendRecipeHydration();
   await testStudyBuilderReadinessHydration();
   await testStudyBuilderLiveDraftInteraction();

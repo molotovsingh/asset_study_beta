@@ -327,68 +327,68 @@ def execute_automation(automation_id: str) -> dict:
             error=None,
         )
 
-        try:
-            payload = maintenance_service.run_data_maintenance(
-                market_universe_ids=current.get("marketUniverseIds"),
-                options_universe_ids=current.get("optionsUniverseIds"),
-                fundamental_universe_ids=current.get("fundamentalUniverseIds"),
-                run_market_collection=bool(current.get("runMarketCollection")),
-                run_options_collection=bool(current.get("runOptionsCollection")),
-                run_fundamental_collection=bool(current.get("runFundamentalCollection")),
-                seed_fundamental_universes=bool(current.get("seedFundamentalUniverses")),
-                refresh_exchange_symbol_masters=bool(current.get("refreshExchangeSymbolMasters")),
-                market_provider_order=current.get("marketProviderOrder"),
-                market_full_sync=bool(current.get("marketFullSync")),
-                market_limit=current.get("marketLimit"),
-                options_minimum_dte=current.get("optionsMinimumDte"),
-                options_max_contracts=current.get("optionsMaxContracts"),
-                fundamental_period_days=current.get("fundamentalPeriodDays")
-                or fundamentals_collector.DEFAULT_FUNDAMENTAL_PERIOD_DAYS,
-                fundamental_limit=current.get("fundamentalLimit"),
-                fundamental_delay_seconds=current.get("fundamentalDelaySeconds") or 0.0,
-                health_stale_after_days=current.get("healthStaleAfterDays") or 7,
-                health_symbol_limit=current.get("healthSymbolLimit") or 20,
-                health_universe_limit=current.get("healthUniverseLimit") or 20,
-                health_run_limit=current.get("healthRunLimit") or 10,
-                max_attention_symbols=current.get("maxAttentionSymbols"),
-                max_sync_errors=current.get("maxSyncErrors"),
-            )
-        except Exception as error:  # noqa: BLE001
-            completed_at = _now_iso()
-            automation = update_automation_run_state(
-                automation_id,
-                is_running=False,
-                completed_at=completed_at,
-                status="error",
-                summary={},
-                error=str(error),
-            )
-            if automation is None:
-                raise
-            return {
-                "automation": automation,
-                "result": {
-                    "status": "error",
-                    "failureReasons": [str(error)],
-                },
-            }
-
+    try:
+        payload = maintenance_service.run_data_maintenance(
+            market_universe_ids=current.get("marketUniverseIds"),
+            options_universe_ids=current.get("optionsUniverseIds"),
+            fundamental_universe_ids=current.get("fundamentalUniverseIds"),
+            run_market_collection=bool(current.get("runMarketCollection")),
+            run_options_collection=bool(current.get("runOptionsCollection")),
+            run_fundamental_collection=bool(current.get("runFundamentalCollection")),
+            seed_fundamental_universes=bool(current.get("seedFundamentalUniverses")),
+            refresh_exchange_symbol_masters=bool(current.get("refreshExchangeSymbolMasters")),
+            market_provider_order=current.get("marketProviderOrder"),
+            market_full_sync=bool(current.get("marketFullSync")),
+            market_limit=current.get("marketLimit"),
+            options_minimum_dte=current.get("optionsMinimumDte"),
+            options_max_contracts=current.get("optionsMaxContracts"),
+            fundamental_period_days=current.get("fundamentalPeriodDays")
+            or fundamentals_collector.DEFAULT_FUNDAMENTAL_PERIOD_DAYS,
+            fundamental_limit=current.get("fundamentalLimit"),
+            fundamental_delay_seconds=current.get("fundamentalDelaySeconds") or 0.0,
+            health_stale_after_days=current.get("healthStaleAfterDays") or 7,
+            health_symbol_limit=current.get("healthSymbolLimit") or 20,
+            health_universe_limit=current.get("healthUniverseLimit") or 20,
+            health_run_limit=current.get("healthRunLimit") or 10,
+            max_attention_symbols=current.get("maxAttentionSymbols"),
+            max_sync_errors=current.get("maxSyncErrors"),
+        )
+    except Exception as error:  # noqa: BLE001
         completed_at = _now_iso()
-        last_status = "ok" if payload.get("status") == "ok" else "attention"
         automation = update_automation_run_state(
             automation_id,
             is_running=False,
             completed_at=completed_at,
-            status=last_status,
-            summary=payload,
-            error=None,
+            status="error",
+            summary={},
+            error=str(error),
         )
         if automation is None:
-            raise RuntimeError(f"Automation {automation_id} disappeared after execution.")
+            raise
         return {
             "automation": automation,
-            "result": payload,
+            "result": {
+                "status": "error",
+                "failureReasons": [str(error)],
+            },
         }
+
+    completed_at = _now_iso()
+    last_status = "ok" if payload.get("status") == "ok" else "attention"
+    automation = update_automation_run_state(
+        automation_id,
+        is_running=False,
+        completed_at=completed_at,
+        status=last_status,
+        summary=payload,
+        error=None,
+    )
+    if automation is None:
+        raise RuntimeError(f"Automation {automation_id} disappeared after execution.")
+    return {
+        "automation": automation,
+        "result": payload,
+    }
 
 
 def run_automation_now(request: dict) -> dict:

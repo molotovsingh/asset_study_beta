@@ -432,6 +432,27 @@ def update_automation_run_state(
     )
 
 
+def reset_stale_automation_run_states(
+    connection: sqlite3.Connection,
+    *,
+    now_iso,
+) -> int:
+    timestamp = now_iso()
+    cursor = connection.execute(
+        """
+        UPDATE automation_configs
+        SET
+            is_running = 0,
+            last_run_status = 'interrupted',
+            last_run_error = 'Automation was marked running during startup and was reset.',
+            updated_at = ?
+        WHERE is_running = 1
+        """,
+        (timestamp,),
+    )
+    return int(cursor.rowcount or 0)
+
+
 def load_due_automation_configs(
     *,
     open_runtime_store,
