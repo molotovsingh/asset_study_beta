@@ -17,18 +17,14 @@
   "providerName": "BSE",
   "family": "Broad Market",
   "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-  "generatedAt": "2026-06-09T05:42:04.735730Z",
+  "generatedAt": "2026-06-10T05:56:24.825829Z",
   "range": {
-    "startDate": "2021-06-09",
-    "endDate": "2026-06-09",
-    "observations": 1233
+    "startDate": "2021-06-10",
+    "endDate": "2026-06-10",
+    "observations": 1232
   },
   "note": null,
   "points": [
-    [
-      "2021-06-09",
-      51941.640625
-    ],
     [
       "2021-06-10",
       52300.46875
@@ -4954,8 +4950,8 @@
       73524.257812
     ],
     [
-      "2026-06-09",
-      73580.632812
+      "2026-06-10",
+      74449.5625
     ]
   ]
 }
