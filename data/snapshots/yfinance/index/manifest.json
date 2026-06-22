@@ -1,7 +1,7 @@
 {
   "provider": "yfinance",
   "datasetType": "index",
-  "generatedAt": "2026-06-19T06:38:21.493098Z",
+  "generatedAt": "2026-06-22T06:56:04.695409Z",
   "datasets": [
     {
       "datasetId": "nifty-50",
@@ -20,11 +20,11 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-06-19T06:38:21.314072Z",
+      "generatedAt": "2026-06-22T06:56:04.492068Z",
       "range": {
-        "startDate": "2021-06-21",
-        "endDate": "2026-06-19",
-        "observations": 1234
+        "startDate": "2021-06-22",
+        "endDate": "2026-06-22",
+        "observations": 1235
       },
       "note": null,
       "path": "yfinance/index/nifty-50.json"
@@ -46,11 +46,11 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-06-19T06:38:21.338220Z",
+      "generatedAt": "2026-06-22T06:56:04.517682Z",
       "range": {
-        "startDate": "2021-06-21",
-        "endDate": "2026-06-19",
-        "observations": 1234
+        "startDate": "2021-06-22",
+        "endDate": "2026-06-22",
+        "observations": 1235
       },
       "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
       "path": "yfinance/index/nifty-50-tri.json"
@@ -72,11 +72,11 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-06-19T06:38:21.461192Z",
+      "generatedAt": "2026-06-22T06:56:04.664156Z",
       "range": {
-        "startDate": "2021-06-21",
-        "endDate": "2026-06-19",
-        "observations": 1232
+        "startDate": "2021-06-22",
+        "endDate": "2026-06-22",
+        "observations": 1233
       },
       "note": null,
       "path": "yfinance/index/sensex.json"
@@ -98,11 +98,11 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-06-19T06:38:21.485648Z",
+      "generatedAt": "2026-06-22T06:56:04.688161Z",
       "range": {
-        "startDate": "2021-06-21",
-        "endDate": "2026-06-19",
-        "observations": 1232
+        "startDate": "2021-06-22",
+        "endDate": "2026-06-22",
+        "observations": 1233
       },
       "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
       "path": "yfinance/index/sensex-tri.json"
