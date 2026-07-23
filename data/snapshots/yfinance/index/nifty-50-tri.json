@@ -17,18 +17,14 @@
   "providerName": "NSE Indices",
   "family": "Broad Market",
   "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-  "generatedAt": "2026-07-22T04:44:47.631637Z",
+  "generatedAt": "2026-07-23T04:49:13.549987Z",
   "range": {
-    "startDate": "2021-07-22",
-    "endDate": "2026-07-22",
+    "startDate": "2021-07-23",
+    "endDate": "2026-07-23",
     "observations": 1235
   },
   "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
   "points": [
-    [
-      "2021-07-22",
-      15824.049805
-    ],
     [
       "2021-07-23",
       15856.049805
@@ -4963,7 +4959,11 @@
     ],
     [
       "2026-07-22",
-      24034.300781
+      23996.25
+    ],
+    [
+      "2026-07-23",
+      23961.849609
     ]
   ]
 }
