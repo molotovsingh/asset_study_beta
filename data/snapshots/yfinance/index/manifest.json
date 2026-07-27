@@ -1,7 +1,7 @@
 {
   "provider": "yfinance",
   "datasetType": "index",
-  "generatedAt": "2026-07-24T04:46:09.209844Z",
+  "generatedAt": "2026-07-27T05:09:01.060531Z",
   "datasets": [
     {
       "datasetId": "nifty-50",
@@ -20,10 +20,10 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-07-24T04:46:09.037126Z",
+      "generatedAt": "2026-07-27T05:09:00.616294Z",
       "range": {
-        "startDate": "2021-07-26",
-        "endDate": "2026-07-24",
+        "startDate": "2021-07-27",
+        "endDate": "2026-07-27",
         "observations": 1235
       },
       "note": null,
@@ -46,10 +46,10 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-07-24T04:46:09.062596Z",
+      "generatedAt": "2026-07-27T05:09:00.675583Z",
       "range": {
-        "startDate": "2021-07-26",
-        "endDate": "2026-07-24",
+        "startDate": "2021-07-27",
+        "endDate": "2026-07-27",
         "observations": 1235
       },
       "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
@@ -72,10 +72,10 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-07-24T04:46:09.179226Z",
+      "generatedAt": "2026-07-27T05:09:00.998156Z",
       "range": {
-        "startDate": "2021-07-26",
-        "endDate": "2026-07-24",
+        "startDate": "2021-07-27",
+        "endDate": "2026-07-27",
         "observations": 1233
       },
       "note": null,
@@ -98,10 +98,10 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-07-24T04:46:09.202503Z",
+      "generatedAt": "2026-07-27T05:09:01.053109Z",
       "range": {
-        "startDate": "2021-07-26",
-        "endDate": "2026-07-24",
+        "startDate": "2021-07-27",
+        "endDate": "2026-07-27",
         "observations": 1233
       },
       "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
