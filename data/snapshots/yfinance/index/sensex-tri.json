@@ -17,18 +17,14 @@
   "providerName": "BSE",
   "family": "Broad Market",
   "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-  "generatedAt": "2026-09-11T06:23:16.868320Z",
+  "generatedAt": "2026-09-14T06:42:33.485764Z",
   "range": {
-    "startDate": "2021-09-13",
+    "startDate": "2021-09-14",
     "endDate": "2026-09-11",
-    "observations": 1235
+    "observations": 1234
   },
   "note": "Bootstrap sync uses the Yahoo Finance price index as a temporary TRI proxy.",
   "points": [
-    [
-      "2021-09-13",
-      58177.761719
-    ],
     [
       "2021-09-14",
       58247.089844
@@ -4963,7 +4959,7 @@
     ],
     [
       "2026-09-11",
-      74561.390625
+      74781.757812
     ]
   ]
 }
