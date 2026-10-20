@@ -20,7 +20,7 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-10-19T06:31:20.702008Z",
+      "generatedAt": "2026-10-20T06:18:28.626961Z",
       "range": {
         "startDate": "2021-10-19",
         "endDate": "2026-10-19",
@@ -46,7 +46,7 @@
       "providerName": "NSE Indices",
       "family": "Broad Market",
       "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-      "generatedAt": "2026-10-19T06:31:20.728467Z",
+      "generatedAt": "2026-10-20T06:18:28.668651Z",
       "range": {
         "startDate": "2021-10-19",
         "endDate": "2026-10-19",
@@ -72,7 +72,7 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-10-19T06:31:20.938140Z",
+      "generatedAt": "2026-10-20T06:18:28.923356Z",
       "range": {
         "startDate": "2021-10-19",
         "endDate": "2026-10-19",
@@ -98,7 +98,7 @@
       "providerName": "BSE",
       "family": "Broad Market",
       "sourceUrl": "https://www.bseindia.com/indices/IndexArchiveData.html",
-      "generatedAt": "2026-10-19T06:31:20.962430Z",
+      "generatedAt": "2026-10-20T06:18:28.963395Z",
       "range": {
         "startDate": "2021-10-19",
         "endDate": "2026-10-19",
