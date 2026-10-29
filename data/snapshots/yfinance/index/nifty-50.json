@@ -17,18 +17,14 @@
   "providerName": "NSE Indices",
   "family": "Broad Market",
   "sourceUrl": "https://www.niftyindices.com/reports/historical-data",
-  "generatedAt": "2026-10-28T07:05:39.051722Z",
+  "generatedAt": "2026-10-29T07:27:51.954369Z",
   "range": {
-    "startDate": "2021-10-28",
-    "endDate": "2026-10-28",
+    "startDate": "2021-10-29",
+    "endDate": "2026-10-29",
     "observations": 1235
   },
   "note": null,
   "points": [
-    [
-      "2021-10-28",
-      17857.25
-    ],
     [
       "2021-10-29",
       17671.650391
@@ -4963,7 +4959,11 @@
     ],
     [
       "2026-10-28",
-      22658.449219
+      22698.849609
+    ],
+    [
+      "2026-10-29",
+      22817.5
     ]
   ]
 }
