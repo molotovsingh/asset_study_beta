@@ -215,14 +215,15 @@
     "f9357da52b (press)",
     "6d437b2463 (company filing 27 Mar 21:20)"
    ],
-   "t0": "2026-03-26",
+   "t0": "2026-03-27",
    "fno": false,
    "ban": false,
    "flags": [
     "search tool labelled the IST time as UTC: corrected from the page",
     "company in insolvency; price ~Rs 0.79; BE series",
     "part of an ongoing multi-agency saga, not a first shock",
-    "search at subsidiary premises"
+    "search at subsidiary premises",
+    "t0 corrected 2026-03-26 -> 2026-03-27: 26 Mar 2026 was an NSE holiday (no CM or index file); rule D57 gives the next trading day"
    ],
    "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
@@ -267,5 +268,17 @@
   ],
   "corrections": 0
  },
- "frozenEventSetSha256": "95efef77dfe802c2aea6af5c1c456a9ad2e44c20121cf022641b81b780d42f03"
+ "frozenEventSetSha256": "f55e29ffa9a2ffbebe5968fc378e6359614d7bf0ed6d890f26e47d3a08895a3f",
+ "amendments": [
+  {
+   "date": "2026-11-07",
+   "event": "C21",
+   "field": "t0 (derived)",
+   "from": "2026-03-26",
+   "to": "2026-03-27",
+   "reason": "26 Mar 2026 was a market holiday (NSE CM bhavcopy and ind_close_all both 404). The t0 rule maps a non-trading day to the next trading day. Mechanical rule application, not a judgement.",
+   "when": "Found by the study run, which stopped on C21. Results for 8 other events had been printed; C21's had not. Reviewed fields (event, issuer, first-public time) unchanged.",
+   "previousFrozenSha256": "95efef77dfe802c2aea6af5c1c456a9ad2e44c20121cf022641b81b780d42f03"
+  }
+ ]
 }
