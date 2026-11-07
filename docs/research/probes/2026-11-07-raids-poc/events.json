@@ -1,7 +1,7 @@
 {
  "plan": "PLAN.md (c5da250)",
  "candidates": "candidates.md (e78f4be)",
- "status": "prepared by agent; awaiting user review (D50); not frozen",
+ "status": "FROZEN",
  "buildingBlocks": "D56: Event, Disclosure, Public-time claim, Evidence document, Company identity on that date, Verification, Search record",
  "events": [
   {
@@ -25,7 +25,8 @@
    "ban": false,
    "flags": [
     "search began 14 Feb; no 14 Feb report found"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C03",
@@ -48,7 +49,8 @@
    "ban": false,
    "flags": [
     "listed 9 May 2023, two trading days before t0"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C04",
@@ -72,7 +74,8 @@
     "warrant in another company's name",
     "very thin trading (~24k shares on t0)",
     "no press before the filing found"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C11",
@@ -95,7 +98,8 @@
    "ban": false,
    "flags": [
     "BE series (trade-for-trade) on t0"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C14",
@@ -118,7 +122,8 @@
    "ban": false,
    "flags": [
     "search ran 4 days with no public report found: possible leakage before t0"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C16",
@@ -142,7 +147,8 @@
    "flags": [
     "first pass dated it 12 Dec (company confirmation, -20% day): wrong leg, corrected",
     "TOI 10 Dec 00:18 IST described the searches without naming the company"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C17",
@@ -165,7 +171,8 @@
    "ban": false,
    "flags": [
     "stock fell ~16-20% in early trade on t0 before the first report: possible leakage"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C18",
@@ -189,7 +196,8 @@
     "disclosed 6 days after the search began",
     "no press found",
     "thin trading (~12k shares on t0)"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C21",
@@ -215,7 +223,8 @@
     "company in insolvency; price ~Rs 0.79; BE series",
     "part of an ongoing multi-agency saga, not a first shock",
     "search at subsidiary premises"
-   ]
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   },
   {
    "id": "C23",
@@ -236,7 +245,8 @@
    "t0": "2026-06-02",
    "fno": true,
    "ban": false,
-   "flags": []
+   "flags": [],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
   }
  ],
  "excludedDuringVerification": [
@@ -245,5 +255,17 @@
    "company": "Bhagyanagar India",
    "reason": "Company describes an ED visit for information about suppliers' FEMA violations, not a search of the company. Fails the plan's event definition. Replaced by reserve C14."
   }
- ]
+ ],
+ "review": {
+  "by": "user",
+  "verbatim": "all ok",
+  "date": "2026-11-07",
+  "fieldsChecked": [
+   "event real",
+   "issuer",
+   "first-public time"
+  ],
+  "corrections": 0
+ },
+ "frozenEventSetSha256": "95efef77dfe802c2aea6af5c1c456a9ad2e44c20121cf022641b81b780d42f03"
 }
