@@ -1,6 +1,6 @@
 # Decision Register
 
-Companion to [alignment-interview.md](alignment-interview.md). Trial started 2026-11-06 (Q15). Structure revised at Q16. Interview closed 2026-11-07 (consolidation at Q41); amended the same day after super-advisor review (D49–D54); no later edits applied yet.
+Companion to [alignment-interview.md](alignment-interview.md). Trial started 2026-11-06 (Q15). Structure revised at Q16. Interview closed 2026-11-07 (consolidation at Q41); amended the same day after super-advisor review (D49–D54); no later edits applied yet. The planning sketches those edits targeted were dropped (D61); the edit candidates now apply to their rewrite.
 
 ## Which document wins
 
@@ -61,6 +61,7 @@ Companion to [alignment-interview.md](alignment-interview.md). Trial started 202
 | News pipeline | D58 | General | Evidence documents stay local, outside git; repo keeps reference, hash, fetch time and extracted facts; reruns report missing copies, never silently re-fetch | Confirmed | Delegated to agent | News Q3 |
 | News pipeline | D59 | General | Company identity anchored on ISIN; symbol, series and name recorded as of the date; ISIN changes linked explicitly, never by name | Confirmed | Delegated to agent | News Q3 |
 | News pipeline | D60 | General | POC: thoroughness and accuracy over speed, plain artifacts, no over-engineering; 10 raids, every event reviewed by the user | Confirmed | User | News Q4 |
+| Process | D61 | General | Vol-curve tool and the early event-study / news-ETL sketches removed from the codebase; redo from scratch, sketches rewritten from this register when needed | Confirmed | User | PR #62 review, 2026-11-07 |
 | Data sources | D37 | General | Keep a data-sources registry that parks all good candidates with documentation | Confirmed | User | Q29 |
 | Data sources | D38 | General | Registry = registry.json (master) + one Markdown page per source, kept in sync by a validator | Confirmed | Delegated to agent | Q30 |
 | Data sources | D39 | Per-signal | Indian equities: NSE bhavcopy is the candidate source for point-in-time prices and stock lists | Provisional | Agent → accepted | Q29 |

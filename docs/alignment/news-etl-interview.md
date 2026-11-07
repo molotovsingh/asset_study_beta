@@ -217,3 +217,9 @@ None.
 ## Interview Paused - 2026-11-07
 
 Paused at the user's instruction to "get something working". Settled so far: D55 (vendor-neutral primitives), D56 (seven building blocks), D57 (public-time rule), D58 (evidence stays local), D59 (ISIN identity), D60 (POC priorities). Resume after the POC, with its findings. Open for later: discovery workers (e.g. `news_agent` on the mesh), search-record detail, and coverage estimation.
+
+## Protocol Note - Earlier sketches dropped (2026-11-07)
+
+User ruling (verbatim, on PR #62): "1 yes delete 2 drop them too", following "vol stuff needs works from scratch i dont want that to persist in the codebase".
+
+`docs/planned-features/event-study.md` and `docs/planned-features/news-etl-pipeline.md` (sketches from 4–5 Nov, partly superseded by later decisions: the soft/hard 2×2, the 8/20 suppression thresholds, and a vendor-named pipeline) were removed from the branch, with their index rows. They do not land on `main`. When either is needed, it will be rewritten from the decision register (D01–D61) and the probe findings, not restored. References to them elsewhere in this log and in `alignment-interview.md` are historical; their "Later Edit Candidates" now apply to the rewrite. Also lost with them: the Polycab discovery-tool bake-off write-up and the news-source qualification rubric. The probe notes keep the measured findings.
