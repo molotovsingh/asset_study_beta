@@ -112,5 +112,8 @@ jobs:
       - name: Check assistant contract
         run: node scripts/export_assistant_contract.mjs --check
 
+      - name: Run vol chart checks
+        run: python3 scripts/test_vol_charts.py
+
       - name: Run frontend regression checks
         run: node scripts/run_frontend_regression_checks.mjs
