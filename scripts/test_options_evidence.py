@@ -284,7 +284,13 @@ def test_sync_tracked_positions_tracks_only_straddle_candidates_and_is_idempoten
 
         assert_equal(first_sync["eligibleRows"], 2, "only long/short premium rows should be eligible")
         assert_equal(first_sync["trackedPositions"], 2, "two eligible rows should create tracked positions")
+        assert_equal(first_sync["resolvedPositions"], 2, "first sync should resolve two tracked positions")
+        assert_equal(first_sync["createdPositions"], 2, "first sync should create two tracked positions")
+        assert_equal(first_sync["existingPositions"], 0, "first sync should not reuse existing tracked positions")
         assert_equal(second_sync["trackedPositions"], 2, "re-sync should still resolve the same tracked positions")
+        assert_equal(second_sync["resolvedPositions"], 2, "re-sync should resolve two tracked positions")
+        assert_equal(second_sync["createdPositions"], 0, "re-sync should not create duplicate tracked positions")
+        assert_equal(second_sync["existingPositions"], 2, "re-sync should report reused tracked positions")
         assert_equal(len(positions), 2, "tracked positions should remain idempotent across repeated syncs")
         assert_equal(
             sorted(position["strategy"] for position in positions),
@@ -362,6 +368,61 @@ def test_refresh_open_tracked_option_marks_settles_expired_positions():
         assert_equal(round(marks[-1]["executableReturn"], 4), round((8.0 - 5.1) / 5.1, 4), "long straddle settlement should use executable bid-side value")
 
 
+def test_refresh_open_tracked_option_marks_records_missing_expiry_settlement():
+    with isolated_runtime_store():
+        run_summary = record_run(
+            [build_screener_row("AAPL", expiry="2026-04-15", days_to_expiry=5)],
+        )
+        position = runtime_store.upsert_tracked_option_position(
+            {
+                "sourceRunId": run_summary["runId"],
+                "symbol": "AAPL",
+                "provider": "yfinance",
+                "strategy": "long_front_straddle",
+                "signalVersion": "options-signal-v1",
+                "universeId": "us-liquid-10",
+                "universeLabel": "US Liquid 10",
+                "entryAsOfDate": "2026-04-10",
+                "entryBaseDate": "2026-04-10",
+                "expiry": "2026-04-15",
+                "strike": 100.0,
+                "daysToExpiry": 5,
+                "spotPrice": 100.0,
+                "callEntryBid": 2.4,
+                "callEntryAsk": 2.6,
+                "callEntryMid": 2.5,
+                "putEntryBid": 2.3,
+                "putEntryAsk": 2.5,
+                "putEntryMid": 2.4,
+                "entryMarkSource": "snapshot",
+                "entryExecutableValue": 5.1,
+                "entryReferenceMid": 4.9,
+                "candidateBucket": "long-premium",
+                "pricingBucket": "cheap",
+                "directionBucket": "long",
+                "primaryTradeIdea": "Buy Gamma/Vega",
+                "currency": "USD",
+            },
+        )
+
+        original_loader = dev_server.options_service._tracking.load_or_refresh_price_rows
+        dev_server.options_service._tracking.load_or_refresh_price_rows = lambda *_args, **_kwargs: []
+        try:
+            summary = dev_server.refresh_open_tracked_option_marks(as_of_date="2026-04-16")
+        finally:
+            dev_server.options_service._tracking.load_or_refresh_price_rows = original_loader
+        marks = runtime_store.load_tracked_option_marks(position_id=position["positionId"], limit=10)
+
+        assert_equal(summary["missingMarks"], 1, "missing expiry settlement should be counted explicitly")
+        assert_equal(len(marks), 1, "missing expiry settlement should persist as a mark row")
+        assert_equal(marks[0]["markStatus"], "missing", "missing expiry settlement should use missing status")
+        assert_equal(marks[0]["markSource"], "settlement-unavailable", "missing expiry settlement should identify the source")
+        assert_true(
+            "settlement" in str(marks[0]["reason"]).lower(),
+            "missing expiry settlement should explain why the trade cannot settle",
+        )
+
+
 def test_refresh_open_tracked_option_marks_records_missing_quotes():
     with isolated_runtime_store():
         run_summary = record_run(
@@ -420,6 +481,128 @@ def test_refresh_open_tracked_option_marks_records_missing_quotes():
             "not markable" in str(marks[0]["reason"]),
             "missing quote marks should preserve the provider reason",
         )
+
+
+def test_collect_options_evidence_requires_screener_storage():
+    original_builder = dev_server.options_service.build_options_screener_snapshot_payload
+    original_mark_refresher = dev_server.options_service.refresh_open_tracked_option_marks
+
+    def fake_builder(_request):
+        return {
+            "storage": None,
+            "storageWarning": "local archive write failed",
+            "failures": [],
+        }
+
+    dev_server.options_service.build_options_screener_snapshot_payload = fake_builder
+    dev_server.options_service.refresh_open_tracked_option_marks = lambda **_kwargs: {
+        "openPositions": 0,
+        "refreshedPositions": 0,
+        "settledPositions": 0,
+        "missingMarks": 0,
+    }
+    try:
+        try:
+            dev_server.options_service.collect_options_evidence_for_universe(
+                "us-liquid-10",
+                symbols=["AAPL"],
+            )
+        except RuntimeError as error:
+            assert_true(
+                "storage" in str(error).lower(),
+                "collector storage failures should explain that durable storage is required",
+            )
+        else:
+            raise AssertionError("collector should fail when a screener run is not archived")
+    finally:
+        dev_server.options_service.build_options_screener_snapshot_payload = original_builder
+        dev_server.options_service.refresh_open_tracked_option_marks = original_mark_refresher
+
+
+def test_collect_options_evidence_reuses_same_day_archived_run_before_live_fetch():
+    with isolated_runtime_store():
+        existing_run = record_run(
+            [build_screener_row("AAPL", candidate_bucket="watch")],
+            created_at="2026-04-10T08:30:00+00:00",
+        )
+        original_builder = dev_server.options_service.build_options_screener_snapshot_payload
+
+        def unexpected_builder(_request):
+            raise AssertionError("same-day collector reuse should not call the live screener builder")
+
+        dev_server.options_service.build_options_screener_snapshot_payload = unexpected_builder
+        try:
+            summary = dev_server.options_service.collect_options_evidence_for_universe(
+                "us-liquid-10",
+                minimum_dte=7,
+                max_contracts=1,
+                symbols=["AAPL"],
+                as_of_date="2026-04-10",
+            )
+        finally:
+            dev_server.options_service.build_options_screener_snapshot_payload = original_builder
+
+        runs = runtime_store.load_recent_options_screener_runs(limit=10)
+        assert_equal(summary["screenerRun"]["runId"], existing_run["runId"], "collector should reuse the matching archived run")
+        assert_equal(summary["reusedScreenerRun"], True, "collector should label reused screener runs")
+        assert_equal(len(runs), 1, "collector reuse should not insert a duplicate run")
+
+
+def test_collect_options_evidence_does_not_reuse_failed_same_day_run():
+    with isolated_runtime_store():
+        failed_run = runtime_store.record_options_screener_run(
+            universe_id="us-liquid-10",
+            universe_label="US Liquid 10",
+            minimum_dte=7,
+            max_contracts=1,
+            requested_symbols=["AAPL", "MSFT"],
+            failures=[{"symbol": "MSFT", "error": "provider unavailable"}],
+            rows=[build_screener_row("AAPL", candidate_bucket="watch")],
+            signal_version="options-signal-v1",
+            created_at="2026-04-10T08:30:00+00:00",
+        )
+        original_builder = dev_server.options_service.build_options_screener_snapshot_payload
+        builder_calls = []
+
+        def retry_builder(request):
+            builder_calls.append(request)
+            storage = runtime_store.record_options_screener_run(
+                universe_id=request["universeId"],
+                universe_label=request["universeLabel"],
+                minimum_dte=request["minimumDte"],
+                max_contracts=request["maxContracts"],
+                requested_symbols=request["symbols"],
+                failures=[],
+                rows=[
+                    build_screener_row("AAPL", candidate_bucket="watch"),
+                    build_screener_row("MSFT", candidate_bucket="watch"),
+                ],
+                signal_version="options-signal-v1",
+                created_at="2026-04-10T09:30:00+00:00",
+            )
+            return {
+                "storage": storage,
+                "storageWarning": None,
+                "failures": [],
+            }
+
+        dev_server.options_service.build_options_screener_snapshot_payload = retry_builder
+        try:
+            summary = dev_server.options_service.collect_options_evidence_for_universe(
+                "us-liquid-10",
+                minimum_dte=7,
+                max_contracts=1,
+                symbols=["AAPL", "MSFT"],
+                as_of_date="2026-04-10",
+            )
+        finally:
+            dev_server.options_service.build_options_screener_snapshot_payload = original_builder
+
+        runs = runtime_store.load_recent_options_screener_runs(limit=10)
+        assert_equal(len(builder_calls), 1, "failed same-day runs should not block retry")
+        assert_equal(summary["reusedScreenerRun"], False, "retry result should be a new screener run")
+        assert_true(summary["screenerRun"]["runId"] > failed_run["runId"], "retry should record a newer run")
+        assert_equal(len(runs), 2, "retry after a failed run should preserve both run receipts")
 
 
 def test_trade_validation_clips_to_expiry_without_lookahead():
@@ -618,7 +801,11 @@ def test_underlying_validation_collapses_same_day_reruns():
 def main() -> int:
     test_sync_tracked_positions_tracks_only_straddle_candidates_and_is_idempotent()
     test_refresh_open_tracked_option_marks_settles_expired_positions()
+    test_refresh_open_tracked_option_marks_records_missing_expiry_settlement()
     test_refresh_open_tracked_option_marks_records_missing_quotes()
+    test_collect_options_evidence_requires_screener_storage()
+    test_collect_options_evidence_reuses_same_day_archived_run_before_live_fetch()
+    test_collect_options_evidence_does_not_reuse_failed_same_day_run()
     test_trade_validation_clips_to_expiry_without_lookahead()
     test_underlying_validation_collapses_same_day_reruns()
     print("ok options evidence")

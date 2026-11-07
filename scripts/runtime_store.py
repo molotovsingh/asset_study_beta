@@ -2270,7 +2270,6 @@ def migrate_legacy_local_cache(connection: sqlite3.Connection) -> None:
 
     datasets = manifest.get("datasets")
     if not isinstance(datasets, list):
-        connection.commit()
         return
 
     for entry in datasets:
@@ -2285,8 +2284,6 @@ def migrate_legacy_local_cache(connection: sqlite3.Connection) -> None:
         ):
             continue
         upsert_remembered_dataset(connection, entry)
-
-    connection.commit()
 
 
 def ensure_runtime_store() -> None:
@@ -2306,6 +2303,10 @@ def ensure_runtime_store() -> None:
             migrate_legacy_local_cache(connection)
             migrate_cached_series_to_price_history(connection)
             migrate_legacy_symbols_to_instrument_registry(connection)
+            automation_store.reset_stale_automation_run_states(
+                connection,
+                now_iso=lambda: to_iso(now_utc()),
+            )
             connection.commit()
 
         _RUNTIME_STORE_READY = True

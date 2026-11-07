@@ -13,6 +13,9 @@ __pycache__/
 data/local-cache/
 .playwright-cli/
 
+# Quality audits
+quality-pass/
+
 # Secrets
 .env
 .env.*

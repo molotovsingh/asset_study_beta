@@ -102,6 +102,26 @@ def test_automation_config_round_trips_and_due_detection_work():
         due_late = runtime_store.load_due_automation_configs(reference_time_iso="2026-04-20T10:06:00+00:00")
         assert_equal(len(due_late), 1, "automation should become due after its interval")
 
+        runtime_store.update_automation_run_state(
+            "daily-maintenance",
+            is_running=True,
+            started_at="2026-04-20T10:10:00+00:00",
+            completed_at=None,
+            status="running",
+            summary={},
+        )
+        due_stuck = runtime_store.load_due_automation_configs(reference_time_iso="2026-04-20T11:30:00+00:00")
+        assert_equal(len(due_stuck), 0, "running automation should not be treated as due")
+
+        runtime_store._RUNTIME_STORE_READY = False
+        runtime_store.ensure_runtime_store()
+        reset = runtime_store.load_automation_config("daily-maintenance")
+        assert_equal(reset["isRunning"], False, "startup should clear stale running automation flags")
+        assert_equal(reset["lastRunStatus"], "interrupted", "startup reset should mark stale run interrupted")
+
+        due_after_restart = runtime_store.load_due_automation_configs(reference_time_iso="2026-04-20T11:30:00+00:00")
+        assert_equal(len(due_after_restart), 1, "reset automation should become schedulable again")
+
 
 def test_automation_service_save_run_and_delete():
     with isolated_runtime_store():
@@ -226,9 +246,59 @@ def test_automation_service_save_run_and_delete():
             automation_service.options_service.COLLECTOR_UNIVERSES = original_options_universes
 
 
+def test_automation_lock_is_not_held_during_maintenance():
+    with isolated_runtime_store():
+        seed_market_universe()
+
+        original_runner = automation_service.maintenance_service.run_data_maintenance
+        lock_was_released = {"value": False}
+
+        def fake_runner(**_kwargs):
+            acquired = automation_service._AUTOMATION_RUN_LOCK.acquire(blocking=False)
+            lock_was_released["value"] = acquired
+            if acquired:
+                automation_service._AUTOMATION_RUN_LOCK.release()
+            return {
+                "status": "ok",
+                "failureReasons": [],
+                "marketCollection": {"requestedUniverseIds": [], "results": [], "failures": []},
+                "optionsEvidence": {"requestedUniverseIds": [], "results": [], "failures": []},
+                "fundamentals": {"requestedUniverseIds": [], "results": [], "failures": []},
+                "runtimeHealth": {
+                    "summary": {
+                        "attentionSymbolCount": 0,
+                        "syncErrorCount": 0,
+                    }
+                },
+            }
+
+        automation_service.maintenance_service.run_data_maintenance = fake_runner
+        try:
+            automation_service.save_automation_config(
+                {
+                    "automationId": "daily-maintenance",
+                    "label": "Daily Maintenance",
+                    "intervalMinutes": 1440,
+                    "runMarketCollection": True,
+                    "marketUniverseIds": ["smoke-aapl"],
+                    "runOptionsCollection": False,
+                    "optionsUniverseIds": [],
+                    "isActive": True,
+                }
+            )
+            automation_service.run_automation_now({"automationId": "daily-maintenance"})
+            assert_true(
+                lock_was_released["value"],
+                "automation process lock should be released before maintenance runs",
+            )
+        finally:
+            automation_service.maintenance_service.run_data_maintenance = original_runner
+
+
 def main():
     test_automation_config_round_trips_and_due_detection_work()
     test_automation_service_save_run_and_delete()
+    test_automation_lock_is_not_held_during_maintenance()
     print("ok automation service")
 
 

@@ -1,4 +1,5 @@
 import {
+  escapeHtml,
   formatDate,
   formatDateRange,
   formatNumber,
@@ -757,7 +758,7 @@ function mountRiskAdjustedReturnRelative(root, session) {
       session.lastRelativeRun = null;
       resultsRoot.innerHTML = `
         <div class="empty-state">
-          ${error.message}
+          ${escapeHtml(error.message)}
         </div>
       `;
       setStatus(error.message, "error");

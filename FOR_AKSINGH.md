@@ -618,6 +618,78 @@ future in-app AI assistant needs to explain, replay, save, or test StudyPlans,
 it can now call stable non-UI helpers instead of scraping behavior out of a
 settings page.
 
+## Quality Pass: The Boring Edges That Keep Local Software Trustworthy
+
+A quality pass after the saved-study work found a cluster of issues that are
+not glamorous, but matter a lot in a local-first research app.
+
+The first bug was transaction shape. `migrate_legacy_local_cache` committed its
+own work halfway through startup. That sounds harmless until you imagine startup
+as one train crossing a bridge: if the first carriage reaches the other side and
+the bridge collapses under the second, you do not want half the train recorded
+as safely arrived. Startup migrations now rely on the outer `ensure_runtime_store`
+commit, so a later migration failure rolls back the legacy import too.
+
+The second bug was automation state after a crash. An automation row could be
+left with `is_running = 1`, which meant the scheduler would politely skip it
+forever. Startup now clears stale running flags and marks the prior run as
+`interrupted`. Importantly, it does not fake a completion timestamp. If the last
+real completion was old enough, the automation can become due again immediately.
+
+The third bug was lock scope. The app had a Python lock around the entire data
+maintenance job. That protected the state transition, but it also blocked other
+automation HTTP work while market, options, and fundamentals refreshes ran. The
+better pattern is narrower: take the lock, prove the automation is not already
+running, set the DB flag, release the lock, then do the slow provider work. The
+database flag remains the durable gate; the Python lock is only a short critical
+section.
+
+The fourth bug was a classic browser footgun: putting `error.message` into
+`innerHTML`. Most of the time an error is plain text. The one time it contains
+markup, the UI has accidentally become an HTML renderer for an untrusted string.
+The fix was to add a shared `escapeHtml` helper and use it in the relative
+comparison error state. The larger lesson is that `innerHTML` is not wrong, but
+it is a loaded tool. Every interpolated user or backend string needs escaping,
+or the code should render text nodes instead.
+
+The follow-up evidence pass fixed the part of that concern that was no longer
+product-ambiguous. The live screener view can still show a snapshot when local
+archive storage has a warning, because an analyst should not lose the screen just
+because SQLite had a bad moment. The non-UI evidence collector is stricter: if a
+screener run is not archived, it refuses to pretend evidence was collected. That
+distinction is important. A UI can be forgiving; a ledger must be boringly
+honest.
+
+The same follow-up pass also closed a small but dangerous options-ledger gap.
+Expired tracked straddles already settled from intrinsic value when a usable
+underlying close was available. When that close was missing, the old behavior
+could leave the position open without any mark explaining why. The new behavior
+writes an explicit `settlement-unavailable` missing mark. The trade still does
+not invent a result, but the gap is now visible to validation and runtime health.
+
+Provider adapters got one more maturity upgrade: Finnhub and RapidAPI Yahoo now
+wrap HTTP, network, timeout, and JSON failures in a typed provider request error.
+That is less about pretty exceptions and more about source truth. A rate limit,
+an auth failure, and malformed JSON are different operational facts. Good
+systems keep those facts distinct as close to the provider boundary as possible.
+
+The next quality-report follow-up separated two ideas that sound similar but are
+not the same: validation deduplication and collector idempotency. Validation
+deduplication says "do not count repeated evidence twice." Collector idempotency
+says "do not create or fetch the duplicate evidence in the first place." The
+options collector now checks for a matching same-day archived, failure-free
+screener run before calling the live options builder. If it finds one, it reuses
+that durable run and still refreshes tracked marks. If the earlier run had
+provider failures, it does not reuse it; a retry should be allowed to fill the
+gap.
+
+The same pass also added focused fixture tests for the pure computation engines:
+seasonality, rolling returns, SIP, drawdown, and a sector snapshot ranking
+helper. The large frontend regression suite is still useful because it tests the
+whole browser-facing contract. But pure engines deserve smaller tests too. A
+small fixture test is like checking a weighing scale with a known weight; you do
+not need to open the whole shop to know the scale still tells the truth.
+
 ## The Most Important Architectural Lesson
 
 This repo is good because it resists becoming one giant page. It has seams that match real responsibilities:

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import urllib.parse
+import urllib.error
 import urllib.request
 
-from .base import HistoryResult, ProfileResult
+from .base import HistoryResult, ProfileResult, ProviderRequestError
 
 try:
     from env_utils import load_local_env
@@ -40,8 +42,34 @@ def _request_json(path: str, *, timeout: int = 60):
             "User-Agent": "IndexStudyLab/1.0",
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise ProviderRequestError(
+            provider=PROVIDER_ID,
+            provider_name=PROVIDER_NAME,
+            operation="API",
+            status_code=error.code,
+            reason=str(error.reason or "HTTP error"),
+            retryable=error.code in {408, 409, 425, 429, 500, 502, 503, 504},
+        ) from error
+    except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
+        raise ProviderRequestError(
+            provider=PROVIDER_ID,
+            provider_name=PROVIDER_NAME,
+            operation="API",
+            reason=str(getattr(error, "reason", error)),
+            retryable=True,
+        ) from error
+    except json.JSONDecodeError as error:
+        raise ProviderRequestError(
+            provider=PROVIDER_ID,
+            provider_name=PROVIDER_NAME,
+            operation="API",
+            reason="invalid JSON payload",
+            retryable=False,
+        ) from error
 
 
 def _quote_body(symbol: str) -> dict:
