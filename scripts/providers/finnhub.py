@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import urllib.parse
+import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
-from .base import HistoryResult
+from .base import HistoryResult, ProviderRequestError
 
 try:
     from env_utils import load_local_env
@@ -52,8 +54,34 @@ def _request_json(path: str, **params):
             "User-Agent": "IndexStudyLab/1.0",
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise ProviderRequestError(
+            provider=PROVIDER_ID,
+            provider_name=PROVIDER_NAME,
+            operation="API",
+            status_code=error.code,
+            reason=str(error.reason or "HTTP error"),
+            retryable=error.code in {408, 409, 425, 429, 500, 502, 503, 504},
+        ) from error
+    except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
+        raise ProviderRequestError(
+            provider=PROVIDER_ID,
+            provider_name=PROVIDER_NAME,
+            operation="API",
+            reason=str(getattr(error, "reason", error)),
+            retryable=True,
+        ) from error
+    except json.JSONDecodeError as error:
+        raise ProviderRequestError(
+            provider=PROVIDER_ID,
+            provider_name=PROVIDER_NAME,
+            operation="API",
+            reason="invalid JSON payload",
+            retryable=False,
+        ) from error
     if not isinstance(payload, (dict, list)):
         raise RuntimeError("Finnhub returned an invalid JSON payload.")
     return payload

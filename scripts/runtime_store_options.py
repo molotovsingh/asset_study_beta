@@ -1212,7 +1212,7 @@ def upsert_tracked_option_position(
             source_series_type="Price",
             timestamp=timestamp,
         )
-        connection.execute(
+        cursor = connection.execute(
             """
             INSERT INTO tracked_option_positions (
                 source_run_id,
@@ -1288,6 +1288,7 @@ def upsert_tracked_option_position(
                 clean_text(position.get("closeReason")),
             ),
         )
+        was_created = cursor.rowcount > 0
         connection.commit()
 
     positions = load_tracked_option_positions(
@@ -1308,7 +1309,10 @@ def upsert_tracked_option_position(
             and entry["strategy"] == str(position.get("strategy") or "").strip()
             and entry["signalVersion"] == str(position.get("signalVersion") or "legacy-v0").strip()
         ):
-            return entry
+            return {
+                **entry,
+                "wasCreated": was_created,
+            }
     raise RuntimeError("Tracked option position could not be loaded after insert.")
 
 

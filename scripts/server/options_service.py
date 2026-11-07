@@ -19,6 +19,11 @@ from .options import screener as _screener
 from .options import tracking as _tracking
 from .options import validation as _validation
 
+try:
+    from .index_service import get_or_refresh_cached_series
+except ImportError:
+    from scripts.server.index_service import get_or_refresh_cached_series
+
 OPTIONS_SCREENER_MAX_SYMBOLS = _constants.OPTIONS_SCREENER_MAX_SYMBOLS
 OPTIONS_SCREENER_FETCH_CONCURRENCY = _constants.OPTIONS_SCREENER_FETCH_CONCURRENCY
 OPTIONS_SIGNAL_VERSION = _constants.OPTIONS_SIGNAL_VERSION
@@ -40,7 +45,6 @@ build_trend_context = _metrics.build_trend_context
 build_month_end_rows = _metrics.build_month_end_rows
 month_distance = _metrics.month_distance
 build_seasonality_context = _metrics.build_seasonality_context
-build_direction_context = _metrics.build_direction_context
 percentile_rank = _metrics.percentile_rank
 options_pricing_label = _metrics.options_pricing_label
 options_pricing_bucket = _metrics.options_pricing_bucket
@@ -76,6 +80,21 @@ build_mark_payload_from_contract = _tracking.build_mark_payload_from_contract
 load_or_refresh_price_rows = _tracking.load_or_refresh_price_rows
 build_tracked_position_from_screener_row = _tracking.build_tracked_position_from_screener_row
 build_intrinsic_settlement_mark = _tracking.build_intrinsic_settlement_mark
+
+
+def build_direction_context(
+    symbol: str,
+    *,
+    as_of_date: str | None = None,
+    preferred_provider: str | None = None,
+    series_loader=None,
+) -> dict:
+    return _metrics.build_direction_context(
+        symbol,
+        as_of_date=as_of_date,
+        preferred_provider=preferred_provider,
+        series_loader=series_loader or get_or_refresh_cached_series,
+    )
 
 
 def _sync_runtime_overrides() -> None:

@@ -28,6 +28,11 @@ except ModuleNotFoundError:
         write_option_monthly_snapshot,
     )
 
+try:
+    from ..index_service import get_or_refresh_cached_series
+except ImportError:
+    from scripts.server.index_service import get_or_refresh_cached_series
+
 from .constants import (
     OPTIONS_SCREENER_FETCH_CONCURRENCY,
     OPTIONS_SCREENER_MAX_SYMBOLS,
@@ -505,6 +510,7 @@ def build_options_screener_snapshot_payload(request: dict) -> dict:
                     symbol,
                     as_of_date=snapshot.get("asOfDate"),
                     preferred_provider=snapshot.get("provider"),
+                    series_loader=get_or_refresh_cached_series,
                 )
             except Exception as direction_error:  # noqa: BLE001
                 snapshot["directionWarning"] = str(direction_error)
@@ -545,8 +551,8 @@ def build_options_screener_snapshot_payload(request: dict) -> dict:
     try:
         storage_rows = decorate_options_screener_storage_rows(
             [
-            build_options_screener_storage_row(snapshot)
-            for snapshot in snapshots
+                build_options_screener_storage_row(snapshot)
+                for snapshot in snapshots
             ],
         )
         storage = record_options_screener_run(

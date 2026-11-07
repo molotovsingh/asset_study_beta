@@ -64,6 +64,7 @@ import {
 } from "./settings/automationSettings.js";
 import { mountStudyRunHistorySettingsPage } from "./settings/studyRunHistorySettings.js";
 import { mountStudyBuilderSettingsPage } from "./settings/studyBuilderSettings.js";
+import { escapeHtml } from "./lib/format.js";
 
 const studySelect = document.querySelector("#study-select");
 const studyMeta = document.querySelector("#study-meta");
@@ -86,18 +87,6 @@ let automationState = null;
 let automationRuntimeHealth = null;
 let automationStatusMessage = "";
 const automationSubscribers = new Set();
-
-const HTML_ESCAPE_MAP = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (match) => HTML_ESCAPE_MAP[match]);
-}
 
 function clearActiveSubjectSuggestions() {
   activeSubjectSuggestions = [];

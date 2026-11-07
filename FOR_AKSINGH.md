@@ -652,12 +652,43 @@ comparison error state. The larger lesson is that `innerHTML` is not wrong, but
 it is a loaded tool. Every interpolated user or backend string needs escaping,
 or the code should render text nodes instead.
 
-One finding was intentionally not fixed in this pass: options evidence
-same-day deduplication and storage-failure propagation. That is a real product
-boundary, not just a code smell. Deduplicating repeated screener runs changes
-what counts as evidence. Escalating storage warnings changes the collector's
-success contract. Those should be handled in a dedicated evidence-ledger design
-slice rather than slipped into a runtime-safety patch.
+The follow-up evidence pass fixed the part of that concern that was no longer
+product-ambiguous. The live screener view can still show a snapshot when local
+archive storage has a warning, because an analyst should not lose the screen just
+because SQLite had a bad moment. The non-UI evidence collector is stricter: if a
+screener run is not archived, it refuses to pretend evidence was collected. That
+distinction is important. A UI can be forgiving; a ledger must be boringly
+honest.
+
+The same follow-up pass also closed a small but dangerous options-ledger gap.
+Expired tracked straddles already settled from intrinsic value when a usable
+underlying close was available. When that close was missing, the old behavior
+could leave the position open without any mark explaining why. The new behavior
+writes an explicit `settlement-unavailable` missing mark. The trade still does
+not invent a result, but the gap is now visible to validation and runtime health.
+
+Provider adapters got one more maturity upgrade: Finnhub and RapidAPI Yahoo now
+wrap HTTP, network, timeout, and JSON failures in a typed provider request error.
+That is less about pretty exceptions and more about source truth. A rate limit,
+an auth failure, and malformed JSON are different operational facts. Good
+systems keep those facts distinct as close to the provider boundary as possible.
+
+The next quality-report follow-up separated two ideas that sound similar but are
+not the same: validation deduplication and collector idempotency. Validation
+deduplication says "do not count repeated evidence twice." Collector idempotency
+says "do not create or fetch the duplicate evidence in the first place." The
+options collector now checks for a matching same-day archived, failure-free
+screener run before calling the live options builder. If it finds one, it reuses
+that durable run and still refreshes tracked marks. If the earlier run had
+provider failures, it does not reuse it; a retry should be allowed to fill the
+gap.
+
+The same pass also added focused fixture tests for the pure computation engines:
+seasonality, rolling returns, SIP, drawdown, and a sector snapshot ranking
+helper. The large frontend regression suite is still useful because it tests the
+whole browser-facing contract. But pure engines deserve smaller tests too. A
+small fixture test is like checking a weighing scale with a known weight; you do
+not need to open the whole shop to know the scale still tells the truth.
 
 ## The Most Important Architectural Lesson
 

@@ -18,8 +18,10 @@ try:
         load_option_monthly_snapshots,
         load_options_screener_rows,
         load_price_rows,
+        load_recent_options_screener_runs,
         load_tracked_option_marks,
         load_tracked_option_positions,
+        normalize_symbol,
         upsert_tracked_option_mark,
         upsert_tracked_option_position,
     )
@@ -28,8 +30,10 @@ except ModuleNotFoundError:
         load_option_monthly_snapshots,
         load_options_screener_rows,
         load_price_rows,
+        load_recent_options_screener_runs,
         load_tracked_option_marks,
         load_tracked_option_positions,
+        normalize_symbol,
         upsert_tracked_option_mark,
         upsert_tracked_option_position,
     )
@@ -232,7 +236,9 @@ def sync_tracked_positions_for_run(run_id: int) -> dict:
         limit=OPTIONS_SCREENER_MAX_SYMBOLS * 4,
     )
     eligible_rows = 0
-    tracked_positions = 0
+    resolved_positions = 0
+    created_positions = 0
+    existing_positions = 0
     skipped_rows: list[dict] = []
 
     for row in rows:
@@ -251,7 +257,12 @@ def sync_tracked_positions_for_run(run_id: int) -> dict:
             continue
 
         stored_position = upsert_tracked_option_position(position)
-        tracked_positions += 1
+        was_created = bool(stored_position.pop("wasCreated", False))
+        resolved_positions += 1
+        if was_created:
+            created_positions += 1
+        else:
+            existing_positions += 1
         entry_contract = {
             "callBid": position.get("callEntryBid"),
             "callAsk": position.get("callEntryAsk"),
@@ -278,7 +289,10 @@ def sync_tracked_positions_for_run(run_id: int) -> dict:
     return {
         "runId": int(run_id),
         "eligibleRows": eligible_rows,
-        "trackedPositions": tracked_positions,
+        "trackedPositions": resolved_positions,
+        "resolvedPositions": resolved_positions,
+        "createdPositions": created_positions,
+        "existingPositions": existing_positions,
         "skippedRows": skipped_rows,
     }
 
@@ -320,6 +334,61 @@ def build_intrinsic_settlement_mark(position: dict, price_rows: list[dict]) -> d
         reason="Expired; settled from intrinsic value on the last underlying close at or before expiry.",
     )
 
+def build_missing_settlement_mark(position: dict, *, mark_date: str) -> dict:
+    expiry = str(position.get("expiry") or "").strip() or "expiry"
+    return {
+        "markDate": mark_date,
+        "markSource": "settlement-unavailable",
+        "markStatus": "missing",
+        "reason": (
+            "Expired; intrinsic settlement could not be computed because no usable "
+            f"underlying close at or before {expiry} is available."
+        ),
+    }
+
+def normalize_collector_symbols(symbols: list[str] | tuple[str, ...]) -> list[str]:
+    normalized_symbols: list[str] = []
+    for symbol in symbols:
+        normalized_symbol = normalize_symbol(symbol)
+        if normalized_symbol and normalized_symbol not in normalized_symbols:
+            normalized_symbols.append(normalized_symbol)
+    return normalized_symbols
+
+def find_reusable_collector_screener_run(
+    *,
+    universe_id: str,
+    minimum_dte: int,
+    max_contracts: int,
+    requested_symbols: list[str],
+    collection_date: str,
+) -> dict | None:
+    normalized_symbols = normalize_collector_symbols(requested_symbols)
+    if not normalized_symbols or not collection_date:
+        return None
+
+    for run in load_recent_options_screener_runs(limit=100):
+        if str(run.get("createdAt") or "")[:10] != collection_date:
+            continue
+        if str(run.get("universeId") or "") != str(universe_id or ""):
+            continue
+        if int(run.get("minimumDte") or 0) != int(minimum_dte):
+            continue
+        if int(run.get("maxContracts") or 0) != int(max_contracts):
+            continue
+        if str(run.get("signalVersion") or "") != OPTIONS_SIGNAL_VERSION:
+            continue
+        if int(run.get("rowCount") or 0) <= 0:
+            continue
+        if int(run.get("failureCount") or 0) > 0:
+            continue
+        if normalize_collector_symbols(run.get("requestedSymbols") or []) != normalized_symbols:
+            continue
+        return {
+            **run,
+            "reused": True,
+        }
+    return None
+
 def refresh_open_tracked_option_marks(*, as_of_date: str | None = None) -> dict:
     current_date = str(as_of_date or datetime.utcnow().date().isoformat())
     positions = load_tracked_option_positions(
@@ -350,6 +419,15 @@ def refresh_open_tracked_option_marks(*, as_of_date: str | None = None) -> dict:
                     settlement_mark,
                 )
                 settled_positions += 1
+            elif not settlement_mark and current_date not in existing_dates:
+                upsert_tracked_option_mark(
+                    int(position["positionId"]),
+                    build_missing_settlement_mark(
+                        position,
+                        mark_date=current_date,
+                    ),
+                )
+                missing_marks += 1
             continue
 
         try:
@@ -427,16 +505,48 @@ def collect_options_evidence_for_universe(
         raise RuntimeError("A screener snapshot builder is required.")
     tracked_position_sync = tracked_position_sync or sync_tracked_positions_for_run
     mark_refresher = mark_refresher or refresh_open_tracked_option_marks
+    minimum_dte_value = int(minimum_dte or config["minimumDte"])
+    max_contracts_value = int(max_contracts or config["maxContracts"])
+    requested_symbols = symbols or config["symbols"]
+    collection_date = str(as_of_date or datetime.utcnow().date().isoformat())[:10]
+
+    reusable_run = find_reusable_collector_screener_run(
+        universe_id=config["universeId"],
+        minimum_dte=minimum_dte_value,
+        max_contracts=max_contracts_value,
+        requested_symbols=requested_symbols,
+        collection_date=collection_date,
+    )
+    if reusable_run:
+        tracking_summary = tracked_position_sync(int(reusable_run["runId"]))
+        mark_summary = mark_refresher(as_of_date=as_of_date)
+        return {
+            "universeId": config["universeId"],
+            "universeLabel": config["universeLabel"],
+            "signalVersion": OPTIONS_SIGNAL_VERSION,
+            "screenerRun": reusable_run,
+            "reusedScreenerRun": True,
+            "tracking": tracking_summary,
+            "marking": mark_summary,
+            "failures": reusable_run.get("failures") or [],
+            "storageWarning": None,
+        }
 
     screener_payload = screener_snapshot_builder(
         {
             "universeId": config["universeId"],
             "universeLabel": config["universeLabel"],
-            "minimumDte": int(minimum_dte or config["minimumDte"]),
-            "maxContracts": int(max_contracts or config["maxContracts"]),
-            "symbols": symbols or config["symbols"],
+            "minimumDte": minimum_dte_value,
+            "maxContracts": max_contracts_value,
+            "symbols": requested_symbols,
         },
     )
+    if screener_payload.get("storageWarning") or not screener_payload.get("storage"):
+        storage_warning = str(screener_payload.get("storageWarning") or "").strip()
+        raise RuntimeError(
+            "Options collector requires archived screener storage before tracking evidence."
+            + (f" Storage warning: {storage_warning}" if storage_warning else "")
+        )
     tracking_summary = (
         tracked_position_sync(int(screener_payload["storage"]["runId"]))
         if screener_payload.get("storage")
@@ -453,6 +563,7 @@ def collect_options_evidence_for_universe(
         "universeLabel": config["universeLabel"],
         "signalVersion": OPTIONS_SIGNAL_VERSION,
         "screenerRun": screener_payload.get("storage"),
+        "reusedScreenerRun": False,
         "tracking": tracking_summary,
         "marking": mark_summary,
         "failures": screener_payload.get("failures") or [],

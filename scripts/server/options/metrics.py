@@ -4,7 +4,6 @@ import math
 from datetime import date, datetime
 
 from .constants import TRADE_IDEA_DEFINITIONS
-from ..index_service import get_or_refresh_cached_series
 
 def clean_history_number(value) -> float | None:
     if value is None:
@@ -194,7 +193,9 @@ def build_direction_context(
     preferred_provider: str | None = None,
     series_loader=None,
 ) -> dict:
-    load_series = series_loader or get_or_refresh_cached_series
+    if series_loader is None:
+        raise RuntimeError("A series loader is required to build direction context.")
+    load_series = series_loader
     raw_snapshot, _cache_status = load_series(
         symbol,
         preferred_provider=preferred_provider,
@@ -542,4 +543,3 @@ def build_trade_idea_matches(row: dict) -> list[dict]:
             matches.append(definition)
 
     return matches
-
