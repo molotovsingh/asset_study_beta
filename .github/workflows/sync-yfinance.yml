@@ -1,16 +1,17 @@
 name: Sync YFinance Snapshots
 
+# Manual-only health check. It no longer runs on a schedule and no longer
+# commits or pushes snapshots: Yahoo-derived data is not republished from this
+# public repo (decision D51, docs/alignment/decision-register.md).
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "30 1 * * 1-5"
 
 concurrency:
   group: sync-yfinance-snapshots-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   sync:
@@ -38,15 +39,3 @@ jobs:
 
       - name: Run frontend regressions against refreshed snapshots
         run: node scripts/run_frontend_regression_checks.mjs
-
-      - name: Commit refreshed snapshots
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- data/snapshots; then
-            echo "No snapshot changes to commit."
-            exit 0
-          fi
-          git add data/snapshots
-          git commit -m "chore(data): refresh yfinance snapshots"
-          git push
