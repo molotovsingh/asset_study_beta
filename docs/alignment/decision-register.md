@@ -66,7 +66,7 @@ Companion to [alignment-interview.md](alignment-interview.md). Trial started 202
 | Review gate | D48 | General | Trust is earned per event type; every new type starts in review-every-event mode | Confirmed | Agent → accepted | Q40 |
 | Review gate | D50 | General | Critical fields (event, issuer, first-public time) verified per event always; batches cover non-critical fields only | Confirmed | Super proposal → user accepted | Amendment 2026-11-07 |
 | Dates | D23 | General | Date tolerance rule | Delegated | Delegated to agent | Q13 |
-| Dates | D24 | General | Late by ≤1 trading day is fine; too-early dates and wrong-announcement dates block | Confirmed | Agent → accepted | Q13, Q25 |
+| Dates | D24 | General | Late by ≤1 trading day is fine; too-early dates and wrong-announcement dates block | Partially superseded → D50 (late-side tolerance withdrawn; too-early and wrong-leg still block) | Agent → accepted | Q13, Q25 |
 | Working rule | D10 | General | Everything is provisional until tested | Confirmed | User | Q6 |
 | Working rule | D33 | General | Raids are a probe for general primitives; process stays signal-agnostic; signal specifics are per-signal settings | Confirmed | User | Q19 follow-up |
 | Working rule | D53 | General | No new machinery without a demonstrated reason from the probe | Confirmed | User | Amendment 2026-11-07 |
