@@ -383,5 +383,77 @@
   "sha256": "482acf7def0374a5e31b1ab2f80ab3e9eed30361966ad175333f37a73ea6b085",
   "bytes": 337207,
   "textChars": 3307
+ },
+ {
+  "url": "https://www.deccanchronicle.com/nation/current-affairs/150219/hyderabad-divi-labs-raided-suspecting-tax-evasion.html",
+  "fetchedAt": "2026-11-07T11:40:54.846Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "3b785934fb79b99c4a4cf3a183c77e8cab7cd1ed2641e4c0599c22f72a6aa9c1",
+  "bytes": 2121,
+  "kind": "press page text (fetched copy)",
+  "event": "C01"
+ },
+ {
+  "url": "https://www.moneycontrol.com/news/business/i-t-department-raids-mankind-pharma-premises-in-delhi-over-tax-evasion-allegation-10565941.html",
+  "fetchedAt": "2026-11-07T11:40:55.402Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "5611b6d405c9a3c1298b1cbdffe281e7647b0faf14af47e2ee1e87142b7ba2ca",
+  "bytes": 2000,
+  "kind": "press page text (fetched copy)",
+  "event": "C03"
+ },
+ {
+  "url": "https://www.tradingview.com/news/reuters.com,2025:newsml_FWN3U809U:0-interarch-building-products-income-tax-department-initiated-search-at-manufacturing-facilitiy-at-pantnagar-noida-office/",
+  "fetchedAt": "2026-11-07T11:40:54.554Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "7f03a0add1a9ae1c6ed89c0ac909c2a5efe5f137e30f7c3ded275d8c9c2ab1d7",
+  "bytes": 1430,
+  "kind": "press page text (fetched copy)",
+  "event": "C11"
+ },
+ {
+  "url": "https://scanx.trade/stock-market-news/stocks/ashapura-minechem-undergoes-income-tax-department-search-operations-unaffected/22175895",
+  "fetchedAt": "2026-11-07T11:40:55.686Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "9f9fedbdba61055199e3e90d4c938b7f3fbdc2e08573983812bc6d4d8888026e",
+  "bytes": 6791,
+  "kind": "press page text (fetched copy)",
+  "event": "C14"
+ },
+ {
+  "url": "https://www.dinamalar.com/news/tamil-nadu-news/income-tax-department-conducts-raids-at-30-locations-including-diamond-jewellery-shop/4102200",
+  "fetchedAt": "2026-11-07T11:40:55.131Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "a3284587c1151b7842dc76445abc7260b21a70ca5a79cb5ba2a8f8db8704126c",
+  "bytes": 6217,
+  "kind": "press page text (fetched copy)",
+  "event": "C16"
+ },
+ {
+  "url": "https://www.zeebiz.com/companies/news-breaking-income-tax-raids-at-balu-forge-related-companies-in-this-city-387292",
+  "fetchedAt": "2026-11-07T11:40:54.278Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "6e1e7cbde9164d5d25172b81c549db0b3be6b08e36da76b41a83c9ab00b95709",
+  "bytes": 5742,
+  "kind": "press page text (fetched copy)",
+  "event": "C17"
+ },
+ {
+  "url": "https://www.dtnext.in/news/business/cbi-conducts-searches-in-mumbai-in-reliance-telecom-sbi-fraud-case",
+  "fetchedAt": "2026-11-07T11:40:53.196Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "f9357da52b58ecfc6d5396896614e365ca02d28dab03b2194a00b4feeb7d7957",
+  "bytes": 3497,
+  "kind": "press page text (fetched copy)",
+  "event": "C21"
+ },
+ {
+  "url": "https://economictimes.indiatimes.com/news/company/corporate-trends/ed-searches-against-vedanta-group-in-fema-case/articleshow/131454843.cms",
+  "fetchedAt": "2026-11-07T11:40:53.486Z",
+  "fetchTool": "exa_fetch (cached)",
+  "sha256": "bf20fd38fd1da7764dfadc8f76f226c5582fdf90255a52ec4267241d039f69e3",
+  "bytes": 6775,
+  "kind": "press page text (fetched copy)",
+  "event": "C23"
  }
 ]
