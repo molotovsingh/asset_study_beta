@@ -1186,3 +1186,21 @@ Interview mode ended. No later edit candidates have been applied; canonical arti
 ## Protocol Note - Files relocated (2026-11-07)
 
 On committing, this log and the Decision Register moved from the repo root (`Alignment Interview.md`, `Decision Register.md`) to `docs/alignment/alignment-interview.md` and `docs/alignment/decision-register.md`, following the junior repo's convention of keeping alignment records under `docs/`. Earlier entries that mention the root filenames are historical and left unchanged.
+
+## Post-interview Amendment - super-advisor review (2026-11-07)
+
+After the interview closed, the decisions were shared with the super-advisor agent (`/Users/aksingh/agents/super_advisor_agent@super`, reply id `01a1b4e7-a62e-7127-83c0-ec71db82ce8a`), which reviewed commit `949a532` and recommended "reframe": keep the small filing-sourced probe, but fix publication rights and event-time validity before expanding infrastructure.
+
+User ruling (verbatim): "agreed unless its buildiong more machinery without reason"
+
+Rulings accepted, with the user's condition as a standing rule:
+
+1. **Placebo:** optional for exploration; **required before a study is used to justify capital**. Control design frozen before results. Amends D32.
+2. **Metrics:** one metric registry with consistent meanings and declared per-domain criteria. Exploratory event results are shown with warnings but are not qualified headlines merely because suppression is off. Correction: the agent's claim that the rest of the app "hides" weak metrics was too broad (the manifest already allows diagnostics with context).
+3. **Review gate:** critical fields (event validity, issuer identity, first-public time) are source-verified **per admitted event**, always. Batch approval covers non-critical fields only. Critical-field corrections are measured separately; no new percentage threshold is invented. Partially supersedes D21. Correction to Q12–Q13 reasoning: a wrong date does not only bias toward "no effect", and a late date is **not** always conservative. It can move entry past a loss into a rebound. A deliberate delayed entry is a strategy setting, not a timestamp tolerance.
+4. **Sequence:** next work is one hand-fed Polycab end-to-end check (first public time → eligible entry → prices/actions → benchmark → result), then a bounded historical-price/listing feasibility check including suspended/delisted names. The registry is seeded only with sources actually used; the problems found scope the News DB & ETL interview. The hold on applying `event-study.md` edits stays.
+5. **First probe:** raids stay for wiring. A return-blind event-count/coverage census comes before choosing the first aggregate study. Switch to order wins only if it gives a materially better independent sample.
+6. **Yahoo data:** stop committing and publishing it. A private repo or the library licence would not grant data rights. Existing public history needs a separate owner disposition (no history rewrite).
+7. **Certainty labels:** sample-count and profit-factor bands become descriptive, not quality claims (no "adequate" or "strong"), because dependence, effect size, variance and search count matter; overlapping same-entity clusters are not automatically independent. D05 becomes a research scorecard; capital belongs to the deployment study.
+
+Standing rule from the user's condition: no new machinery without a demonstrated reason. Each build step must be justified by a concrete failure or need found in the hand-fed probe.

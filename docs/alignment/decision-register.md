@@ -1,6 +1,6 @@
 # Decision Register
 
-Companion to [alignment-interview.md](alignment-interview.md). Trial started 2026-11-06 (Q15). Structure revised at Q16. Interview closed 2026-11-07 (consolidation at Q41); no later edits applied yet.
+Companion to [alignment-interview.md](alignment-interview.md). Trial started 2026-11-06 (Q15). Structure revised at Q16. Interview closed 2026-11-07 (consolidation at Q41); amended the same day after super-advisor review (D49–D54); no later edits applied yet.
 
 ## Which document wins
 
@@ -15,7 +15,7 @@ Companion to [alignment-interview.md](alignment-interview.md). Trial started 202
 - Rows are grouped by area for lookup. IDs never change and are never reused.
 - Scope: `General` (applies to every signal) · `Per-signal` (a setting for one signal, e.g. raids) · `Process` (how this interview is kept).
 - Status: `Confirmed` · `Provisional` (accepted, open to change after testing) · `Working Direction` (useful, not yet accepted) · `Delegated` · `Deferred` · `Superseded`.
-- Who decided: `User` · `Agent → accepted` · `Agent proposal` (not yet accepted) · `Delegated to agent`.
+- Who decided: `User` · `Agent → accepted` · `Super proposal → user accepted` · `Agent proposal` (not yet accepted) · `Delegated to agent`.
 
 ## Decisions
 
@@ -25,14 +25,16 @@ Companion to [alignment-interview.md](alignment-interview.md). Trial started 202
 | Scope | D14 | General | Commission → run → report; monitoring and alerts wait until a signal passes | Confirmed | User | Q8 |
 | Frequency | D02 | General | No intraday, no HFT; edge comes from judgement over days | Confirmed | User | Pre-interview |
 | Holding period | D03 | General | Holding period is a backtest output (horizon grid, entry ≥ t+1, plateau), then frozen and forward-tracked | Confirmed | Agent → accepted | Pre-interview |
-| Qualification | D05 | General | Capital needs all three layers: full trade rules, after-cost economics, statistical credibility (placebo now optional, see D32) | Provisional | User + agent research | Q1, Q18 |
+| Qualification | D05 | General | Capital needs all three layers: full trade rules, after-cost economics, statistical credibility (placebo now optional, see D32) | Superseded → D52 | User + agent research | Q1, Q18 |
 | Qualification | D08 | General | Sample size warns, never blocks; event count always shown; trader decides | Confirmed | User | Q3 |
-| Qualification | D41 | General | Sample warning levels follow practitioner convention: <30 below minimum, 30–99 limited, 100–199 adequate, 200+ strong; count and top-2-removed always shown | Confirmed | Agent → accepted | Q32 |
-| Qualification | D42 | General | Result labels: PF <1.3 weak, ≥1.5 acceptable, ≥2.0 strong; after-cost expectancy >0 at 1× and 2× costs; drawdown shown unlabelled | Confirmed | Agent → accepted | Q33 |
+| Qualification | D41 | General | Sample warning levels follow practitioner convention: <30 below minimum, 30–99 limited, 100–199 adequate, 200+ strong; count and top-2-removed always shown | Superseded → D52 | Agent → accepted | Q32 |
+| Qualification | D42 | General | Result labels: PF <1.3 weak, ≥1.5 acceptable, ≥2.0 strong; after-cost expectancy >0 at 1× and 2× costs; drawdown shown unlabelled | Superseded → D52 | Agent → accepted | Q33 |
 | Qualification | D43 | General | Every version tried is counted per study and shown in plain words; formal deflated Sharpe / PBO added later | Confirmed | Agent → accepted | Q34 |
+| Qualification | D52 | General | Research scorecard, not a capital gate: counts and profit factor shown as descriptive bands, never 'adequate'/'strong' claims | Confirmed | Super proposal → user accepted | Amendment 2026-11-07 |
 | Kill rule | D25 | General | Drop the idea if, after costs, no tradable long or short effect vs same-period index | Provisional | User | Q14 |
 | Benchmark | D26 | General | Same-window index is primary; random-date placebo also required; market model and sector as robustness | Superseded → D32 | Agent proposal | Q14 |
-| Benchmark | D32 | General | Same-period index comparison is mandatory; random-date placebo optional for now, with a warning when skipped | Confirmed | User | Q18 |
+| Benchmark | D32 | General | Same-period index comparison is mandatory; random-date placebo optional for now, with a warning when skipped | Partially superseded → D49 | User | Q18 |
+| Benchmark | D49 | General | Random-date placebo optional for exploration, required before a study justifies capital; design frozen before results | Confirmed | Super proposal → user accepted | Amendment 2026-11-07 |
 | Benchmark | D35 | General | Benchmark is a broad index that matches the stock list | Confirmed | Agent → accepted | Q28 |
 | Benchmark | D36 | Per-signal | Indian equities: Nifty 500 (^CRSLDX), price index, dividend gap disclosed | Confirmed | Agent → accepted | Q28 |
 | Deployment | D06 | General | Signal study uses the same virtual amount per trade; sizing and instrument choice are a separate study | Confirmed | User | Q2 |
@@ -57,14 +59,18 @@ Companion to [alignment-interview.md](alignment-interview.md). Trial started 202
 | Data sources | D38 | General | Registry = registry.json (master) + one Markdown page per source, kept in sync by a validator | Confirmed | Delegated to agent | Q30 |
 | Data sources | D39 | Per-signal | Indian equities: NSE bhavcopy is the candidate source for point-in-time prices and stock lists | Provisional | Agent → accepted | Q29 |
 | Data sources | D40 | General | Source stages: candidate → tested → approved per use → wired in → retired/blocked; fields: coverage, licence, key, point-in-time trust, last checked | Confirmed | Agent → accepted | Q31 |
+| Data sources | D51 | General | Stop committing/publishing Yahoo-derived data; old public history needs a separate owner decision | Confirmed | Super proposal → user accepted | Amendment 2026-11-07 |
 | Review gate | D20 | General | Review each event first (event and company); approve batches once trust is earned | Confirmed | User | Q11 |
-| Review gate | D21 | General | Switch to batch approval at ≥80% of reviewed events accepted unchanged | Provisional | User | Q12 |
+| Review gate | D21 | General | Switch to batch approval at ≥80% of reviewed events accepted unchanged | Partially superseded → D50 | User | Q12 |
 | Review gate | D22 | General | Trust measured over the last 50 reviewed events | Provisional | Agent → accepted | Q12, Q24 |
 | Review gate | D48 | General | Trust is earned per event type; every new type starts in review-every-event mode | Confirmed | Agent → accepted | Q40 |
+| Review gate | D50 | General | Critical fields (event, issuer, first-public time) verified per event always; batches cover non-critical fields only | Confirmed | Super proposal → user accepted | Amendment 2026-11-07 |
 | Dates | D23 | General | Date tolerance rule | Delegated | Delegated to agent | Q13 |
 | Dates | D24 | General | Late by ≤1 trading day is fine; too-early dates and wrong-announcement dates block | Confirmed | Agent → accepted | Q13, Q25 |
 | Working rule | D10 | General | Everything is provisional until tested | Confirmed | User | Q6 |
 | Working rule | D33 | General | Raids are a probe for general primitives; process stays signal-agnostic; signal specifics are per-signal settings | Confirmed | User | Q19 follow-up |
+| Working rule | D53 | General | No new machinery without a demonstrated reason from the probe | Confirmed | User | Amendment 2026-11-07 |
+| Working rule | D54 | General | Next work: hand-fed Polycab end-to-end check, then bounded delisted-price check; return-blind raid count before any aggregate study | Confirmed | Super proposal → user accepted | Amendment 2026-11-07 |
 | Process | D28 | Process | Keep a decision register beside the interview log, trialled here first | Confirmed | User | Q15 |
 | Process | D29 | Process | End design: register generated from the log; propose an interview-skill change after the trial | Confirmed | Agent → accepted | Protocol note, Q26 |
 | Process | D31 | Process | Register gets an area column, a "which document wins" section, and a one-line-per-row cap | Confirmed | Delegated to agent | Q16 |
