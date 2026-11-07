@@ -5,6 +5,9 @@ Data comes from the vendored global-stock-data CBOE delayed options chain.
 SKILL.md interleaves live example calls between definitions, so only
 definitions/constants are extracted and executed -- it is not importable as-is.
 
+Requires numpy (SVI fitting, parity regression) and, for live runs, requests
+(used by the vendor functions). The repo .venv has both.
+
 Examples:
   .venv/bin/python scripts/vol_charts.py
   .venv/bin/python scripts/vol_charts.py --tickers SPY,QQQ --max-dte 90

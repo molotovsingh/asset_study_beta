@@ -113,7 +113,9 @@ jobs:
         run: node scripts/export_assistant_contract.mjs --check
 
       - name: Run vol chart checks
-        run: python3 scripts/test_vol_charts.py
+        run: |
+          python3 -m pip install --quiet "numpy>=1.26"
+          python3 scripts/test_vol_charts.py
 
       - name: Run frontend regression checks
         run: node scripts/run_frontend_regression_checks.mjs
