@@ -284,8 +284,10 @@ total-return dataset later, pass `--source-policy approved_total_return` plus th
 source/provenance fields; the sync validator will not infer approval from a TRI
 label alone.
 
-If this repo is hosted on GitHub, `.github/workflows/sync-yfinance.yml` can
-refresh and commit snapshots automatically on weekdays or by manual dispatch.
+`.github/workflows/sync-yfinance.yml` is a manual-only health check: it refreshes
+snapshots and runs the frontend regressions, but does not commit or push them.
+Yahoo-derived data is no longer republished from this repo; refreshed snapshots
+are for local use only.
 
 The sync script now retries transient symbol failures and also writes
 `data/snapshots/yfinance/index/manifest.json` so the repo has a compact index of
