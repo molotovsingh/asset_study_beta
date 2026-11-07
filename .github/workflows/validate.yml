@@ -57,6 +57,7 @@ jobs:
           python3 scripts/test_runtime_store_cache.py
           python3 scripts/test_runtime_health.py
           python3 scripts/test_options_evidence.py
+          python3 scripts/test_provider_errors.py
 
       - name: Validate bundled snapshots
         run: python3 scripts/validate_yfinance_snapshots.py --require-all-configured
@@ -72,6 +73,9 @@ jobs:
 
       - name: Run monthly straddle checks
         run: node scripts/test_monthly_straddle.mjs
+
+      - name: Run computation engine checks
+        run: node scripts/test_computation_engines.mjs
 
       - name: Run symbol discovery checks
         run: node scripts/test_symbol_discovery.mjs
