@@ -1,0 +1,3 @@
+[submodule "vendors/global-stock-data"]
+	path = vendors/global-stock-data
+	url = https://github.com/simonlin1212/global-stock-data

@@ -20,3 +20,7 @@ quality-pass/
 .env
 .env.*
 !.env.example
+
+# Local outputs and agent session state
+output/
+.pi/

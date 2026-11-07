@@ -1,0 +1,284 @@
+{
+ "plan": "PLAN.md (c5da250)",
+ "candidates": "candidates.md (e78f4be)",
+ "status": "FROZEN",
+ "buildingBlocks": "D56: Event, Disclosure, Public-time claim, Evidence document, Company identity on that date, Verification, Search record",
+ "events": [
+  {
+   "id": "C01",
+   "company": "Divi's Laboratories",
+   "symbol": "DIVISLAB",
+   "isin": "INE361B01024",
+   "series": "EQ",
+   "agency": "Income Tax",
+   "what": "IT search at head office and manufacturing sites (s.132)",
+   "searchStart": "2019-02-14",
+   "firstPublic": "2019-02-15 01:15 IST",
+   "precision": "minute",
+   "basis": "press (Deccan Chronicle, on-page stamp)",
+   "evidence": [
+    "3b785934fb (press)",
+    "b51346754e (company clarification 15 Feb 2019)"
+   ],
+   "t0": "2019-02-15",
+   "fno": true,
+   "ban": false,
+   "flags": [
+    "search began 14 Feb; no 14 Feb report found"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C03",
+   "company": "Mankind Pharma",
+   "symbol": "MANKIND",
+   "isin": "INE634S01028",
+   "series": "EQ",
+   "agency": "Income Tax",
+   "what": "IT search at offices and plants of company and subsidiaries",
+   "searchStart": "2023-05-11",
+   "firstPublic": "2023-05-11 10:45 IST",
+   "precision": "minute",
+   "basis": "press (Moneycontrol, on-page stamp)",
+   "evidence": [
+    "5611b6d405 (press)",
+    "25acb10ce3 (company letter 17 May 2023)"
+   ],
+   "t0": "2023-05-11",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "listed 9 May 2023, two trading days before t0"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C04",
+   "company": "Heads UP Ventures",
+   "symbol": "HEADSUP",
+   "isin": "INE759V01019",
+   "series": "EQ",
+   "agency": "CBI",
+   "what": "CBI search at corporate office; warrant named Mandhana Industries",
+   "searchStart": "2023-09-14",
+   "firstPublic": "2023-09-15 20:14 IST",
+   "precision": "minute",
+   "basis": "exchange filing (NSE filename time; signed 19:57)",
+   "evidence": [
+    "d29dac1691 (company filing)"
+   ],
+   "t0": "2023-09-18",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "warrant in another company's name",
+    "very thin trading (~24k shares on t0)",
+    "no press before the filing found"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C11",
+   "company": "Interarch Building Solutions",
+   "symbol": "INTERARCH",
+   "isin": "INE00M901018",
+   "series": "BE",
+   "agency": "Income Tax",
+   "what": "IT search at Pantnagar plant and Noida office",
+   "searchStart": "2025-08-18",
+   "firstPublic": "2025-08-18 12:19 IST",
+   "precision": "minute (search-tool metadata; page shows no time)",
+   "basis": "wire brief (Reuters via TradingView)",
+   "evidence": [
+    "7f03a0add1 (press)",
+    "974472acfa (company completion letter 22 Aug)"
+   ],
+   "t0": "2025-08-18",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "BE series (trade-for-trade) on t0"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C14",
+   "company": "Ashapura Minechem",
+   "symbol": "ASHAPURMIN",
+   "isin": "INE348A01023",
+   "series": "EQ",
+   "agency": "Income Tax",
+   "what": "IT search at registered office, 13-16 Oct 2025",
+   "searchStart": "2025-10-13",
+   "firstPublic": "2025-10-16 21:28 IST",
+   "precision": "minute",
+   "basis": "press (ScanX, on-page stamp) of the company's same-evening filing",
+   "evidence": [
+    "9f9fedbdba (press)",
+    "482acf7def (company filing 16 Oct)"
+   ],
+   "t0": "2025-10-17",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "search ran 4 days with no public report found: possible leakage before t0"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C16",
+   "company": "Refex Industries",
+   "symbol": "REFEX",
+   "isin": "INE056I01025",
+   "series": "EQ",
+   "agency": "Income Tax",
+   "what": "IT search at registered office, plants and group locations",
+   "searchStart": "2025-12-09",
+   "firstPublic": "2025-12-10 08:11 IST",
+   "precision": "minute",
+   "basis": "press (Dinamalar, Tamil, names Refex Industries; on-page stamp)",
+   "evidence": [
+    "a3284587c1 (press)",
+    "1704b0918b (company letter, later leg)"
+   ],
+   "t0": "2025-12-10",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "first pass dated it 12 Dec (company confirmation, -20% day): wrong leg, corrected",
+    "TOI 10 Dec 00:18 IST described the searches without naming the company"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C17",
+   "company": "Balu Forge Industries",
+   "symbol": "BALUFORGE",
+   "isin": "INE011E01029",
+   "series": "EQ",
+   "agency": "Income Tax",
+   "what": "IT search at offices and manufacturing units",
+   "searchStart": "2026-01-06",
+   "firstPublic": "2026-01-07 12:09 IST",
+   "precision": "minute",
+   "basis": "press (Zee Business, on-page stamp)",
+   "evidence": [
+    "6e1e7cbde9 (press)",
+    "25d57139d8 (company letter 13 Jan)"
+   ],
+   "t0": "2026-01-07",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "stock fell ~16-20% in early trade on t0 before the first report: possible leakage"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C18",
+   "company": "Touchwood Entertainment",
+   "symbol": "TOUCHWOOD",
+   "isin": "INE486Y01013",
+   "series": "EQ",
+   "agency": "Income Tax",
+   "what": "IT search at corporate office, 28-31 Jan 2026",
+   "searchStart": "2026-01-28",
+   "firstPublic": "2026-02-03 19:16 IST",
+   "precision": "minute",
+   "basis": "exchange filing (NSE filename time)",
+   "evidence": [
+    "6cfa9433c2 (company filing)"
+   ],
+   "t0": "2026-02-04",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "disclosed 6 days after the search began",
+    "no press found",
+    "thin trading (~12k shares on t0)"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C21",
+   "company": "Reliance Communications",
+   "symbol": "RCOM",
+   "isin": "INE330H01018",
+   "series": "BE",
+   "agency": "CBI",
+   "what": "CBI search at office of wholly owned subsidiary Reliance Telecom, and ex-directors' homes",
+   "searchStart": "2026-03-26",
+   "firstPublic": "2026-03-26 10:37 IST (page 'updated' time; original could be earlier)",
+   "precision": "minute",
+   "basis": "press (DT Next / IANS, on-page stamp)",
+   "evidence": [
+    "f9357da52b (press)",
+    "6d437b2463 (company filing 27 Mar 21:20)"
+   ],
+   "t0": "2026-03-27",
+   "fno": false,
+   "ban": false,
+   "flags": [
+    "search tool labelled the IST time as UTC: corrected from the page",
+    "company in insolvency; price ~Rs 0.79; BE series",
+    "part of an ongoing multi-agency saga, not a first shock",
+    "search at subsidiary premises",
+    "t0 corrected 2026-03-26 -> 2026-03-27: 26 Mar 2026 was an NSE holiday (no CM or index file); rule D57 gives the next trading day"
+   ],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  },
+  {
+   "id": "C23",
+   "company": "Vedanta",
+   "symbol": "VEDL",
+   "isin": "INE205A01025",
+   "series": "EQ",
+   "agency": "ED",
+   "what": "ED FEMA searches at company premises in several cities",
+   "searchStart": "2026-06-02",
+   "firstPublic": "2026-06-02 10:12 IST",
+   "precision": "minute (search-tool metadata; page shows last-updated 11:57 IST)",
+   "basis": "press (Economic Times)",
+   "evidence": [
+    "bf20fd38fd (press)",
+    "005bcccf1d (company follow-up 4 Jun)"
+   ],
+   "t0": "2026-06-02",
+   "fno": true,
+   "ban": false,
+   "flags": [],
+   "verification": "agent prepared; user reviewed: OK (event, issuer, time)"
+  }
+ ],
+ "excludedDuringVerification": [
+  {
+   "id": "C06",
+   "company": "Bhagyanagar India",
+   "reason": "Company describes an ED visit for information about suppliers' FEMA violations, not a search of the company. Fails the plan's event definition. Replaced by reserve C14."
+  }
+ ],
+ "review": {
+  "by": "user",
+  "verbatim": "all ok",
+  "date": "2026-11-07",
+  "fieldsChecked": [
+   "event real",
+   "issuer",
+   "first-public time"
+  ],
+  "corrections": 0
+ },
+ "frozenEventSetSha256": "f55e29ffa9a2ffbebe5968fc378e6359614d7bf0ed6d890f26e47d3a08895a3f",
+ "amendments": [
+  {
+   "date": "2026-11-07",
+   "event": "C21",
+   "field": "t0 (derived)",
+   "from": "2026-03-26",
+   "to": "2026-03-27",
+   "reason": "26 Mar 2026 was a market holiday (NSE CM bhavcopy and ind_close_all both 404). The t0 rule maps a non-trading day to the next trading day. Mechanical rule application, not a judgement.",
+   "when": "Found by the study run, which stopped on C21. Results for 8 other events had been printed; C21's had not. Reviewed fields (event, issuer, first-public time) unchanged.",
+   "previousFrozenSha256": "95efef77dfe802c2aea6af5c1c456a9ad2e44c20121cf022641b81b780d42f03"
+  }
+ ]
+}

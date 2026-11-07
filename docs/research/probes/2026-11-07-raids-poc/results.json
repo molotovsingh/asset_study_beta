@@ -1,0 +1,554 @@
+{
+ "frozenEventSetSha256": "f55e29ffa9a2ffbebe5968fc378e6359614d7bf0ed6d890f26e47d3a08895a3f",
+ "events": [
+  {
+   "id": "C01",
+   "symbol": "DIVISLAB",
+   "t0": "2019-02-15",
+   "entry": "2019-02-18",
+   "eventDay": -0.51,
+   "eventDayStock": -0.98,
+   "horizons": {
+    "1": {
+     "date": "2019-02-19",
+     "stock": 0.83,
+     "index": -0.14,
+     "marketAdjusted": 0.97
+    },
+    "5": {
+     "date": "2019-02-25",
+     "stock": 1.27,
+     "index": 2.62,
+     "marketAdjusted": -1.35
+    },
+    "10": {
+     "date": "2019-03-05",
+     "stock": 5.65,
+     "index": 4.79,
+     "marketAdjusted": 0.86
+    },
+    "20": {
+     "date": "2019-03-19",
+     "stock": 7.7,
+     "index": 9.32,
+     "marketAdjusted": -1.62
+    },
+    "60": {
+     "date": "2019-05-22",
+     "stock": 6.7,
+     "index": 9.64,
+     "marketAdjusted": -2.94
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": []
+  },
+  {
+   "id": "C03",
+   "symbol": "MANKIND",
+   "t0": "2023-05-11",
+   "entry": "2023-05-12",
+   "eventDay": -0.29,
+   "eventDayStock": -0.18,
+   "horizons": {
+    "1": {
+     "date": "2023-05-15",
+     "stock": -0.68,
+     "index": 0.47,
+     "marketAdjusted": -1.15
+    },
+    "5": {
+     "date": "2023-05-19",
+     "stock": -4.56,
+     "index": -0.45,
+     "marketAdjusted": -4.11
+    },
+    "10": {
+     "date": "2023-05-26",
+     "stock": -5.08,
+     "index": 1.42,
+     "marketAdjusted": -6.5
+    },
+    "20": {
+     "date": "2023-06-09",
+     "stock": 6.52,
+     "index": 2.58,
+     "marketAdjusted": 3.93
+    },
+    "60": {
+     "date": "2023-08-07",
+     "stock": 29.33,
+     "index": 9.56,
+     "marketAdjusted": 19.78
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": []
+  },
+  {
+   "id": "C04",
+   "symbol": "HEADSUP",
+   "t0": "2023-09-18",
+   "entry": "2023-09-20",
+   "eventDay": -0.12,
+   "eventDayStock": -0.41,
+   "horizons": {
+    "1": {
+     "date": "2023-09-21",
+     "stock": -0.84,
+     "index": -0.84,
+     "marketAdjusted": -0.0
+    },
+    "5": {
+     "date": "2023-09-27",
+     "stock": 0.84,
+     "index": -0.62,
+     "marketAdjusted": 1.45
+    },
+    "10": {
+     "date": "2023-10-05",
+     "stock": -4.18,
+     "index": -1.45,
+     "marketAdjusted": -2.73
+    },
+    "20": {
+     "date": "2023-10-19",
+     "stock": 10.04,
+     "index": -0.8,
+     "marketAdjusted": 10.84
+    },
+    "60": {
+     "date": "2023-12-19",
+     "stock": 24.27,
+     "index": 9.86,
+     "marketAdjusted": 14.41
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": [
+    "index gap patched from NSE on 2024-01-01",
+    "1 calendar days with no trade: last traded price carried"
+   ]
+  },
+  {
+   "id": "C11",
+   "symbol": "INTERARCH",
+   "t0": "2025-08-18",
+   "entry": "2025-08-19",
+   "eventDay": -2.23,
+   "eventDayStock": -1.12,
+   "horizons": {
+    "1": {
+     "date": "2025-08-20",
+     "stock": -0.95,
+     "index": 0.33,
+     "marketAdjusted": -1.28
+    },
+    "5": {
+     "date": "2025-08-26",
+     "stock": -0.61,
+     "index": -1.29,
+     "marketAdjusted": 0.68
+    },
+    "10": {
+     "date": "2025-09-03",
+     "stock": 0.54,
+     "index": -0.88,
+     "marketAdjusted": 1.42
+    },
+    "20": {
+     "date": "2025-09-17",
+     "stock": -0.49,
+     "index": 1.64,
+     "marketAdjusted": -2.14
+    },
+    "60": {
+     "date": "2025-11-17",
+     "stock": 24.75,
+     "index": 3.85,
+     "marketAdjusted": 20.9
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": []
+  },
+  {
+   "id": "C14",
+   "symbol": "ASHAPURMIN",
+   "t0": "2025-10-17",
+   "entry": "2025-10-20",
+   "eventDay": -0.68,
+   "eventDayStock": -0.53,
+   "horizons": {
+    "1": {
+     "date": "2025-10-21",
+     "stock": 0.5,
+     "index": 0.18,
+     "marketAdjusted": 0.32
+    },
+    "5": {
+     "date": "2025-10-28",
+     "stock": -3.2,
+     "index": 0.41,
+     "marketAdjusted": -3.61
+    },
+    "10": {
+     "date": "2025-11-04",
+     "stock": 0.42,
+     "index": -0.17,
+     "marketAdjusted": 0.59
+    },
+    "20": {
+     "date": "2025-11-19",
+     "stock": 4.81,
+     "index": 0.8,
+     "marketAdjusted": 4.01
+    },
+    "60": {
+     "date": "2026-01-16",
+     "stock": 23.0,
+     "index": -0.97,
+     "marketAdjusted": 23.97
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": [
+    "index gap patched from NSE on 2026-01-01"
+   ]
+  },
+  {
+   "id": "C16",
+   "symbol": "REFEX",
+   "t0": "2025-12-10",
+   "entry": "2025-12-11",
+   "eventDay": -0.28,
+   "eventDayStock": -0.73,
+   "horizons": {
+    "1": {
+     "date": "2025-12-12",
+     "stock": -19.99,
+     "index": 0.74,
+     "marketAdjusted": -20.74
+    },
+    "5": {
+     "date": "2025-12-18",
+     "stock": -13.53,
+     "index": -0.25,
+     "marketAdjusted": -13.28
+    },
+    "10": {
+     "date": "2025-12-26",
+     "stock": -17.55,
+     "index": 0.97,
+     "marketAdjusted": -18.52
+    },
+    "20": {
+     "date": "2026-01-09",
+     "stock": -25.71,
+     "index": -0.35,
+     "marketAdjusted": -25.35
+    },
+    "60": {
+     "date": "2026-03-11",
+     "stock": -34.06,
+     "index": -6.41,
+     "marketAdjusted": -27.66
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": [
+    "index gap patched from NSE on 2026-01-01"
+   ]
+  },
+  {
+   "id": "C17",
+   "symbol": "BALUFORGE",
+   "t0": "2026-01-07",
+   "entry": "2026-01-08",
+   "eventDay": -11.57,
+   "eventDayStock": -11.55,
+   "horizons": {
+    "1": {
+     "date": "2026-01-09",
+     "stock": -9.58,
+     "index": -0.9,
+     "marketAdjusted": -8.68
+    },
+    "5": {
+     "date": "2026-01-16",
+     "stock": -10.07,
+     "index": -0.82,
+     "marketAdjusted": -9.25
+    },
+    "10": {
+     "date": "2026-01-23",
+     "stock": -25.26,
+     "index": -4.11,
+     "marketAdjusted": -21.15
+    },
+    "20": {
+     "date": "2026-02-09",
+     "stock": -4.17,
+     "index": 0.01,
+     "marketAdjusted": -4.18
+    },
+    "60": {
+     "date": "2026-04-10",
+     "stock": -8.01,
+     "index": -5.63,
+     "marketAdjusted": -2.38
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": [
+    "index gap patched from NSE on 2026-01-01"
+   ]
+  },
+  {
+   "id": "C18",
+   "symbol": "TOUCHWOOD",
+   "t0": "2026-02-04",
+   "entry": "2026-02-05",
+   "eventDay": -3.5,
+   "eventDayStock": -3.12,
+   "horizons": {
+    "1": {
+     "date": "2026-02-06",
+     "stock": 1.19,
+     "index": 0.1,
+     "marketAdjusted": 1.09
+    },
+    "5": {
+     "date": "2026-02-12",
+     "stock": 0.12,
+     "index": 1.02,
+     "marketAdjusted": -0.9
+    },
+    "10": {
+     "date": "2026-02-19",
+     "stock": -5.68,
+     "index": -0.49,
+     "marketAdjusted": -5.19
+    },
+    "20": {
+     "date": "2026-03-06",
+     "stock": -22.57,
+     "index": -3.97,
+     "marketAdjusted": -18.59
+    },
+    "60": {
+     "date": "2026-05-08",
+     "stock": -15.62,
+     "index": -1.26,
+     "marketAdjusted": -14.36
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": []
+  },
+  {
+   "id": "C21",
+   "symbol": "RCOM",
+   "t0": "2026-03-27",
+   "entry": "2026-03-30",
+   "eventDay": -2.69,
+   "eventDayStock": -4.82,
+   "horizons": {
+    "1": {
+     "date": "2026-04-01",
+     "stock": 3.95,
+     "index": 1.98,
+     "marketAdjusted": 1.96
+    },
+    "5": {
+     "date": "2026-04-08",
+     "stock": 23.68,
+     "index": 7.84,
+     "marketAdjusted": 15.85
+    },
+    "10": {
+     "date": "2026-04-16",
+     "stock": 36.84,
+     "index": 10.37,
+     "marketAdjusted": 26.47
+    },
+    "20": {
+     "date": "2026-04-30",
+     "stock": 26.32,
+     "index": 10.5,
+     "marketAdjusted": 15.82
+    },
+    "60": {
+     "date": "2026-06-30",
+     "stock": 18.42,
+     "index": 12.02,
+     "marketAdjusted": 6.4
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": []
+  },
+  {
+   "id": "C23",
+   "symbol": "VEDL",
+   "t0": "2026-06-02",
+   "entry": "2026-06-03",
+   "eventDay": -1.44,
+   "eventDayStock": -1.07,
+   "horizons": {
+    "1": {
+     "date": "2026-06-04",
+     "stock": -0.21,
+     "index": 0.2,
+     "marketAdjusted": -0.42
+    },
+    "5": {
+     "date": "2026-06-10",
+     "stock": -8.81,
+     "index": -0.97,
+     "marketAdjusted": -7.83
+    },
+    "10": {
+     "date": "2026-06-17",
+     "stock": -6.61,
+     "index": 2.93,
+     "marketAdjusted": -9.54
+    },
+    "20": {
+     "date": "2026-07-02",
+     "stock": -15.87,
+     "index": 3.62,
+     "marketAdjusted": -19.5
+    },
+    "60": {
+     "date": "2026-08-27",
+     "stock": -14.38,
+     "index": 4.59,
+     "marketAdjusted": -18.97
+    }
+   },
+   "checks": 8,
+   "mismatches": [],
+   "notes": []
+  }
+ ],
+ "summary": {
+  "event": {
+   "all": {
+    "n": 10,
+    "mean": -2.33,
+    "median": -1.06,
+    "positive": 0
+   },
+   "withoutTop2": {
+    "n": 8,
+    "mean": -1.03,
+    "median": -0.59,
+    "positive": 0
+   },
+   "top2Removed": [
+    "C17",
+    "C18"
+   ]
+  },
+  "1": {
+   "all": {
+    "n": 10,
+    "mean": -2.79,
+    "median": -0.21,
+    "positive": 4
+   },
+   "withoutTop2": {
+    "n": 8,
+    "mean": 0.19,
+    "median": 0.16,
+    "positive": 4
+   },
+   "top2Removed": [
+    "C16",
+    "C17"
+   ]
+  },
+  "5": {
+   "all": {
+    "n": 10,
+    "mean": -2.23,
+    "median": -2.48,
+    "positive": 3
+   },
+   "withoutTop2": {
+    "n": 8,
+    "mean": -3.12,
+    "median": -2.48,
+    "positive": 2
+   },
+   "top2Removed": [
+    "C16",
+    "C21"
+   ]
+  },
+  "10": {
+   "all": {
+    "n": 10,
+    "mean": -3.43,
+    "median": -3.96,
+    "positive": 4
+   },
+   "withoutTop2": {
+    "n": 8,
+    "mean": -4.95,
+    "median": -3.96,
+    "positive": 3
+   },
+   "top2Removed": [
+    "C17",
+    "C21"
+   ]
+  },
+  "20": {
+   "all": {
+    "n": 10,
+    "mean": -3.68,
+    "median": -1.88,
+    "positive": 4
+   },
+   "withoutTop2": {
+    "n": 8,
+    "mean": 1.01,
+    "median": 1.16,
+    "positive": 4
+   },
+   "top2Removed": [
+    "C16",
+    "C23"
+   ]
+  },
+  "60": {
+   "all": {
+    "n": 10,
+    "mean": 1.92,
+    "median": 2.01,
+    "positive": 5
+   },
+   "withoutTop2": {
+    "n": 8,
+    "mean": 2.86,
+    "median": 2.01,
+    "positive": 4
+   },
+   "top2Removed": [
+    "C14",
+    "C16"
+   ]
+  }
+ }
+}
